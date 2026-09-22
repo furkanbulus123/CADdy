@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
+  <name>CADdy</name>
+  <description>FreeCAD icinde AI yardimcisi. Insan elle cizer, AI devam eder,
+  insan yine devam eder — hepsi tek bir canli belge uzerinde.</description>
+  <version>0.1.0</version>
+  <date>2026-08-18</date>
+  <maintainer email="77415793+furkanbulus123@users.noreply.github.com">Furkan Bulus</maintainer>
+  <license>MIT</license>
+  <icon>resources/icons/caddy.svg</icon>
+  <freecadmin>1.1</freecadmin>
+  <content>
+    <workbench>
+      <classname>CADdyWorkbench</classname>
+      <name>CADdy</name>
+      <description>AI sohbet paneli</description>
+      <!-- Duz yerlesim: InitGui.py kok dizinde. package.xml varsa FreeCAD
+           InitGui.py'yi KOKTEN calistirmaz, her subdirectory altindan
+           calistirir — bu yuzden "./" sart. -->
+      <subdirectory>./</subdirectory>
+      <icon>resources/icons/caddy.svg</icon>
+    </workbench>
+  </content>
+</package>

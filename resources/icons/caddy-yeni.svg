@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- "Yeni sohbet" — arti. Ayni kalem: #2b6cb0, stroke-width 7, yuvarlak uc
+     (bkz. caddy-undo.svg). Kollar 44 px, yani geri/ileri yaylarinin
+     kapladigi alanla ayni gorsel agirlikta. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <path d="M32 10 L32 54 M10 32 L54 32" fill="none" stroke="#2b6cb0"
+        stroke-width="7" stroke-linecap="round"/>
+</svg>

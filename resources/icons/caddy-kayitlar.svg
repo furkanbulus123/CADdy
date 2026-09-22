@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- "Kayıtlar" — cekmeceli dolap. Kullanicinin sozu: "dolap gibi kutuphane
+     gibi bir sembol". Cekmece kulplari kisa yatay cizgiler; ayni kalem
+     (#2b6cb0), ayni yuvarlak uc. Dis cerceve 6 px, ic ayrimlar 5 px —
+     kucuk boyutta (20 px) ic cizgiler cerceveyle birlesmesin diye. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <rect x="9" y="8" width="46" height="48" rx="5" fill="none"
+        stroke="#2b6cb0" stroke-width="6"/>
+  <path d="M9 24 L55 24 M9 40 L55 40" stroke="#2b6cb0" stroke-width="5"/>
+  <path d="M27 16 L37 16 M27 32 L37 32 M27 48 L37 48" stroke="#2b6cb0"
+        stroke-width="5" stroke-linecap="round"/>
+</svg>

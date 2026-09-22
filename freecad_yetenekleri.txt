@@ -1,0 +1,179 @@
+FreeCAD'İN KULLANMADIĞIMIZ YETENEKLERİ — ne ekleyebiliriz
+2026-08-21 · hepsi FreeCAD 1.1.1'de KOŞTURULDU, tahmin yok
+
+Şu an kullandıklarımız: Part, PartDesign, Sketcher, Draft, Mesh, MeshPart,
+Measure, transaction/undo, DocumentObserver, 3B görüntü yakalama.
+Aşağıdakiler duruyor ve kullanılmıyor.
+
+Sıralama, GÜNLÜKTE karşılığı olana göre: her maddenin altında o yeteneğin
+yokluğunun bize kaç tura mal olduğu yazıyor.
+
+
+==========================================================================
+A. ÖNCE BUNLAR — günlükte doğrudan karşılığı var
+==========================================================================
+
+A1. MESH ONARIM ZİNCİRİ                                      0.024 sn
+    removeDuplicatedPoints → fixIndices → fixDegenerations →
+    fixSelfIntersections → removeNonManifolds → fillupHoles →
+    harmonizeNormals
+    Ölçüldü: delikli mesh isSolid False → TRUE.
+    GÜNLÜK: baa70fa4'te model bunu elle yazmaya çalıştı — flood-fill,
+    sınır döngüsü örme, normal düzeltme — ve gövdede GERÇEK DELİK açtı,
+    üç tur üst üste, sonunda kullanıcı geri almak zorunda kaldı.
+    Sekiz satırlık hazır zincir yerine ~150 satır elle geometri.
+
+A2. MESH → KATI KÖPRÜSÜ                              870 facet / 0.705 sn
+    Part.Shape().makeShapeFromMesh(m.Topology, 0.1) + Part.makeSolid
+    Ölçüldü: isValid True, hacim %0.2 sapma.
+    NEDEN ÖNEMLİ: Monkey'in indirdiği her şey mesh. Mesh'te fillet yok,
+    pocket yok, kesit yok. Katıya çevirince FreeCAD'in tüm parametrik
+    araçları açılıyor.
+    TUZAK (ölçüldü): parametrik bir katı DEĞİL. 8000 facet → 8000 YÜZLÜ
+    katı, 4.64 sn. Önce decimate ile facet düşürmek şart.
+
+A3. İÇİNİ BOŞALTMA (kabuk)                                   0.010 sn
+    Shape.makeThickness([yüz], -kalınlık, 1e-3)  → silindiri kupaya
+    PartDesign::Thickness → aynısı ama AĞAÇTA DÜZENLENEBİLİR kalıyor
+    (ölçüldü: kabuk valid, hacim 8072).
+    GÜNLÜK: kupa gövdesi elle "dış koni − iç koni" diye kuruldu. Kabuk
+    tek çağrı ve duvar kalınlığı sonradan değiştirilebilir.
+
+A4. BASKI İÇİN PARÇAYA BÖLME                                 0.391 sn
+    BOPTools.SplitAPI.slice(şekil, [düzlem], "Split") → 2 katı
+    GÜNLÜK: b2938bd0'da kullanıcı "gerekirse 2 parça yaparız birbirine
+    geçen" dedi; elle uğraşıldı.
+
+A5. DİZİLER
+    Draft.make_polar_array           0.030 sn
+    Draft.make_ortho_array           1.93 sn (ilk çağrı modül yüklemesi)
+    PartDesign::PolarPattern         ÇALIŞIYOR — ölçüldü: 6 delikli plaka,
+                                     hacim tam 13760.2, 7 silindirik yüz
+    GÜNLÜK: 57f73673'te "45 derece dilimden çember — polar dizi" elle
+    yazıldı.
+    İKİ TUZAK, ikisi de ölçülerek bulundu:
+      * özelliğin adı `Originals` (1.1'de değişmiş; `Transformed` YOK)
+      * desen yalnızca ESKİZ TABANLI özellikte çalışıyor (Pad/Pocket).
+        Primitifte (AdditiveCylinder) sessizce TEK kopya bırakıyor:
+        hata vermiyor, "Up-to-date" diyor, hacim değişmiyor.
+
+A6. PARÇA ÜZERİNE YAZI                                       2.14 sn
+    Draft.make_shapestring(String="...", FontFile=r"C:\Windows\Fonts\arial.ttf",
+                           Size=10)  → gerçek geometri, pad'lenebilir
+    Ölçüldü: 97 kenarlı şekil. 3B baskıda en sık istenen şeylerden biri
+    (isim, ölçü, logo kabartma/oyma).
+
+A7. VİDA DİŞİ                                                0.022 sn
+    Part.makeHelix(hatve, boy, yarıçap) + sweep
+    GÜNLÜK: b2938bd0 baştan sona bir BANJO CİVATASI oturumuydu; diş hiç
+    açılamadı.
+
+A8. AĞIRLIK                                                  0.001 sn
+    hacim/1000 × yoğunluk → PLA 1.24, PETG 1.27, ABS 1.04 g/cm³
+    Ölçüldü: 50 mm küp = 155 g PLA.
+    "Kaç gram gelir, ne kadar filament gider" sorusunun cevabı ve
+    şu an hiç veremiyoruz.
+
+A9. TABLAYA HANGİ YÜZ OTURACAK                               0.010 sn
+    Mesh.getPlanarSegments(0.01) → düz bölgeler
+    Ölçüldü: silindirde 34 düz bölge, en büyüğü 30 facet.
+    Baskı hazırlığının ilk sorusu; şu an göz kararı.
+
+A10. AKILLI BİRLEŞTİRME                                      0.134 sn
+     BOPTools.JoinAPI.connect([a, b]) → kesişen parçaları temiz birleştirir
+     GÜNLÜK: kulbu gövdeye kaynatma denemeleri.
+
+
+==========================================================================
+B. YAPIYI DEĞİŞTİRENLER — bunlar "özellik" değil, seviye atlatır
+==========================================================================
+
+B1. SPREADSHEET + İFADE MOTORU                               0.143 sn
+    Spreadsheet::Sheet + setAlias("B1","cap")
+    nesne.setExpression("Radius", "Olculer.cap / 2")
+    Ölçüldü: Radius = 27.75 mm, hücreye bağlı.
+    NEDEN BÜYÜK: MANTIK'ın "bırak düzenlenebilir olsun" kuralının en
+    güçlü hali. Ölçüler bir TABLODA; kullanıcı tek hücreyi değiştirip
+    modeli güncelliyor, AI'a hiç dönmeden. Şu anki modelde ölçüler kodun
+    içine gömülü sabitler.
+
+B2. TAM KISITLANMIŞ ESKİZ                                    0.021 sn
+    sk.addConstraint(...), sk.solve() → 0 DoF, sk.FullyConstrained
+    Şu an model kısıtsız eskiz üretiyor: görüntü doğru ama kullanıcı bir
+    noktayı sürükleyince şekil dağılıyor. Kısıtlı eskiz, gerçekten
+    düzenlenebilir olan tek eskizdir.
+
+B3. MESH KESİTİ → TEL → ESKİZ                                0.008 sn
+    crossSections → Part.makePolygon → eskiz
+    Ölçüldü: 128 noktalı kesitten tel, uzunluk 101.8.
+    İndirilen bir mesh'ten ölçü alıp ONUN ÜZERİNE parametrik parça
+    kurmanın yolu. Monkey + CADdy'yi asıl birbirine bağlayan şey bu.
+
+B4. App::Link                                                0.003 sn
+    Aynı geometriyi kopyalamadan çoğaltma. 20 vida = 1 geometri + 20 link.
+
+B5. SVG / DXF İÇE AKTARMA                                    0.24–0.70 sn
+    importSVG, importDXF modülleri var.
+    Logo/profil dışarıdan gelip parçaya işlenebiliyor.
+
+
+==========================================================================
+C. ARAYÜZ TARAFI — başsız test edemedim, değeri yüksek
+==========================================================================
+
+C1. AI'IN NEYİ KASTETTİĞİNİ 3B'DE GÖSTERMESİ
+    Gui.Selection.addSelection(belge, nesne, "Face7")
+    "Şu yüzü kastediyorum" demek yerine EKRANDA SEÇMESİ. Şu an tek yönlü:
+    kullanıcı seçiyor, AI okuyor. Tersi yok.
+
+C2. DEĞİŞTİRDİĞİ YERİ BOYAMASI
+    nesne.ViewObject.DiffuseColor / ShapeColor
+    "Şurayı değiştirdim" görsel kontrolde kanıtlanabilir olurdu.
+
+C3. KESİT GÖRÜNÜMÜ (clipping plane)
+    İçi boş bir parçanın içine bakmak. Görsel kontrolün en büyük kör
+    noktası: duvar, iç boşluk, gömülü parça dışarıdan görünmüyor.
+
+C4. SEÇİM GÖZLEMCİSİ
+    Gui.Selection.addObserver → kullanıcı bir yüze tıklayınca panel
+    kendiliğinden "Ø3.4, derinlik 5" yazabilir. AI'a sormadan.
+
+
+==========================================================================
+D. BÜYÜK VE PAHALI — şimdilik hayır demeyi öneriyorum
+==========================================================================
+
+D1. Assembly (1.1'in yeni atölyesi) — çok parçalı montaj, eklem çözücü.
+    Tek parça baskı işinde karşılığı yok.
+D2. TechDraw — ölçülü teknik resim sayfası. Güzel ama baskı için gereksiz.
+D3. FEM — gerilme analizi ("bu kırılır mı"). Harici çözücü ikilisi gerekiyor.
+D4. OpenSCAD atölyesi — harici openscad.exe istiyor.
+
+
+==========================================================================
+E. ELENENLER (denendi, olmadı)
+==========================================================================
+
+  * App.MeasureManager — getMeasureTypes() konsolda BOŞ; tipleri GUI
+    kaydediyor. (Measure.Measurement ise çalışıyor, onu kullanıyoruz.)
+  * Shape.optimalBoundingBox() — 30° döndürülmüş kutuda 28.48x10x19.33
+    döndü, yani HÂLÂ eksene hizalı. Yerine atalet eksenleri kullanıldı.
+  * trimesh / open3d — FreeCAD'in içinde yok. (numpy, scipy, shapely VAR.)
+
+
+==========================================================================
+ÖNERİM
+==========================================================================
+
+Bir turda hepsi olmaz. Sıra önerim:
+
+  1  A1+A2+A3 birlikte — "indirilen mesh'i çalışılabilir hale getir"
+     zinciri. Günlükteki en pahalı kaybın tam karşılığı.
+  2  B1 (Spreadsheet) — modeli AI'sız düzenlenebilir yapan tek şey.
+  3  A6+A7+A8 — yazı, diş, ağırlık. Üçü de küçük, üçü de sık isteniyor.
+  4  A4+A5+A9+A10 — bölme, dizi, tabla yüzü, birleştirme.
+  5  C1+C2+C3 — arayüz tarafı; asıl kazanç görsel kontrolde.
+  6  B2+B3 — kısıtlı eskiz ve mesh→eskiz köprüsü. En zoru, en kalıcısı.
+
+Hepsinde kural aynı olacak, ölçüm katmanındaki gibi:
+YARDIMCI, YAPAMADIĞINDA YAPAMADIĞINI SÖYLER.

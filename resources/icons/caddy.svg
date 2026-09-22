@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- CADdy logosu: low-poly (fasetli) kedi kafasi.
+     "3D kedi" istegi CAD programina yakisir bicimde yorumlandi - duz cizim
+     yerine yuzeylere bolunmus, soldan isik alan bir kati gibi golgelendi.
+     Sol yuzeyler acik, sag yuzeyler koyu; kulaklar ucgen.
+     16-24 px arac cubugu boyutunda da okunsun diye ayrinti bilincli olarak
+     az tutuldu (biyiklar ince ve soluk, kaybolurlarsa siluet bozulmuyor). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+
+  <!-- KULAKLAR -->
+  <polygon points="13,27 10,5 27,20"  fill="#2b6cb0"/>
+  <polygon points="51,27 54,5 37,20"  fill="#1b4b80"/>
+  <!-- ic kulak -->
+  <polygon points="16,25 13.5,12 24,20" fill="#f4b183"/>
+  <polygon points="48,25 50.5,12 40,20" fill="#d99461"/>
+
+  <!-- KAFA - uc yuzey: sol yanak / on yuz / sag yanak.
+       Iki yariya bolmek "iki renkli" duruyordu; aradaki ON YUZ eklenince
+       silindirik bir kati gibi okunuyor. -->
+  <polygon points="32,20 14,26 8,37 15,50 32,56" fill="#2f7cc4"/>
+  <polygon points="32,20 50,26 56,37 49,50 32,56" fill="#1f4f86"/>
+  <!-- on yuz: en cok isik alan orta serit -->
+  <polygon points="32,19.5 25,22.5 22.5,43 32,56 41.5,43 39,22.5" fill="#3d92dd"/>
+
+  <!-- alt cene fasetleri: siluete hacim katiyor -->
+  <polygon points="32,56 15,50 24,52" fill="#2b6cb0" opacity="0.55"/>
+  <polygon points="32,56 49,50 40,52" fill="#1a4373" opacity="0.55"/>
+
+  <!-- GOZLER - badem, low-poly -->
+  <polygon points="18,35 23,30.5 28,35 23,39" fill="#f7fafc"/>
+  <polygon points="36,35 41,30.5 46,35 41,39" fill="#e2e8f0"/>
+  <!-- kedi bebegi: dikey yarik -->
+  <polygon points="23,31.6 24.3,35 23,38.4 21.7,35" fill="#12263a"/>
+  <polygon points="41,31.6 42.3,35 41,38.4 39.7,35" fill="#12263a"/>
+
+  <!-- BURUN -->
+  <polygon points="28.8,42.5 35.2,42.5 32,46.5" fill="#f4b183"/>
+
+  <!-- AGIZ -->
+  <path d="M32 46.5 V49 M32 49 q-3.6 3 -6.6 0.4 M32 49 q3.6 3 6.6 0.4"
+        fill="none" stroke="#12263a" stroke-width="1.4"
+        stroke-linecap="round" opacity="0.75"/>
+
+  <!-- BIYIKLAR - kucuk boyutta kaybolurlar, siluet yine de kedi kalir -->
+  <g stroke="#e8f0f8" stroke-width="1.1" stroke-linecap="round" opacity="0.5" fill="none">
+    <path d="M27 44 L14 42"/>
+    <path d="M27 46 L15 47.5"/>
+    <path d="M37 44 L50 42"/>
+    <path d="M37 46 L49 47.5"/>
+  </g>
+</svg>

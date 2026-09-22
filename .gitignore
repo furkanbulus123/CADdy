@@ -1,0 +1,39 @@
+__pycache__/
+*.pyc
+
+# CLI'in calisma dizini — oturum artiklari, gecici dosyalar
+workspace/.claude/
+workspace/*.log
+
+# Sohbet kayitlari - calisma ciktisi, surekli buyur, kisisel icerik tasir.
+# Kullanici bunlari klasorden okuyor (panelde sag tik -> LOG klasoru).
+# Acik depoda HICBIRI yok: MANTIK.md'deki LOG/... atiflari gelistiricinin
+# kendi kayitlarina isaret eder.
+LOG/
+
+# Kisisel gelistirme notlari ve ayri bir eklenti — acik depoya girmez.
+Monkey/
+log_incelemesi*.txt
+report.txt
+caddy_gelisim.txt
+caddy-atlas.html
+*.png
+
+# Test raporlari (freecadcmd icinde print kayboldugu icin dosyaya yaziliyor).
+**/tests/_son_*.txt
+
+# Eklenti gunlukleri
+*.log
+
+# FreeCAD
+*.FCStd1
+.copilot-backups/
+.caddy-backups/
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Test gunlukleri: suite artik gercek LOG/ yerine buraya yaziyor
+# (bkz. sohbet_log, CADDY_LOG_DIR). Calisma ciktisi, depoda yeri yok.
+tests/_gunlukler/
