@@ -17,7 +17,7 @@ log_incelemesi*.txt
 report.txt
 caddy_gelisim.txt
 caddy-atlas.html
-*.png
+/uzay_asansoru_*.png
 
 # Test raporlari (freecadcmd icinde print kayboldugu icin dosyaya yaziliyor).
 **/tests/_son_*.txt
