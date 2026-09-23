@@ -16,7 +16,7 @@ import time
 from PySide import QtCore, QtGui, QtWidgets
 
 from .. import config, kayitlar, locate, log
-from ..conversation import ConversationController, _kisa_sayi
+from ..conversation import ConversationController, _short_num
 from .code_card import CodeCard
 
 NESNE_ADI = "CaddyPanel"
@@ -642,7 +642,7 @@ class CaddyPanel(QtWidgets.QWidget):
         if dugme is None:
             return
         try:
-            dugme.setEnabled(self.ctl._ileri_sayisi() > 0)
+            dugme.setEnabled(self.ctl._redo_count() > 0)
         except Exception:                                        # noqa: BLE001
             pass
 
@@ -712,7 +712,7 @@ class CaddyPanel(QtWidgets.QWidget):
         if self._dusunce_tk:
             # "düşünce" degil "token": olculen sey token sayisi, kullanici
             # da oyle adlandirilmasini istedi.
-            parca.append(f"~{_kisa_sayi(self._dusunce_tk)} token")
+            parca.append(f"~{_short_num(self._dusunce_tk)} token")
         metin = " · ".join(parca)
 
         if self._ilerleme is None:

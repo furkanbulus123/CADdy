@@ -2,7 +2,7 @@
 
     "C:\\Program Files\\FreeCAD 1.1\\bin\\freecadcmd.exe" tests\\test_geri_al_fc.py
 
-Aga CIKMAZ. Model yanitini taklit edip (`_tur_bitti` sentetik bir TurSonucu
+Aga CIKMAZ. Model yanitini taklit edip (`_turn_done` sentetik bir TurSonucu
 ile surulur) isaretin dogru yerde tetiklendigi ve TETIKLENMEDIGI sinaniyor.
 
 NEDEN VAR — olculdu, LOG/2026-08-20_baa70fa4.txt:
@@ -91,14 +91,14 @@ ctl.transport.tur_gonder = lambda *a, **k: gonderilen.append(a[0] if a else "")
 # --------------------------------------------------------------- isaret
 bolum("isaret ayristirma")
 kontrol("kendi satirinda tetikler",
-        cv._GERI_AL_ISARET.search("Yanlis oldu.\nGERI-AL") is not None)
+        cv._UNDO_MARKER.search("Yanlis oldu.\nGERI-AL") is not None)
 kontrol("Turkce yazim da tetikler",
-        cv._GERI_AL_ISARET.search("bitti\nGERİ-AL\n") is not None)
+        cv._UNDO_MARKER.search("bitti\nGERİ-AL\n") is not None)
 kontrol("cumle icinde TETIKLEMEZ",
-        cv._GERI_AL_ISARET.search("bunu geri-al demeye gerek yok") is None)
+        cv._UNDO_MARKER.search("bunu geri-al demeye gerek yok") is None)
 kontrol("bosluklu satirda tetikler",
-        cv._GERI_AL_ISARET.search("\n   GERI-AL   \n") is not None)
-kontrol("dongu siniri 2", cv._GERI_AL_SINIR == 2, cv._GERI_AL_SINIR)
+        cv._UNDO_MARKER.search("\n   GERI-AL   \n") is not None)
+kontrol("dongu siniri 2", cv._UNDO_LIMIT == 2, cv._UNDO_LIMIT)
 
 # ----------------------------------------------------------- bos yigin
 bolum("bos yiginda")
@@ -114,7 +114,7 @@ kontrol("kod calisti", s.basarili, s.hata_izi[-200:])
 kontrol("nesne eklendi", doc.getObject("AiKutu") is not None)
 _yaz("       undo yigini: %s" % list(doc.UndoNames))
 kontrol("tepe kaydi AI oneki tasiyor",
-        doc.UndoNames and doc.UndoNames[0].startswith(cv._AI_ONEK),
+        doc.UndoNames and doc.UndoNames[0].startswith(cv._AI_PREFIX),
         list(doc.UndoNames))
 
 oldu, aciklama = ctl.geri_al(ai_mi=True)
@@ -138,7 +138,7 @@ doc.commitTransaction()
 doc.recompute()
 _yaz("       undo yigini: %s" % list(doc.UndoNames))
 kontrol("ON KABUL: tepede artik kullanicinin isi var",
-        not doc.UndoNames[0].startswith(cv._AI_ONEK), doc.UndoNames[0])
+        not doc.UndoNames[0].startswith(cv._AI_PREFIX), doc.UndoNames[0])
 
 oldu, aciklama = ctl.geri_al()
 kontrol("REDDEDILDI — kullanicinin isi silinmedi", not oldu, aciklama)
@@ -152,8 +152,8 @@ kontrol("aciklama tepedeki islemin adini soyluyor",
 bolum("reddedilince MODEL haberdar ediliyor")
 mesajlar.clear()
 gonderilen.clear()
-ctl._geri_al_tur = 0
-ctl._ai_geri_al()
+ctl._undo_turns = 0
+ctl._ai_undo()
 kontrol("kullaniciya soylendi",
         any("not done" in m for _, m in mesajlar), mesajlar)
 kontrol("MODELE de soylendi (varsayimla devam etmesin)",
@@ -171,8 +171,8 @@ doc.recompute()
 _yaz("       undo yigini: %s" % list(doc.UndoNames))
 mesajlar.clear()
 gonderilen.clear()
-ctl._geri_al_tur = 0
-ctl._ai_geri_al()
+ctl._undo_turns = 0
+ctl._ai_undo()
 kontrol("geri alindi", doc.getObject("AiKutu2") is None,
         [o.Name for o in doc.Objects])
 kontrol("kullaniciya soylendi", any("AI undid" in m for _, m in mesajlar),
@@ -187,11 +187,11 @@ for i in range(3):
         'doc.addObject("Part::Box", "Dongu%d")\n' % i, "dongu %d" % i)
 mesajlar.clear()
 gonderilen.clear()
-ctl._geri_al_tur = 0
+ctl._undo_turns = 0
 for i in range(3):
-    ctl._ai_geri_al()
-kontrol("sinir uygulandi", ctl._geri_al_tur == cv._GERI_AL_SINIR,
-        ctl._geri_al_tur)
+    ctl._ai_undo()
+kontrol("sinir uygulandi", ctl._undo_turns == cv._UNDO_LIMIT,
+        ctl._undo_turns)
 kontrol("durduruldugu SOYLENIYOR",
         any("stopped" in m for _, m in mesajlar), mesajlar)
 kontrol("ucuncu kutu HALA duruyor (sinir gercekten kesti)",
@@ -199,19 +199,19 @@ kontrol("ucuncu kutu HALA duruyor (sinir gercekten kesti)",
         [o.Name for o in doc.Objects])
 
 bolum("gercek kullanici mesaji sayaci sifirliyor")
-ctl._geri_al_tur = 2
+ctl._undo_turns = 2
 gonderilen.clear()
 ctl.gonder("yeni bir istek", kullanici_mi=True)
-kontrol("sayac sifirlandi", ctl._geri_al_tur == 0, ctl._geri_al_tur)
+kontrol("sayac sifirlandi", ctl._undo_turns == 0, ctl._undo_turns)
 
 # --------------------------------------------------------- tur ayristirma
 bolum("tam tur: isaret yanittan ayikaniyor")
 mesajlar.clear()
 gonderilen.clear()
-ctl._geri_al_tur = 0
+ctl._undo_turns = 0
 ctl.executor.calistir('doc.addObject("Part::Box", "TurKutu")\n', "tur kutu")
 
-ctl._tur_bitti(TurSonucu(metin="Bu adim yanlis oldu, geri aliyorum.\n"
+ctl._turn_done(TurSonucu(metin="Bu adim yanlis oldu, geri aliyorum.\n"
                                "GERI-AL\n"))
 ai_mesajlari = [m for r, m in mesajlar if r == "ai"]
 _yaz("       ai mesaji: %r" % (ai_mesajlari[0] if ai_mesajlari else None))
@@ -225,7 +225,7 @@ kontrol("geri alma GERCEKTEN oldu", doc.getObject("TurKutu") is None,
 bolum("isaret yoksa geri alma OLMAMALI")
 ctl.executor.calistir('doc.addObject("Part::Box", "Kalsin")\n', "kalsin")
 mesajlar.clear()
-ctl._tur_bitti(TurSonucu(metin="Her sey yolunda gorunuyor."))
+ctl._turn_done(TurSonucu(metin="Her sey yolunda gorunuyor."))
 kontrol("isaretsiz yanitta geri alma yok",
         doc.getObject("Kalsin") is not None,
         [o.Name for o in doc.Objects])
@@ -294,7 +294,7 @@ doc2.recompute()
 kontrol("ON KABUL: kullanicinin nesnesi geri alinmis",
         doc2.getObject("ElleGeri") is None, [o.Name for o in doc2.Objects])
 kontrol("ON KABUL: ileri yigininin tepesi AI DEGIL",
-        not doc2.RedoNames[0].startswith(cv._AI_ONEK), list(doc2.RedoNames))
+        not doc2.RedoNames[0].startswith(cv._AI_PREFIX), list(doc2.RedoNames))
 oldu, aciklama = ctl.ileri_al()
 kontrol("REDDEDILMIYOR — is geri getiriliyor", oldu, aciklama)
 kontrol("kullanicinin nesnesi geri geldi", doc2.getObject("ElleGeri") is not None,
