@@ -30,6 +30,10 @@ Nothing is exported, nothing is lost, and every AI step is one `Ctrl+Z` away.
 | ![Sailing ship: CADdy measures the hull and checks every part](docs/ship.png) | ![Alien figurine split into printable parts, overlap-checked](docs/alien.png) |
 | *A sailing ship: measured part by part, not eyeballed.* | *A 3-part printable figurine, checked for overlaps and fit.* |
 
+![A space elevator concept built with CADdy](docs/space.png)
+
+*Not only parts — ideas too. A visual concept of a space elevator: a cable anchored on Earth's north pole, a climber cabin on its way up, a station in geostationary orbit and a counterweight beyond it, with the Moon, planets and a starfield around them. Asked "what is this", CADdy reads the scene back from the document itself — every part, its size and where it sits.*
+
 ## Requirements
 
 - Windows 10 / 11
@@ -56,8 +60,6 @@ FreeCAD's `Mod` directory. No admin rights needed. Restart FreeCAD and pick
 Open the CADdy panel and describe what you want:
 
 > *"Add four M3 mounting holes, 5 mm from each corner."*
-
-![Asking CADdy about an existing scene](docs/space.png)
 
 | Button | What it does |
 |---|---|
