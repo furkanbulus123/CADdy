@@ -2,11 +2,7 @@
 
 **An AI assistant that lives inside FreeCAD — and measures its work instead of guessing.**
 
-[![Watch the demo: building a toy pickup truck with CADdy](docs/truck.png)](docs/demo.mp4)
-
-▶ **[Watch the 1-minute demo](
 https://github.com/user-attachments/assets/2cfa3f8e-b67b-40ed-ae7c-c576d6d24644
-)**
 
 You draw. You ask. CADdy continues on the same live document. You keep going.
 Nothing is exported, nothing is lost, and every AI step is one `Ctrl+Z` away.
