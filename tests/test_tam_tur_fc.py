@@ -299,7 +299,7 @@ yaz("0c) GORSEL KONTROL — isaret ayristirma ve emniyet (ag yok)")
 from caddy import conversation as _cv
 from caddy import gorunum as _gor
 
-_isaret = _cv._GORSEL_ISARET
+_isaret = _cv._VISUAL_MARKER
 kontrol("kendi satirinda tetikler",
         _isaret.search("Kulaklari ekledim.\nGORSEL-KONTROL") is not None)
 kontrol("Turkce yazim da tetikler",
@@ -321,8 +321,8 @@ yaz("     sozlesme boyu: %d karakter (~%d token)" % (len(_sz), len(_sz) // 3))
 # sinaniyor) cunku acmaya karar verirsek geri gelecek.
 kontrol("sozlesmede gorsel maddesi KALMADI", "GORSEL-KONTROL" not in _sz)
 kontrol("sozlesme 'resim yok' diyor", "YOU CANNOT SEE THE 3D VIEW" in _sz)
-kontrol("gorsel anahtari kapali", _cv.GORSEL_ACIK is False)
-kontrol("dongu siniri 2", _cv._GORSEL_SINIR == 2, _cv._GORSEL_SINIR)
+kontrol("gorsel anahtari kapali", _cv.VISUAL_ENABLED is False)
+kontrol("dongu siniri 2", _cv._VISUAL_LIMIT == 2, _cv._VISUAL_LIMIT)
 # freecadcmd'de GUI yok; yakalanabilir_mi() PATLAMADAN False donmeli.
 kontrol("GUI yokken yakalanabilir_mi False", _gor.yakalanabilir_mi() is False)
 kontrol("GUI yokken yakala() None", _gor.yakala() is None)
@@ -362,21 +362,21 @@ kontrol("3 + YAKIN birlikte okunuyor",
 kontrol("YAKIN'siz isaret hala calisiyor (yakin adi bos)",
         _uc is not None and _uc.group(2) is None,
         _uc.group(2) if _uc else "eslesme yok")
-kontrol("en fazla 3 nesne alinir", _cv._YAKIN_AZAMI == 3, _cv._YAKIN_AZAMI)
+kontrol("en fazla 3 nesne alinir", _cv._CLOSEUP_MAX == 3, _cv._CLOSEUP_MAX)
 # Adlar FreeCAD IC ADI: bosluklu bir sey yazilirsa isaret HIC eslesmemeli
 # ki cumlenin devami yanlislikla nesne adi sanilmasin. O halde de kanal
 # sessiz kalmaz: anahtar yakalanir ve modele not gider (asagida).
 kontrol("bosluklu ad kaliba UYMUYOR",
         _isaret.search("GORSEL-KONTROL YAKIN Flok Ust") is None)
 kontrol("...ama anahtar yine de goruluyor (sessiz kalinmaz)",
-        _cv._GORSEL_ANAHTAR.search("GORSEL-KONTROL YAKIN Flok Ust")
+        _cv._VISUAL_KEYWORD.search("GORSEL-KONTROL YAKIN Flok Ust")
         is not None)
 
 # Tetiklemedigi durumda SESSIZ kalmamali: anahtar var ama yerinde degil.
 kontrol("anahtar kalibi ortadaki gecisi goruyor",
-        _cv._GORSEL_ANAHTAR.search(
+        _cv._VISUAL_KEYWORD.search(
             "GORSEL-KONTROL yazarsam resim gelir") is not None)
-ctl._gorsel_uyari = True
+ctl._visual_warning = True
 _orj_gonder = ctl.transport.tur_gonder
 _yakalanan = {}
 ctl.transport.tur_gonder = lambda istem, gorsel=None: _yakalanan.update(
@@ -387,15 +387,15 @@ finally:
     ctl.transport.tur_gonder = _orj_gonder
 _istek = _yakalanan.get("istem", "")
 kontrol("dusen istek bir sonraki OTOMATIK isteme not olarak biniyor",
-        _cv._GORSEL_UYARI in _istek, repr(_istek[-160:]))
-kontrol("not bir kez binip temizleniyor", ctl._gorsel_uyari is False)
+        _cv._VISUAL_WARNING in _istek, repr(_istek[-160:]))
+kontrol("not bir kez binip temizleniyor", ctl._visual_warning is False)
 # Ek tur acilmadiginin kaniti: not, ZATEN gidecek olan istemin icinde,
 # kendi <request> blogunda degil.
 kontrol("not EK TUR acmiyor (mevcut isteme bindi)",
         _istek.count("<request>") == 1 and "kod calisti" in _istek,
         _istek.count("<request>"))
 # Kullanici mesaji bayragi sifirlar - eski bir not yeni sohbete sizmasin.
-ctl._gorsel_uyari = True
+ctl._visual_warning = True
 ctl.transport.tur_gonder = lambda istem, gorsel=None: _yakalanan.update(
     {"istem": istem})
 try:
@@ -409,7 +409,7 @@ kontrol("kullanici mesajinda not EKLENMIYOR",
 # GORSEL KAPALI. Model yine de isteyebilir; host sessiz kalmamali —
 # ciktiyi gondermeli ve "goruntuye bakmis gibi konusma" demeli. Sessiz
 # kalinsaydi model basarili bir calistirma hakkinda SIFIR geri bildirim
-# alirdi (olculen kayip, bkz. _gorsel_yerine_cikti).
+# alirdi (olculen kayip, bkz. _output_instead_of_visual).
 _msj = []
 ctl.mesaj.connect(lambda r, m: _msj.append((r, m)))
 _gonderilen = {}
@@ -417,18 +417,18 @@ _orj_g = ctl.transport.tur_gonder
 ctl.transport.tur_gonder = lambda istem, **k: _gonderilen.setdefault(
     "istem", istem)
 try:
-    ctl._gorseli_gonder("hacim: 8000 mm3")
+    ctl._send_visual("hacim: 8000 mm3")
 finally:
     ctl.transport.tur_gonder = _orj_g
-kontrol("gorsel kapaliyken KARE gonderilmiyor", not ctl._gorsel_tur,
-        ctl._gorsel_tur)
+kontrol("gorsel kapaliyken KARE gonderilmiyor", not ctl._visual_turns,
+        ctl._visual_turns)
 kontrol("ama kod CIKTISI yine de modele gidiyor",
         "8000" in _gonderilen.get("istem", ""),
         _gonderilen.get("istem", "")[:120])
 kontrol("modele 'goruntuye bakmis gibi konusma' deniyor",
         "could NOT be sent" in _gonderilen.get("istem", ""),
         _gonderilen.get("istem", "")[:200])
-ctl._gorsel_tur = 0
+ctl._visual_turns = 0
 _msj.clear()
 
 # ---- OLCULEN KAYIP: butce CIKTIYI da yutuyordu ----------------------
@@ -446,12 +446,12 @@ _yakalanan.clear()
 ctl.transport.tur_gonder = lambda istem, gorsel=None: _yakalanan.update(
     {"istem": istem, "gorsel": gorsel})
 try:
-    ctl._gorsel_tur = _cv._GORSEL_SINIR
-    ctl._gorseli_gonder("dolgu alani: 3080 mm2 | cakisma: 0.00 mm2")
+    ctl._visual_turns = _cv._VISUAL_LIMIT
+    ctl._send_visual("dolgu alani: 3080 mm2 | cakisma: 0.00 mm2")
 finally:
     ctl.transport.tur_gonder = _orj_gonder
     ctl.gunluk.sistem = _orj_sistem
-    ctl._gorsel_tur = 0
+    ctl._visual_turns = 0
 
 _ist = _yakalanan.get("istem", "")
 kontrol("butce dolsa da CIKTI modele gidiyor", "3080 mm2" in _ist,
@@ -471,11 +471,11 @@ _yakalanan.clear()
 ctl.transport.tur_gonder = lambda istem, gorsel=None: _yakalanan.update(
     {"istem": istem})
 try:
-    ctl._gorsel_tur = _cv._GORSEL_SINIR
-    ctl._gorseli_gonder()
+    ctl._visual_turns = _cv._VISUAL_LIMIT
+    ctl._send_visual()
 finally:
     ctl.transport.tur_gonder = _orj_gonder
-    ctl._gorsel_tur = 0
+    ctl._visual_turns = 0
 kontrol("cikti yoksa BOS tur harcanmiyor", "istem" not in _yakalanan,
         _yakalanan)
 
@@ -484,17 +484,17 @@ kontrol("cikti yoksa BOS tur harcanmiyor", "istem" not in _yakalanan,
 # kod yazdi — istedigimiz dongunun ta kendisi — ve dorduncude cezalandirildi.
 yaz("0e) GORSEL SAYACI — arada KOD kostuysa zincir degil, ilerleme")
 
-ctl._gorsel_tur = _cv._GORSEL_SINIR
+ctl._visual_turns = _cv._VISUAL_LIMIT
 _blok = type("B", (), {"kod": "x = 1 + 1", "baslik": "sessiz is"})()
-# Cikti YOK: yoksa _ciktiyi_yolla gercek bir tur baslatir ve asagidaki
+# Cikti YOK: yoksa _send_output gercek bir tur baslatir ve asagidaki
 # canli tur testini bozar (olculdu — bu testi ilk yazista tam bu oldu).
 ctl.transport.tur_gonder = lambda istem, gorsel=None: None
 try:
     ctl.blogu_calistir(_blok)
 finally:
     ctl.transport.tur_gonder = _orj_gonder
-kontrol("kod kosunca gorsel sayaci SIFIRLANIYOR", ctl._gorsel_tur == 0,
-        ctl._gorsel_tur)
+kontrol("kod kosunca gorsel sayaci SIFIRLANIYOR", ctl._visual_turns == 0,
+        ctl._visual_turns)
 
 # Ama koruma kaybolmadi: arada is yokken sinir hala kesiyor. Bassiz
 # ortamda 3B pencere olmadigi icin sayac kendiliginden artmaz — sinir
@@ -503,13 +503,13 @@ kontrol("kod kosunca gorsel sayaci SIFIRLANIYOR", ctl._gorsel_tur == 0,
 # kapali dal en basta donuyor. Acildiginda korumanin geri gelmesi icin
 # sabitin yerinde oldugunu ve sayacin kirletilmedigini sinariyoruz.
 _msj.clear()
-ctl._gorsel_tur = _cv._GORSEL_SINIR
-ctl._gorseli_gonder()
+ctl._visual_turns = _cv._VISUAL_LIMIT
+ctl._send_visual()
 kontrol("kapali dal sayaci KIRLETMIYOR",
-        ctl._gorsel_tur == _cv._GORSEL_SINIR, ctl._gorsel_tur)
+        ctl._visual_turns == _cv._VISUAL_LIMIT, ctl._visual_turns)
 kontrol("dongu emniyeti sabiti yerinde duruyor (acilinca gerekli)",
-        _cv._GORSEL_SINIR == 2, _cv._GORSEL_SINIR)
-ctl._gorsel_tur = 0
+        _cv._VISUAL_LIMIT == 2, _cv._VISUAL_LIMIT)
+ctl._visual_turns = 0
 _msj.clear()
 
 # ---- GUNLUK BASLIGINDA MODEL ADI ------------------------------------
@@ -521,40 +521,40 @@ _msj.clear()
 # OLCULDU (LOG/2026-08-27_9564dc71.txt): karar modeldeyken 30 gorsel
 # gonderiminin 27'si (%90) uc kareydi ve sozlesmeye "uc kare varsayilan
 # degil" yazildiktan SONRA da oran %90 kaldi. Kural tutmayinca kurali
-# uygulayacak yere tasidik: _kac_kare.
+# uygulayacak yere tasidik: _frame_count.
 yaz("0h) KARE SAYISI — karar host'ta")
-ctl._gorsel_tur = 0
-ctl._son_eklenen = []
-ctl._gorsel_cok = True
-_cok, _not = ctl._kac_kare()
+ctl._visual_turns = 0
+ctl._last_added = []
+ctl._visual_multi = True
+_cok, _not = ctl._frame_count()
 kontrol("model istedi ama yeni nesne yok -> TEK kare", _cok is False, _cok)
 kontrol("indirimin sebebi modele soyleniyor", "one was sent" in _not,
         _not[:80])
 kontrol("model yerine ne yapacagi da soyleniyor",
         "check_overlap" in _not, _not[-120:])
 
-ctl._son_eklenen = ["Kutu"]
-ctl._gorsel_cok = True
-_cok, _not = ctl._kac_kare()
+ctl._last_added = ["Kutu"]
+ctl._visual_multi = True
+_cok, _not = ctl._frame_count()
 kontrol("yeni nesne eklendiyse UC kare", _cok is True, _cok)
 kontrol("hak verilince not YOK", _not == "", _not)
 
 # Ikinci bakis: ilk kare soruyu kapatmadi.
-ctl._son_eklenen = []
-ctl._gorsel_tur = 1
-ctl._gorsel_cok = False
-_cok, _not = ctl._kac_kare()
+ctl._last_added = []
+ctl._visual_turns = 1
+ctl._visual_multi = False
+_cok, _not = ctl._frame_count()
 kontrol("arka arkaya ikinci bakista UC kare", _cok is True, _cok)
 
 # Model HIC istemediyse ve ortada yeni bir sey yoksa tek kare, not da yok:
 # istemedigi bir seyin gerekcesini yazmak gurultudur.
-ctl._gorsel_tur = 0
-ctl._gorsel_cok = False
-_cok, _not = ctl._kac_kare()
+ctl._visual_turns = 0
+ctl._visual_multi = False
+_cok, _not = ctl._frame_count()
 kontrol("istemeyene tek kare, not YOK", _cok is False and _not == "",
         (_cok, _not))
 
-# Calisan blok EKLENEN nesneleri _son_eklenen'e yaziyor mu.
+# Calisan blok EKLENEN nesneleri _last_added'e yaziyor mu.
 _blok2 = type("B", (), {"kod": 'k = doc.addObject("Part::Box", "KareKutu")',
                         "baslik": "ek"})()
 #
@@ -573,25 +573,25 @@ finally:
     App.closeDocument(_kd.Name)
     App.setActiveDocument(doc.Name)
 kontrol("calisan blok eklenen nesneyi kaydediyor",
-        "KareKutu" in ctl._son_eklenen, ctl._son_eklenen)
-ctl._son_eklenen = []
-ctl._gorsel_tur = 0
+        "KareKutu" in ctl._last_added, ctl._last_added)
+ctl._last_added = []
+ctl._visual_turns = 0
 
 # GORSEL KAPALIYKEN hak BIRIKTIRILMIYOR. Bassiz "3B pencere yok" dalinda
 # hakki saklamak dogruydu (kullanici pencereyi acinca ilk bakisini alsin).
 # Kapali sistemde saklanacak bir sey yok: kare hic gelmeyecek, birikmis
 # hak yalnizca acildigi gun patlar.
-ctl._son_eklenen = ["Kutu"]
-ctl._gorsel_tur = 0
-ctl._gorsel_cok = True
-ctl._gorseli_gonder()
+ctl._last_added = ["Kutu"]
+ctl._visual_turns = 0
+ctl._visual_multi = True
+ctl._send_visual()
 kontrol("gorsel kapaliyken hak biriktirilmiyor",
-        ctl._son_eklenen == [], ctl._son_eklenen)
+        ctl._last_added == [], ctl._last_added)
 # Temizlik gonderim yolunda: sayac artmissa kare cikmistir.
-kontrol("gonderilmeyen bakis sayaci da artirmiyor", ctl._gorsel_tur == 0,
-        ctl._gorsel_tur)
-ctl._son_eklenen = []
-ctl._gorsel_cok = False
+kontrol("gonderilmeyen bakis sayaci da artirmiyor", ctl._visual_turns == 0,
+        ctl._visual_turns)
+ctl._last_added = []
+ctl._visual_multi = False
 
 yaz("0g) EFOR — dusunme miktari GERCEKTEN komut satirina gidiyor mu")
 # OLCULDU (3 tekrar, sonnet, ayni istem):
