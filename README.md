@@ -25,10 +25,10 @@ Nothing is exported, nothing is lost, and every AI step is one `Ctrl+Z` away.
 
 | | |
 |---|---|
-| ![Sailing ship: CADdy measures the hull and checks every part](docs/ship.png) | ![Alien figurine split into printable parts, overlap-checked](docs/alien.png) |
-| *A sailing ship: measured part by part, not eyeballed.* | *A 3-part printable figurine, checked for overlaps and fit.* |
-
-![A space elevator concept built with CADdy](docs/space.png)
+| ![Toy pickup truck built step by step with CADdy](docs/truck.png) | ![Sailing ship: CADdy measures the hull and checks every part](docs/ship.png) |
+| *A toy pickup truck, built step by step in one live document.* | *A sailing ship: measured part by part, not eyeballed.* |
+| ![Alien figurine split into printable parts, overlap-checked](docs/alien.png) | ![A space elevator concept built with CADdy](docs/space.png) |
+| *A 3-part printable figurine, checked for overlaps and fit.* | *A space elevator concept (below).* |
 
 *Not only parts — ideas too. A visual concept of a space elevator: a cable anchored on Earth's north pole, a climber cabin on its way up, a station in geostationary orbit and a counterweight beyond it, with the Moon, planets and a starfield around them. Asked "what is this", CADdy reads the scene back from the document itself — every part, its size and where it sits.*
 
@@ -46,7 +46,7 @@ Nothing is exported, nothing is lost, and every AI step is one `Ctrl+Z` away.
 ```powershell
 git clone https://github.com/furkanbulus123/CADdy.git
 cd CADdy
-.\kurulum.ps1
+.\install.ps1
 ```
 
 The script finds FreeCAD, checks the `claude` command and links the folder into
