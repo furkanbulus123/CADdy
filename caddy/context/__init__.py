@@ -1,4 +1,4 @@
-"""Belgeyi modele anlatilabilir metne cevirme.
+"""Turning the document into text the model can read.
 
-Bu paket Qt import ETMEZ — freecadcmd ile bassiz test edilebilir.
+This package does NOT import Qt — it can be tested headless with freecadcmd.
 """

@@ -67,38 +67,38 @@ engine plus numpy/scipy (both present in this FreeCAD):
 
 | Call | Answers |
 |---|---|
-| `kesif()` | everything present — the first step on an existing model |
-| `olc(nesne)` | size, centre, volume, area, mesh state. Warns `YATIK` and gives the true size along the object's **own** axes |
-| `kesit_capi(nesne, z=...)` | diameter at a height. Tells circle / oval (short + long) / **wall** (outer, inner, thickness) apart |
-| `duvar_kalinligi(nesne)` | thinnest wall, by ray casting — the print-critical number |
-| `mesafe(a, b)` | shortest distance between two objects: *"do they actually touch?"* |
-| `olcu(nesne, "Face7")` | radius / diameter / area / length of a picked face or edge, exact, no fitting |
-| `baski_kontrol(nesne)` | print-readiness verdict |
+| `survey()` | everything present — the first step on an existing model |
+| `measure(obj)` | size, centre, volume, area, mesh state. Warns `TILTED` and gives the true size along the object's **own** axes |
+| `section_diameter(obj, z=...)` | diameter at a height. Tells circle / oval (short + long) / **wall** (outer, inner, thickness) apart |
+| `wall_thickness(obj)` | thinnest wall, by ray casting — the print-critical number |
+| `distance(a, b)` | shortest distance between two objects: *"do they actually touch?"* |
+| `measure_element(obj, "Face7")` | radius / diameter / area / length of a picked face or edge, exact, no fitting |
+| `print_check(obj)` | print-readiness verdict |
 
 And these **do the work** — reach for them before writing geometry by hand:
 
 | Call | Does | Needs → gives back |
 |---|---|---|
-| `mesh_onar(nesne)` | full mesh repair chain; says what it could not fix | mesh → dict, repairs in place |
-| `kati_yap(nesne)` | mesh → solid, so Part/PartDesign tools apply | **closed** mesh → **new** `Part::Feature` object (~5 s), or `None` |
-| `icini_bosalt(nesne, 2)` | hollow it out (cup, box, enclosure) | solid → same object, reshaped |
-| `birlestir(a, b)` | one part out of two; **prints whether the result actually prints** | **two solids** *or* **two closed meshes** → new object (~7 s), or `None` |
-| `kesit_konturu(nesne, z)` | outline points at a height — silhouettes, waists, pockets | mesh *or* solid → list of contours, longest first, each `[(x, y), …]`; pass a **list** of z and get `{z: contours}` for the price of one |
-| `olcu_tablosu(cap=55, duvar=2)` + `bagla(o, "Radius", "Olculer.cap/2")` | dimensions in a **table** the user can edit without you | — → sheet / bool |
-| `yazi("metin", boyut, kalinlik)` | text as real geometry, to emboss or cut | — → new object |
-| `vida_disi(yaricap, hatve, boy, ic_mi=False)` | a real screw thread | — → new object |
-| `agirlik(nesne, "PLA", doluluk=0.2)` | grams + filament metres | any → grams |
-| `baskiya_bol(nesne, z=...)` | split into printable parts | solid → list |
-| `dizi_polar(nesne, 6)` / `dizi_dogrusal(nesne, 3, yon, aralik)` | arrays | any → array object |
-| `tabana_otur(nesne)` | widest flat face down onto the bed | mesh → bool, moves in place |
+| `repair_mesh(obj)` | full mesh repair chain; says what it could not fix | mesh → dict, repairs in place |
+| `make_solid(obj)` | mesh → solid, so Part/PartDesign tools apply | **closed** mesh → **new** `Part::Feature` object (~5 s), or `None` |
+| `hollow(obj, 2)` | hollow it out (cup, box, enclosure) | solid → same object, reshaped |
+| `join(a, b)` | one part out of two; **prints whether the result actually prints** | **two solids** *or* **two closed meshes** → new object (~7 s), or `None` |
+| `section_contour(obj, z)` | outline points at a height — silhouettes, waists, pockets | mesh *or* solid → list of contours, longest first, each `[(x, y), …]`; pass a **list** of z and get `{z: contours}` for the price of one |
+| `dimension_table(dia=55, wall=2)` + `bind(o, "Radius", "Olculer.dia/2")` | dimensions in a **table** the user can edit without you | — → sheet / bool |
+| `text3d("text", size, thickness)` | text as real geometry, to emboss or cut | — → new object |
+| `screw_thread(radius, pitch, length, internal=False)` | a real screw thread | — → new object |
+| `weight(obj, "PLA", infill=0.2)` | grams + filament metres | any → grams |
+| `split_for_print(obj, z=...)` | split into printable parts | solid → list |
+| `polar_array(obj, 6)` / `linear_array(obj, 3, direction, spacing)` | arrays | any → array object |
+| `place_on_bed(obj)` | widest flat face down onto the bed | mesh → bool, moves in place |
 
 All of them print, so the answer comes straight back to you in the same turn.
 **Read the third column first** — guessing a return value cost a whole turn
 once, and the wrong kind of input cost sixteen minutes.
 
 They are **honest about their limits**, and you should trust the refusals:
-on a tilted object `kesit_capi` says `YUVARLAK DEGIL` instead of inventing a
-diameter; `duvar_kalinligi` says the body is solid rather than returning a
+on a tilted object `section_diameter` says `YUVARLAK DEGIL` instead of inventing a
+diameter; `wall_thickness` says the body is solid rather than returning a
 number. When you get one of those, measure a different way — do not guess.
 
 **2. Compute it and print it.** For solids, geometry is exact and cheap:
@@ -203,13 +203,13 @@ Mesh.export([nesne], r"C:\...\parca.3mf")     # LISTE, ve BELGE NESNESI
 Check before writing the file and report what you found —
 `ham.isSolid()`, `ham.hasNonManifolds()`, `ham.hasSelfIntersections()`.
 
-## "Is it ready to print?" — answer with `baski_kontrol()`, not an opinion
+## "Is it ready to print?" — answer with `print_check()`, not an opinion
 
 This is the single most frequent question the user asks. It has a
 deterministic answer and you have it pre-bound:
 
 ```python
-baski_kontrol(doc.getObject("kupa"))   # or baski_kontrol() for every mesh
+print_check(doc.getObject("kupa"))   # or print_check() for every mesh
 ```
 
 It prints a verdict plus the reasons, and print comes back to you, so one
@@ -221,8 +221,7 @@ A mesh that looks perfect can still be open, and a slicer will reject it.
 
 ## Working on meshes
 
-Meshes are the normal case here: anything imported, and anything Monkey
-downloads, is a `Mesh::Feature`. It has **no `Shape`** — `obj.Shape` raises.
+Meshes are the normal case here: anything imported (STL, OBJ, 3MF) is a `Mesh::Feature`. It has **no `Shape`** — `obj.Shape` raises.
 Use `obj.Mesh`.
 
 **`isSolid()` alone is not enough — measured:** two interpenetrating boxes
@@ -232,30 +231,30 @@ give `isSolid() → True` but `hasSelfIntersections() → True` and
 **Do not hand-write mesh surgery** — flood fill, boundary-loop stitching,
 re-triangulating a hole, or `fillupHoles` by hand. Measured: three turns in a
 row of that cut **real holes in the body** and the user had to undo the lot.
-`mesh_onar` does the whole chain in 0.05 s and reports what it could *not* fix.
+`repair_mesh` does the whole chain in 0.05 s and reports what it could *not* fix.
 
-**Joining two meshes:** `birlestir(a, b)` takes meshes too (~7 s). Not
+**Joining two meshes:** `join(a, b)` takes meshes too (~7 s). Not
 `Mesh.unite()` — measured, it never returns a closed mesh here. If
-`birlestir` says it could not get one clean part, stop: two **closed** parts
+`join` says it could not get one clean part, stop: two **closed** parts
 sunk into each other already print as one, every slicer unions them.
 
 **A valid solid is not a printable one.** `isValid()` and `Solids == 1` say
 nothing about self-intersections — measured: a fuse reported one valid solid
 with the right volume, and the same shape meshed for export came out open,
-self-intersecting and non-manifold. `birlestir` now meshes its own result and
+self-intersecting and non-manifold. `join` now meshes its own result and
 tells you; believe that line, not the volume. Before any export, run
-`baski_kontrol`.
+`print_check`.
 
-**Don't hand-roll cross-sections.** `kesit_konturu(nesne, z)` gives you the
+**Don't hand-roll cross-sections.** `section_contour(obj, z)` gives you the
 outline points directly. Measured: writing `makeShapeFromMesh → slice →
 discretize` by hand cost 69 s in one session, and got retyped in five
 separate blocks in another. Ask for several heights at once —
-`kesit_konturu(o, [2, 5, 8])` — the conversion is paid once.
+`section_contour(o, [2, 5, 8])` — the conversion is paid once.
 
 **A cut that lands on a flat face is meaningless, and it does not error.**
 Measured: a cylinder sliced exactly at z=0 reported 7.2 mm² instead of 707;
 a stepped part sliced at its shoulder reported an area matching neither side.
-`kesit_konturu` now nudges away from the ends and *warns* when your z sits on
+`section_contour` now nudges away from the ends and *warns* when your z sits on
 an internal horizontal face, naming the two safe heights — take one of them
 rather than the ambiguous one.
 
@@ -302,14 +301,14 @@ undoes your last change for you.
 ## The verification report you get back
 
 After your code runs, the host checks the geometry your code touched and
-sends the result back as a `dogrulama:` block. It separates checks that
+sends the result back as a `verification:` block. It separates checks that
 **ran** from checks that **did not**, and lists findings. Two findings matter
 most because **both pass `isValid()`**:
 
-- **`ters kati`** — a solid with negative volume. FreeCAD calls it valid;
+- **`reversed solid`** — a solid with negative volume. FreeCAD calls it valid;
   it renders as a hole in the world and corrupts every boolean after it.
   Usually a reversed face orientation or a bad loft/extrude direction.
-- **`acik kabuk`** — an unclosed shell. Valid, but it is not a solid: it
+- **`open shell`** — an unclosed shell. Valid, but it is not a solid: it
   cannot be cut, fused or printed.
 
 Fix these in the step that produced them. Left alone, the failure surfaces
@@ -353,13 +352,13 @@ measurement.** One short line and one read-only block:
 > Tamamdır, önce mevcut modeli ölçüyorum.
 
 ```freecad-python title="Mevcut modeli olc"
-kesif()
+survey()
 ```
 
-`kesif()` measures everything present: sizes, volumes, cross-section
+`survey()` measures everything present: sizes, volumes, cross-section
 diameters at base / middle / top, wall thickness, mesh state (closed?
 components?), hole inventory. Add whatever the job needs —
-`mesafe(a, b)`, `olcu(x, "Face7")`, `kesit_capi(x, z=40)`. The output comes
+`distance(a, b)`, `measure_element(x, "Face7")`, `section_diameter(x, z=40)`. The output comes
 straight back to you, so this is **one step, not a round trip through the
 user.**
 
@@ -456,7 +455,7 @@ Ctrl+Z between turns; a stale binding points at a deleted C++ object and
   move the tip: set `body.Tip = pattern` yourself. Measured, all three.
 - `Shape.makeThickness([face], ...)` needs a face taken from **that same
   shape object**; a face from a second, identical shape raises *"face does
-  not belong to the shape"*. `icini_bosalt()` handles this for you.
+  not belong to the shape"*. `hollow()` handles this for you.
 
 ## Running the same block twice adds a second copy
 

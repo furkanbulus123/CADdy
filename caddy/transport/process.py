@@ -1,16 +1,16 @@
-"""Tek bir claude.exe surecinin sahibi.
+"""Owner of a single claude.exe process.
 
-Neden QThread degil QProcess: QProcess Qt'nin olay dongusunde calisir, yani
-`readyReadStandardOutput` DOGRUDAN GUI thread'inde tetiklenir. Worker thread
-yok, moveToThread yok, kuyruklu baglanti disiplini yok, widget'a yanlis
-thread'den dokunma riski yok. Iptal `kill()`, olum bir sinyal.
+Why QProcess and not QThread: QProcess runs on Qt's event loop, so
+`readyReadStandardOutput` fires DIRECTLY on the GUI thread. No worker thread,
+no moveToThread, no queued-connection discipline, no risk of touching a
+widget from the wrong thread. Cancel is `kill()`, death is a signal.
 
-"JSON'u GUI thread'inde ayristirmak donmaya yol acar" itirazi bu eklentide
-gecersiz: bir mesaj birkac KB, json.loads mikro saniyeler. Burada GUI'yi
-gercekten donduran sey doc.recompute() ve o zaten GUI thread'inde olmak
-zorunda (OCC tek thread'li).
+The objection "parsing JSON on the GUI thread causes freezes" does not apply
+here: a message is a few KB, json.loads takes microseconds. What really
+freezes the GUI is doc.recompute(), and that has to run on the GUI thread
+anyway (OCC is single-threaded).
 
-Bu sinif SOHBET SEMANTIGI BILMEZ — sadece surec + cerceveleme.
+This class knows NOTHING about chat semantics — only process + framing.
 """
 
 from __future__ import annotations
@@ -22,19 +22,19 @@ from PySide import QtCore
 from .. import log
 from .framing import ArtimliSatirOkuyucu, SatirTasmasi
 
-# Windows: konsol penceresi acilmasin. Qt bunu zaten yapiyor ama surumden
-# suruma degisebilecek bir varsayima guvenmiyoruz.
+# Windows: no console window. Qt already does this, but we do not rely on a
+# default that could change between versions.
 CREATE_NO_WINDOW = 0x08000000
 
-STDERR_HALKA = 8192  # son N bayt stderr saklanir (hata raporuna eklenir)
+STDERR_HALKA = 8192  # keep the last N bytes of stderr (added to error reports)
 
 
 class ClaudeProcess(QtCore.QObject):
-    """Bir claude.exe surecini baslatir ve ciktisini satir satir yayinlar."""
+    """Starts a claude.exe process and emits its output line by line."""
 
-    satir = QtCore.Signal(str)          # tam bir stdout satiri (NDJSON)
+    satir = QtCore.Signal(str)          # one complete stdout line (NDJSON)
     basladi = QtCore.Signal()
-    bitti = QtCore.Signal(int, str)     # cikisKodu, stderr kuyrugu
+    bitti = QtCore.Signal(int, str)     # exit code, stderr tail
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -43,7 +43,7 @@ class ClaudeProcess(QtCore.QObject):
         self._stderr = b""
         self._kasitli_oldurme = False
 
-    # -- yasam dongusu -----------------------------------------------------
+    # -- lifecycle ---------------------------------------------------------
 
     def calisiyor_mu(self) -> bool:
         return (self._proc is not None
@@ -51,7 +51,7 @@ class ClaudeProcess(QtCore.QObject):
 
     def baslat(self, exe: str, argv: list[str], cwd: str) -> None:
         if self.calisiyor_mu():
-            raise RuntimeError("surec zaten calisiyor")
+            raise RuntimeError("process already running")
 
         self._okuyucu = ArtimliSatirOkuyucu()
         self._stderr = b""
@@ -63,12 +63,12 @@ class ClaudeProcess(QtCore.QObject):
         p.setWorkingDirectory(cwd)
         p.setProcessEnvironment(self._ortam())
 
-        # Windows'ta konsol parlamasini kesin olarak engelle
+        # Make sure no console window flashes on Windows
         try:
             p.setCreateProcessArgumentsModifier(
                 lambda a: setattr(a, "flags", a.flags | CREATE_NO_WINDOW))
         except Exception:
-            pass  # Windows disi ya da API yok — Qt varsayilani zaten yeterli
+            pass  # not Windows or no API — the Qt default is enough
 
         p.readyReadStandardOutput.connect(self._stdout_geldi)
         p.readyReadStandardError.connect(self._stderr_geldi)
@@ -77,17 +77,17 @@ class ClaudeProcess(QtCore.QObject):
         p.started.connect(self.basladi.emit)
 
         self._proc = p
-        log.ayik(f"baslatiliyor: {exe} {' '.join(argv)}")
+        log.ayik(f"starting: {exe} {' '.join(argv)}")
         p.start()
 
     def girdi_yaz(self, metin: str) -> None:
         if self._proc is None:
-            raise RuntimeError("surec yok")
+            raise RuntimeError("no process")
         self._proc.write(metin.encode("utf-8"))
 
-    # NOT: `girdiyi_kapat()` (closeWriteChannel) CIKARILDI. Tek atislik
-    # surumden kalmaydi; kalici surecte stdin ACIK kalmak zorunda, cagrilsa
-    # sonraki turu bozardi (MANTIK 8d).
+    # NOTE: `girdiyi_kapat()` (closeWriteChannel) was REMOVED. It was left
+    # over from the one-shot version; with a persistent process stdin has to
+    # stay OPEN, and calling it would break the next turn.
 
     def oldur(self) -> None:
         if not self.calisiyor_mu():
@@ -101,13 +101,13 @@ class ClaudeProcess(QtCore.QObject):
     def kasitli_olduruldu_mu(self) -> bool:
         return self._kasitli_oldurme
 
-    # -- ic olaylar --------------------------------------------------------
+    # -- internal events ---------------------------------------------------
 
     def _ortam(self) -> QtCore.QProcessEnvironment:
         o = QtCore.QProcessEnvironment.systemEnvironment()
-        # FreeCAD bunlari kendi ortamina enjekte ediyor ve her cocuk surece
-        # siziyor. claude.exe icin bugun zararsiz, ama Python'a yakin bir sey
-        # calistirdigimiz an ayaga dolanir.
+        # FreeCAD injects these into its own environment and they leak into
+        # every child process. Harmless for claude.exe today, but they get in
+        # the way the moment we run anything Python-related.
         for k in ("PYTHONHOME", "PYTHONPATH", "PYTHONSTARTUP"):
             o.remove(k)
         o.insert("PYTHONIOENCODING", "utf-8")
@@ -127,25 +127,25 @@ class ClaudeProcess(QtCore.QObject):
     def _stderr_geldi(self) -> None:
         if self._proc is None:
             return
-        # Yalnizca halkada birikir; surec bitince _bitti()'de kuyruk olarak
-        # gonderiliyor. (Eskiden bir de `stderr_metin` sinyali yayiliyordu
-        # ama hicbir yere bagli degildi — cikarildi.)
+        # Only accumulates in the ring; sent as the tail in _bitti() once the
+        # process ends. (There used to be a `stderr_metin` signal too, but
+        # nothing was connected to it — removed.)
         veri = bytes(self._proc.readAllStandardError())
         self._stderr = (self._stderr + veri)[-STDERR_HALKA:]
 
     def _surec_hatasi(self, hata) -> None:
-        # FailedToStart en sik hata: yol yanlis ya da exe yok
+        # FailedToStart is the most common error: wrong path or no exe
         if hata == QtCore.QProcess.FailedToStart:
-            log.hata("claude.exe baslatilamadi (yol yanlis olabilir)")
+            log.hata("claude.exe failed to start (the path may be wrong)")
 
     def _surec_bitti(self, kod: int, _durum) -> None:
-        # Kalan tampon: --output-format json cikisinin sonunda satir sonu
-        # olmayabilir, bosalt() olmazsa cevabi tamamen kaybederiz.
+        # Remaining buffer: --output-format json output may lack a trailing
+        # newline; without bosalt() we would lose the whole reply.
         try:
             for s in self._okuyucu.bosalt():
                 self.satir.emit(s)
         except Exception as e:
-            log.hata(f"tampon bosaltilamadi: {e}")
+            log.hata(f"could not flush buffer: {e}")
 
         kuyruk = self._stderr.decode("utf-8", errors="replace")
         self.bitti.emit(int(kod), kuyruk)

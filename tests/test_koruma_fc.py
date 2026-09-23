@@ -230,7 +230,7 @@ gonderilen.clear()
 ctl.blogu_calistir(_Blok3())
 kontrol("BUTCE dolunca gonderilmiyor", gonderilen == [], gonderilen)
 kontrol("durduruldugu SOYLENIYOR",
-        any("durduruldu" in m for _, m in mesajlar), mesajlar)
+        any("stopped" in m for _, m in mesajlar), mesajlar)
 
 bolum("AYNI hata tekrarlarsa butceyi beklemeden durur")
 ctl._onarim_tur = 0
@@ -245,7 +245,7 @@ ctl.blogu_calistir(_Blok())          # AYNI hata
 kontrol("ayni hata TEKRAR gonderilmedi (butce dolmadan)",
         gonderilen == [], gonderilen)
 kontrol("sebep soyleniyor",
-        any("Aynı hata" in m for _, m in mesajlar), mesajlar)
+        any("same error" in m for _, m in mesajlar), mesajlar)
 kontrol("butce hala dolmamisti", ctl._onarim_tur < cv._ONARIM_SINIRI,
         ctl._onarim_tur)
 
@@ -309,10 +309,10 @@ s6 = ex.calistir('doc.addObject("Part::Box", "GunlukKutu")\n', "gunluk")
 g.calisma(s6)
 g.otomatik("otomatik tur metni")
 icerik = g.dosya.read_text(encoding="utf-8")
-kontrol("dogrulama raporu gunlukte", "dogrulama:" in icerik,
+kontrol("dogrulama raporu gunlukte", "verification:" in icerik,
         icerik[-300:])
-kontrol("dokunulan gunlukte", "dokunulan:" in icerik, icerik[-300:])
-kontrol("OTOMATIK basligi gunlukte", "--- OTOMATIK" in icerik, icerik[-300:])
+kontrol("dokunulan gunlukte", "touched:" in icerik, icerik[-300:])
+kontrol("OTOMATIK basligi gunlukte", "--- AUTO" in icerik, icerik[-300:])
 
 # --- KONUSULMAYAN OTURUM DOSYA BIRAKMAZ ---------------------------------
 # Kullanicinin sikayeti: "cok fazla log var, gereksiz bos loglar olusuyor".
@@ -331,9 +331,9 @@ g2.kullanici("ilk gercek mesaj")
 kontrol("ilk kayitla dosya DOGDU", g2.dosya.exists(), g2.dosya)
 _ic2 = g2.dosya.read_text(encoding="utf-8")
 kontrol("baslik kaybolmadi, en tepede", _ic2.startswith("=" * 72), _ic2[:40])
-kontrol("oturum kimligi baslikta", "oturum : bosoturum" in _ic2, _ic2[:200])
-kontrol("baslik BIR KEZ yazildi", _ic2.count("CADdy sohbet gunlugu") == 1,
-        _ic2.count("CADdy sohbet gunlugu"))
+kontrol("oturum kimligi baslikta", "session : bosoturum" in _ic2, _ic2[:200])
+kontrol("baslik BIR KEZ yazildi", _ic2.count("CADdy chat log") == 1,
+        _ic2.count("CADdy chat log"))
 kontrol("mesaj da yazildi", "ilk gercek mesaj" in _ic2, _ic2[-200:])
 
 # Model, baslik daha diskte yokken de basliga islemeli — eskiden bu yol
@@ -343,8 +343,8 @@ g3.oturum_ac("modelsiz")
 g3.ai("cevap", model="claude-opus-5")
 _ic3 = g3.dosya.read_text(encoding="utf-8")
 kontrol("model basliga yazildi (dosya sonradan dogsa da)",
-        "model  : claude-opus-5" in _ic3, _ic3[:200])
-kontrol("'(bilinmiyor)' kalmadi", "(bilinmiyor)" not in _ic3, _ic3[:200])
+        "model   : claude-opus-5" in _ic3, _ic3[:200])
+kontrol("'(unknown)' kalmadi", "(unknown)" not in _ic3, _ic3[:200])
 
 # Ortam degiskeni: testler gercek LOG/'a yazmasin diye eklendi.
 kontrol("CADDY_LOG_DIR kok dizini belirliyor",
@@ -390,7 +390,7 @@ _yaz("       kesif: %.2f sn, sure butcesi %.1f sn"
 kontrol("kesif sure butcesini asmiyor", _sure <= _kesif.SURE_BUTCESI + 0.5,
         _sure)
 kontrol("24 nesneye kadar olcebiliyor",
-        _metin.count("hacim=") >= 12, _metin.count("hacim="))
+        _metin.count("volume=") >= 12, _metin.count("volume="))
 App.closeDocument(_kd.Name)
 
 _yaz("")

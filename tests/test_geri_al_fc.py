@@ -155,11 +155,11 @@ gonderilen.clear()
 ctl._geri_al_tur = 0
 ctl._ai_geri_al()
 kontrol("kullaniciya soylendi",
-        any("yapılmadı" in m for _, m in mesajlar), mesajlar)
+        any("not done" in m for _, m in mesajlar), mesajlar)
 kontrol("MODELE de soylendi (varsayimla devam etmesin)",
         len(gonderilen) == 1, len(gonderilen))
 if gonderilen:
-    kontrol("mesaj 'varsayma' diyor", "VARSAYMA" in gonderilen[0],
+    kontrol("mesaj 'varsayma' diyor", "NOT assume" in gonderilen[0],
             gonderilen[0][:200])
     kontrol("mesaj sebebi tasiyor", "elle kutu" in gonderilen[0].lower(),
             gonderilen[0][:200])
@@ -175,7 +175,7 @@ ctl._geri_al_tur = 0
 ctl._ai_geri_al()
 kontrol("geri alindi", doc.getObject("AiKutu2") is None,
         [o.Name for o in doc.Objects])
-kontrol("kullaniciya soylendi", any("AI geri aldı" in m for _, m in mesajlar),
+kontrol("kullaniciya soylendi", any("AI undid" in m for _, m in mesajlar),
         mesajlar)
 kontrol("modele TUR HARCANMADI (varsayimi zaten dogru)",
         gonderilen == [], gonderilen)
@@ -193,7 +193,7 @@ for i in range(3):
 kontrol("sinir uygulandi", ctl._geri_al_tur == cv._GERI_AL_SINIR,
         ctl._geri_al_tur)
 kontrol("durduruldugu SOYLENIYOR",
-        any("durduruldu" in m for _, m in mesajlar), mesajlar)
+        any("stopped" in m for _, m in mesajlar), mesajlar)
 kontrol("ucuncu kutu HALA duruyor (sinir gercekten kesti)",
         doc.getObject("Dongu2") is not None or doc.getObject("Dongu0") is not None,
         [o.Name for o in doc.Objects])
@@ -253,7 +253,7 @@ doc2.UndoMode = 1
 App.setActiveDocument(doc2.Name)
 oldu, aciklama = ctl.ileri_al()
 kontrol("bos ileri yigininda ileri almiyor", not oldu, aciklama)
-kontrol("sebebini soyluyor", "yeni bir işlem" in aciklama, aciklama)
+kontrol("sebebini soyluyor", "new change" in aciklama, aciklama)
 _yaz("       %s" % aciklama)
 
 bolum("ILERI AL — geri alinan is GERI GELIYOR")
@@ -314,7 +314,7 @@ ctl.blogu_calistir(type("B", (), {
 kontrol("ileri yigini SILINDI (olculdu: degisiklik + abort)",
         len(doc2.RedoNames) == 0, list(doc2.RedoNames))
 kontrol("kullaniciya SOYLENDI (sessizce kaybolmuyor)",
-        any("İleri alma geçmişi silindi" in m for _, m in mesajlar), mesajlar)
+        any("Redo history cleared" in m for _, m in mesajlar), mesajlar)
 
 # 2) SALT-OKUNUR kod yigini KORUR — gunlukteki iki basarisiz calistirma
 #    boyleydi, yani dugme o gun var olsaydi is geri gelirdi.
@@ -329,7 +329,7 @@ ctl.blogu_calistir(type("B", (), {
 kontrol("HICBIR SEY DEGISTIRMEDEN patlayan kod yigini KORUYOR",
         len(doc2.RedoNames) == 1, list(doc2.RedoNames))
 kontrol("bosuna uyari verilmedi",
-        not any("İleri alma geçmişi silindi" in m for _, m in mesajlar), mesajlar)
+        not any("Redo history cleared" in m for _, m in mesajlar), mesajlar)
 oldu, _ = ctl.ileri_al()
 kontrol("GUNLUKTEKI KAYIP GERI GELIYOR: is ileri alinabildi",
         oldu and doc2.getObject("Korunan") is not None,
@@ -347,7 +347,7 @@ kontrol("panelde ileri_al metodu var", hasattr(_dock.CaddyPanel, "ileri_al"))
 kontrol("panel metodu controller'i cagiriyor",
         "ctl.ileri_al" in inspect.getsource(_dock.CaddyPanel.ileri_al))
 kontrol("ipucu ileri gecmisinin silinebilecegini soyluyor",
-        "ileri geçmişi silinir" in kaynak, kaynak[:600])
+        "clears the redo" in kaynak, kaynak[:600])
 
 _yaz("")
 _yaz("=" * 70)

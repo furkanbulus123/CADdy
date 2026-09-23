@@ -1,9 +1,9 @@
-"""Gunluk — FreeCAD Report view'a yazar, FreeCAD yoksa stdout'a duser.
+"""Logging — writes to FreeCAD's Report view, falls back to stdout without FreeCAD.
 
-Neden ozel bir modul: FreeCAD.Console fonksiyonlari satir sonu EKLEMEZ ve
-sadece str kabul eder. Her cagri yerinde "\\n" hatirlamak yerine tek yerde
-hallediliyor. Ayrica eklenti FreeCAD disinda (dogrudan python ile) import
-edilirse cokmemeli — bassiz test bunu gerektiriyor.
+Why a dedicated module: FreeCAD.Console functions do NOT append a newline and
+only accept str. Instead of remembering "\\n" at every call site, it is
+handled in one place. Also, the addon must not crash when imported outside
+FreeCAD (plain python) — headless tests rely on that.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ ONEK = "[CADdy] "
 
 try:
     import FreeCAD as _App
-except ImportError:  # FreeCAD disinda calisiyoruz (bassiz test)
+except ImportError:  # running outside FreeCAD (headless test)
     _App = None
 
 
@@ -37,7 +37,7 @@ def hata(mesaj: str) -> None:
 
 
 def ayik(mesaj: str) -> None:
-    """Ayrintili izleme. Tercihlerde acilmadikca susar."""
+    """Verbose tracing. Silent unless enabled in preferences."""
     from . import config
 
     if config.ayikla_acik():

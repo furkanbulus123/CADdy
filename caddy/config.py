@@ -1,20 +1,21 @@
-"""Ayarlar — FreeCAD'in kendi parametre deposunda saklanir.
+"""Settings — stored in FreeCAD's own parameter store.
 
-FreeCAD ayarlari `App.ParamGet(...)` ile okunur/yazilir ve user.cfg'de kalicidir;
-ayri bir ayar dosyasi uydurmuyoruz. Anahtarlar:
+FreeCAD settings are read/written with `App.ParamGet(...)` and persist in
+user.cfg; we do not invent a separate settings file. Keys:
 
-    Model            "opus" | "sonnet"              panelden secilir, bkz. MODELLER
-    Efor             "" | "low"                     dusunme miktari, bkz. EFORLAR
-    Timeout          saniye — TOPLAM sure degil, SESSIZLIK suresi (bkz. asagi)
-    Debug            ayrintili gunluk
-    ClaudeExe        elle verilen claude.exe yolu (bos = otomatik bul)
-    MaxBudgetUsd     0 = sinirsiz; >0 ise --max-budget-usd olarak gecer
-    PanelYuzde       panel ilk acilista ana pencerenin yuzde kaci (bkz. asagi)
+    Model            "opus" | "sonnet"              chosen in the panel, see MODELLER
+    Efor             "" | "low"                     amount of thinking, see EFORLAR
+    Timeout          seconds — NOT total time, SILENCE time (see below)
+    Debug            verbose logging
+    ClaudeExe        claude.exe path set by hand (empty = find automatically)
+    MaxBudgetUsd     0 = unlimited; >0 is passed as --max-budget-usd
+    PanelYuzde       panel width on first open, as % of the main window (see below)
 
-CIKARILDI — `AutoRun`. Aciklamasi "guard temizse onay beklemeden calistir"
-idi ve DAYANDIGI GUARD HIC YAZILMADI (MANTIK 6, ucuncu katman). Yani ayar
-acilsaydi hicbir sey denetlemeden kod calisirdi. Okuyanda var olmayan bir
-emniyet duygusu birakiyordu; guard yazilirsa ayar da geri gelir.
+REMOVED — `AutoRun`. Its description was "run without confirmation if the
+guard is clean", and the GUARD IT RELIED ON WAS NEVER WRITTEN. So turning
+it on would have run code with no check at all. It left the reader with a
+sense of safety that did not exist; if the guard is ever written, the
+setting comes back.
 """
 
 from __future__ import annotations
@@ -26,26 +27,26 @@ YOL = "User parameter:BaseApp/Preferences/Mod/CADdy"
 
 VARSAYILAN = {
     "Model": "opus",
-    # Dusunme miktari. Bos = CLI varsayilani (olculen en yavas seviye).
-    # Varsayilani DEGISTIRMIYORUZ: hiz kazanci olculdu, KALITE kaybi
-    # olculmedi. Kullanici panelden secer; olcum gelince varsayilan
-    # yeniden tartisilir. Bkz. EFORLAR.
+    # Amount of thinking. Empty = CLI default (the slowest level measured).
+    # We do NOT change the default: the speed gain was measured, the
+    # QUALITY loss was not. The user picks it in the panel; once quality is
+    # measured the default can be revisited. See EFORLAR.
     "Efor": "",
-    # SESSIZLIK siniri, toplam sure DEGIL. Olculdu: zor bir istekte model
-    # 131 sn dusunup 166 sn'de bitirdi — toplam sureye bakan 180 sn'lik bir
-    # saat bunu kil payi kacirmis, biraz daha zorunda calisan bir yaniti
-    # kesip "iptal edildi" diye raporlayacakti. CLI ise dusunurken ~1.5 sn'de
-    # bir nabiz atiyor (system/thinking_tokens), en uzun gozlenen bosluk
-    # 4.3 sn. Yani 90 sn sessizlik = surec gercekten olmus demektir.
+    # A SILENCE limit, NOT total time. Measured: on a hard request the model
+    # thought for 131 s and finished at 166 s — a 180 s clock on total time
+    # barely missed it and would have cut a slightly harder reply and
+    # reported it as "cancelled". The CLI sends a heartbeat roughly every
+    # 1.5 s while thinking (system/thinking_tokens); the longest gap seen
+    # was 4.3 s. So 90 s of silence means the process really is dead.
     "Timeout": 90,
     "Debug": False,
     "ClaudeExe": "",
     "MaxBudgetUsd": 0.0,
-    # Panel ilk acilista ne kadar yer kaplar. Kullanicinin sikayeti:
-    # "caddy ekranin yuzde 60'ini kapsiyor, %40 olsun, %60 model gozuksun".
-    # Olculdu: panel Qt'nin verdigi kadar genisti cunku ASGARI genisligi
-    # 888 px idi (ust satirdaki uzun dugme etiketleri) ve daha dar
-    # olamiyordu. Once o taban dusuruldu, sonra bu oran uygulanabildi.
+    # How much room the panel takes on first open. User feedback: "caddy
+    # covers 60% of the screen, make it 40% so 60% shows the model".
+    # Measured: the panel was as wide as Qt gave it because its MINIMUM
+    # width was 888 px (long button labels in the top row) and it could not
+    # get narrower. That floor was lowered first, then this ratio could apply.
     "PanelYuzde": 40,
 }
 
@@ -96,99 +97,101 @@ def yaz(anahtar: str, deger) -> None:
         p.SetString(anahtar, str(deger))
 
 
-# --- kisayollar -----------------------------------------------------------
+# --- shortcuts ------------------------------------------------------------
 
-# Panelde secilebilen modeller: (deger, etiket, ipucu)
+# Models selectable in the panel: (value, label, tooltip)
 #
-# Olculdu (ayni istem, CADdy'nin gercek argv'si ile):
+# Measured (same prompt, with CADdy's real argv):
 #
-#   model   istek   toplam sure          dusunce   kod blogu
-#   opus    basit    8.1 sn                    0   var
-#   sonnet  basit   11.8 sn                    0   var
-#   opus    zor     77 / 167 / 183 sn   3.6k-12k   var
-#   sonnet  zor     21.9 sn                  750   YOK
-#   sonnet  zor    108 sn                    7.4k   var
+#   model   request  total time          thinking  code block
+#   opus    simple    8.1 s                     0   yes
+#   sonnet  simple   11.8 s                     0   yes
+#   opus    hard     77 / 167 / 183 s    3.6k-12k   yes
+#   sonnet  hard     21.9 s                   750   NO
+#   sonnet  hard    108 s                    7.4k   yes
 #
-# Iki sonuc, ikisi de arayuze dogrudan yansiyor:
-#  1) Basit iste sonnet DAHA HIZLI DEGIL - opus zaten dusunmuyor. Yani
-#     "hizli mod" her zaman kazandiran bir dugme degil, oyle etiketlenmemeli.
-#  2) Sonnet zor iste hizli bittiginde kodu hic vermedi. Hiz, guvenilirlik
-#     karsiligi aliniyor. Bu ipucu balonunda ACIKCA yaziyor.
+# Two results, both reflected directly in the UI:
+#  1) On a simple task sonnet is NOT FASTER - opus does not think there
+#     anyway. So a "fast mode" is not a button that always wins, and must
+#     not be labelled as one.
+#  2) When sonnet finished a hard task quickly, it gave no code at all.
+#     Speed is paid for with reliability. The tooltip says this PLAINLY.
 #
-# Sureyi belirleyen asil sey model degil, modelin ne kadar dusunmeye karar
-# verdigi; o da ISTEGIN BUYUKLUGUNE bagli. Ayni belge, ayni model (opus):
+# What really sets the time is not the model but how much the model decides
+# to think, and that depends on the SIZE OF THE REQUEST. Same document, same
+# model (opus):
 #
-#   "kulbun karsisina kedi kafasi logosu ekle"      77 / 95 / 157 / 167 / 183 sn
-#   "kulbun karsisina 20 mm capinda 3 mm disk ekle"      54.4 / 55.7 sn
+#   "add a cat-head logo opposite the handle"             77 / 95 / 157 / 167 / 183 s
+#   "add a 20 mm diameter, 3 mm disk opposite the handle"      54.4 / 55.7 s
 #
-# Yani istegi bolmek hem ~3 kat hizlandiriyor hem de sureyi ONGORULEBILIR
-# kiliyor (belirsiz istekte 77-183 arasi zipliyor). Panel bu yuzden bekleyis
-# uzayinca kullaniciya istegi bolmeyi oneriyor (dock._OGUT) - bu, "hizli mod"
-# dugmesinden daha buyuk bir kazanc.
-# Dizilim: (deger, KISA etiket, TAM etiket, ipucu).
+# So splitting the request makes it ~3x faster AND makes the time
+# PREDICTABLE (a vague request jumps between 77 and 183). That is why the
+# panel suggests splitting the request once the wait gets long (dock._OGUT)
+# - a bigger win than a "fast mode" button.
+# Layout: (value, SHORT label, FULL label, tooltip).
 #
-# Kisa etiket neden var: bu kutu panelin ust satirindaydi ve tek basina
-# 270 px asgari genislik dayatiyordu (olculdu). Ust satir da panelin
-# asgari genisligini belirledigi icin "paneli daralt" istegi bu yuzden
-# imkansizdi. Tam etiket kaybolmuyor — ipucunun ilk satiri.
+# Why a short label: this box sat in the panel's top row and alone forced
+# a 270 px minimum width (measured). The top row set the panel's minimum
+# width, so the "make the panel narrower" request was impossible because of
+# it. The full label is not lost — it is the tooltip's first line.
 MODELLER = [
-    ("opus", "Opus", "Opus (iyi kalite)",
-     "Zor istekleri dogru cozer. Olculdu (2026-08-24, ayni tavsan): tur "
-     "basina ortalama 87.5 sn ve Sonnet'ten %35 DAHA UCUZ — daha az turda "
-     "bitirdigi icin. Isi tamamlayan oturum bu oldu."),
-    ("sonnet", "Sonnet", "Sonnet (orta kalite)",
-     "Tur basina ortalama 49.1 sn. Olculdu: cikti hizi Opus'unkiyle ayni "
-     "(78 vs 72 token/sn) — fark hizda degil, Opus'un iki kat uzun "
-     "dusunmesinde. Ayni iste kullanicidan onay alamadi."),
+    ("opus", "Opus", "Opus (higher quality)",
+     "Solves hard requests correctly. Measured: 87.5 s per turn on "
+     "average and 35% CHEAPER than Sonnet on the same task — it needs "
+     "fewer turns. This was the session that finished the job."),
+    ("sonnet", "Sonnet", "Sonnet (medium quality)",
+     "49.1 s per turn on average. Measured: same output speed as Opus "
+     "(78 vs 72 tokens/s) — the difference is Opus thinking twice as "
+     "long. On the same task it did not get the user's approval."),
 ]
 
-# DUSUNME MIKTARI — gecikmenin asil kaynagi. Olculdu (2026-08-24, iki gercek
-# oturumun 22 turu):
+# AMOUNT OF THINKING — the real source of latency. Measured (22 turns of two
+# real sessions):
 #
-#   * Cikti hizi SABIT: Sonnet ortanca 78.5, Opus 72.5 token/sn.
-#   * Baglam gecikmeyi BELIRLEMIYOR: 93k baglam + 92 cikti = 3.9 sn;
-#     15k baglam + 2486 cikti = 36.8 sn. Prompt cache calisiyor.
-#   * Cikti token'inin %91-94'u DUSUNME (gorunur metin gunlukten sayildi):
-#     Sonnet 482 sn dusunme / 32 sn yazma, Opus 756 / 74.
+#   * Output speed is CONSTANT: Sonnet median 78.5, Opus 72.5 tokens/s.
+#   * Context does NOT set the latency: 93k context + 92 output = 3.9 s;
+#     15k context + 2486 output = 36.8 s. The prompt cache works.
+#   * 91-94% of output tokens are THINKING (visible text counted from logs):
+#     Sonnet 482 s thinking / 32 s writing, Opus 756 / 74.
 #
-# Yani gecikme ~= cikti / 75, ve o ciktinin onda dokuzu dusunme. CLI'in
-# `--effort` bayragi tam bunu ayarliyor. Ayni istem, 3 tekrar (sonnet):
+# So latency ~= output / 75, and nine tenths of that output is thinking. The
+# CLI's `--effort` flag controls exactly this. Same prompt, 3 runs (sonnet):
 #
-#   (varsayilan)  109 · 126 · 116 sn   ortanca 116.1   9820 cikti token
-#   low            37 ·  43 ·  37 sn   ortanca  37.0   2774 cikti token
+#   (default)     109 · 126 · 116 s    median 116.1   9820 output tokens
+#   low            37 ·  43 ·  37 s    median  37.0   2774 output tokens
 #
-# CIKARILDI — "high". Ilk tek ornekte 48 sn cikmis ve "dengeli orta secenek"
-# diye yazilmisti; tekrarli olcum bunu CURUTTU:
+# REMOVED — "high". A first single sample came out at 48 s and it was
+# written up as "a balanced middle option"; repeated measurement DISPROVED it:
 #
-#   low            37 ·  43 ·  37 sn   ortanca  37.0    2774 cikti
-#   (varsayilan)  109 · 126 · 116 sn   ortanca 116.1    9820 cikti
-#   high          123 · 130 · 149 sn   ortanca 129.6   11408 cikti
+#   low            37 ·  43 ·  37 s    median  37.0    2774 output
+#   (default)     109 · 126 · 116 s    median 116.1    9820 output
+#   high          123 · 130 · 149 s    median 129.6   11408 output
 #
-# high varsayilandan DAHA YAVAS (0.9x). Ortada bir secenek yok; tablo iki
-# uclu. Tek ornekle secenek yazmanin bedeli buydu.
+# high is SLOWER than the default (0.9x). There is no middle option; the
+# table has two ends. That was the price of writing an option from one sample.
 #
-# Opus'ta da gecerli: varsayilan 87.0 sn -> low 44.4 sn (2.0x).
+# Same on Opus: default 87.0 s -> low 44.4 s (2.0x).
 #
-# DIKKAT — KALITE OLCULMEDI. Bu testte sistem sozlesmesi ve CLAUDE.md yoktu;
-# gercek oturumda model cok daha fazla kurali tartiyor. "low daha iyi"
-# denmiyor, "dusunme miktari ayarlanabilir" deniyor. Secim kullanicinin.
+# CAREFUL — QUALITY WAS NOT MEASURED. This test had no system contract and
+# no CLAUDE.md; in a real session the model weighs many more rules. We are
+# not saying "low is better", we are saying "thinking is adjustable". The
+# choice is the user's.
 EFORLAR = [
-    ("low", "Hızlı", "Hızlı (az düşünür)",
-     "Olculdu, 3 tekrar: 116.1 sn -> 37.0 sn, yani 3.1 kat (opus'ta 2.0 "
-     "kat). Olcum, kesif, tek satirlik degisiklik gibi kararsiz islerde "
-     "yeter. KALITE FARKI OLCULMEDI — neyi kaybettigini bilmiyoruz."),
-    ("", "Derin", "Derin (CLI varsayilani)",
-     "Bayrak hic gecilmez. Olculen ortanca 116.1 sn. 'Tavsanin sirti hic "
-     "cizilmemis' gibi teshisleri satin aldigin yer burasi. NOT: --effort "
-     "high denendi ve bundan da YAVAS cikti (129.6 sn), o yuzden listede "
-     "yok."),
+    ("low", "Fast", "Fast (thinks less)",
+     "Measured, 3 runs: 116.1 s -> 37.0 s, i.e. 3.1x (2.0x on Opus). "
+     "Good enough for measuring, inspecting, one-line changes. QUALITY "
+     "DIFFERENCE NOT MEASURED — what you lose is unknown."),
+    ("", "Deep", "Deep (CLI default)",
+     "No flag passed. Measured median 116.1 s. This is where you pay for "
+     "subtle diagnoses. NOTE: --effort high was tried and was even SLOWER "
+     "(129.6 s), so it is not listed."),
 ]
 
-# Baglam penceresi. CLI BUNU BILDIRMIYOR - init ve result satirlarinin
-# butun alanlari tarandi, limit hicbirinde yok. O yuzden modelin katalog
-# degeri buraya sabit yaziliyor ve panelde "sinir katalog degeri" diye
-# isaretleniyor; uydurma bir kesinlik vermeyelim.
-# Opus 5 ve Sonnet 5: 1M token.
+# Context window. The CLI DOES NOT REPORT IT - every field of the init and
+# result lines was checked, the limit is in none of them. So the model's
+# catalog value is hard-coded here and marked in the panel as "limit is the
+# catalog value"; let us not fake precision.
+# Opus 5 and Sonnet 5: 1M tokens.
 BAGLAM_SINIRI = 1_000_000
 
 
@@ -209,10 +212,10 @@ def modeli_ayarla(ad: str) -> None:
 
 
 def efor() -> str:
-    """Dusunme miktari. Bos dize = bayrak hic gecilmez (CLI varsayilani).
+    """Amount of thinking. Empty string = no flag passed (CLI default).
 
-    Bos dize GECERLI bir deger — o yuzden `metin()` yerine dogrudan
-    okunuyor ve gecerlilik listeye bakarak denetleniyor.
+    The empty string is a VALID value — so it is read directly instead of
+    through `metin()`, and validity is checked against the list.
     """
     try:
         d = _p().GetString("Efor", VARSAYILAN["Efor"])
@@ -226,10 +229,10 @@ def eforu_ayarla(ad: str) -> None:
 
 
 def zaman_asimi() -> int:
-    """Kac saniye SESSIZLIKTEN sonra surec olu sayilir.
+    """After how many seconds of SILENCE the process counts as dead.
 
-    Toplam sure siniri bilerek YOK: modelin ne kadar dusunecegini onceden
-    bilemeyiz ve uzun dusunmek hata degil.
+    There is deliberately NO total-time limit: we cannot know in advance how
+    long the model will think, and thinking long is not an error.
     """
     d = sayi("Timeout")
     return d if d > 0 else VARSAYILAN["Timeout"]
@@ -240,7 +243,7 @@ def ayikla_acik() -> bool:
 
 
 def panel_yuzde() -> int:
-    """Panelin ana penceredeki payi. Sacma degerler varsayilana duser."""
+    """The panel's share of the main window. Nonsense values fall back to the default."""
     d = sayi("PanelYuzde")
     return d if 10 <= d <= 90 else VARSAYILAN["PanelYuzde"]
 
@@ -249,19 +252,19 @@ def butce_usd() -> float:
     return ondalik("MaxBudgetUsd")
 
 
-# --- yollar ---------------------------------------------------------------
+# --- paths ----------------------------------------------------------------
 
 def eklenti_dizini() -> Path:
-    """Bu paketin bir ustu, yani eklenti kok dizini."""
+    """One level above this package, i.e. the addon root directory."""
     return Path(__file__).resolve().parent.parent
 
 
 def calisma_dizini() -> Path:
-    """claude.exe'nin cwd'si.
+    """claude.exe's cwd.
 
-    Neden ayri bir klasor: CLI, calistigi dizindeki CLAUDE.md'yi otomatik
-    yukler. Oraya FreeCAD API kilavuzunu koyuyoruz ki her turda tekrar
-    gondermek zorunda kalmayalim (ustelik onbellege giriyor).
+    Why a separate folder: the CLI automatically loads CLAUDE.md from its
+    working directory. We put the FreeCAD API guide there so we do not have
+    to send it every turn (and it gets cached).
     """
     d = eklenti_dizini() / "workspace"
     d.mkdir(parents=True, exist_ok=True)
@@ -269,11 +272,11 @@ def calisma_dizini() -> Path:
 
 
 def yedek_dizini() -> Path:
-    """Ilk AI degisikliginden onceki belge kopyalari (bkz. executor._yedek_al).
+    """Copies of the document from before the first AI change (see executor._yedek_al).
 
-    MANTIK 6'nin ikinci katmani. Uzun bir seansta hasar birikebiliyor ve
-    Ctrl+Z yigini o kadar geriye yetmeyebiliyor; bu klasordeki kopya son
-    caredir.
+    The second safety layer. Damage can pile up over a long session and the
+    Ctrl+Z stack may not reach back far enough; the copy in this folder is
+    the last resort.
     """
     d = eklenti_dizini() / ".caddy-backups"
     d.mkdir(parents=True, exist_ok=True)

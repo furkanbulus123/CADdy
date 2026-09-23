@@ -1,14 +1,14 @@
-"""CADdy — FreeCAD icin AI yardimcisi.
+"""CADdy — an AI assistant for FreeCAD.
 
-Katman kurali (bozulursa bassiz test imkani kaybolur):
+Layer rule (breaking it loses headless testing):
 
-    ui/          -> conversation, execution, transport, context   import EDEBILIR
-    conversation -> execution, transport, context                 import EDEBILIR
-    execution/   -> (FreeCAD API + stdlib)          Qt import ETMEZ
-    context/     -> (FreeCAD API + stdlib)          Qt import ETMEZ
+    ui/          -> conversation, execution, transport, context   MAY import
+    conversation -> execution, transport, context                 MAY import
+    execution/   -> (FreeCAD API + stdlib)          does NOT import Qt
+    context/     -> (FreeCAD API + stdlib)          does NOT import Qt
 
-Yani `ui` disindaki hicbir yer QtWidgets gormez; cekirdek `freecadcmd` ile
-bassiz calistirilabilir.
+So nothing outside `ui` ever sees QtWidgets, and the core can run headless
+under `freecadcmd`.
 """
 
 __version__ = "0.1.0"

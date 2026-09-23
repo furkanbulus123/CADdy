@@ -182,7 +182,7 @@ doc.recompute()
 tam = sz.belge_metni(doc, butce=10**9)
 kontrol("kirpilmamis metinde tum nesneler var",
         tam.count("Part::Box") == 61, tam.count("Part::Box"))
-kontrol("kirpilmamis metinde kirpma notu YOK", "kirpildi" not in tam)
+kontrol("kirpilmamis metinde kirpma notu YOK", "trimmed" not in tam)
 
 kucuk = sz.belge_metni(doc, butce=1200)
 _yaz("       uzunluk: %d" % len(kucuk))
@@ -192,7 +192,7 @@ kontrol("secim bolumu duruyor", "<selection>" in kucuk
         and "</selection>" in kucuk)
 kontrol("etiket kapandi", kucuk.rstrip().endswith("</document>"))
 kontrol("kirpma SOYLENIYOR (sessizce dusurulmuyor)",
-        "kirpildi" in kucuk, kucuk[-160:])
+        "trimmed" in kucuk, kucuk[-160:])
 
 bolum("butce — kirpma ONCELIK sirasina uyuyor")
 # Konsolda secim yok; oncelik mantigini dogrudan sina: en son eklenen
@@ -214,12 +214,12 @@ kontrol("asiri kucuk butcede etiket yine kapali",
 
 bolum("bos ve tuhaf belgeler")
 kontrol("belge yoksa patlamiyor",
-        "Acik belge yok" in sz.belge_metni(None if App.ActiveDocument is None
+        "No document is open" in sz.belge_metni(None if App.ActiveDocument is None
                                            else App.ActiveDocument, 100)
         or True)
 bos = App.newDocument("BosBelge")
 mb = sz.belge_metni(bos)
-kontrol("bos belgede secim yok yaziyor", "(secim yok)" in mb, mb[:200])
+kontrol("bos belgede secim yok yaziyor", "(nothing selected)" in mb, mb[:200])
 kontrol("bos belgede de etiket kapali", mb.rstrip().endswith("</document>"))
 
 _yaz("")

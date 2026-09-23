@@ -397,30 +397,30 @@ class CaddyPanel(QtWidgets.QWidget):
         ayni islevin gizli ikinci kapisiydi.
         """
         c = QtWidgets.QHBoxLayout()
-        b = _ikon_dugmesi("caddy-yeni.svg", "Yeni")
-        b.setToolTip("Yeni sohbet\n"
-                     "Bağlamı unutur, sıfırdan başlar.\n"
-                     "Belgeye DOKUNMAZ — yalnızca konuşma sıfırlanır.")
+        b = _ikon_dugmesi("caddy-yeni.svg", "New")
+        b.setToolTip("New chat\n"
+                     "Forgets the context and starts fresh.\n"
+                     "Does NOT touch the document — only the conversation is reset.")
         b.clicked.connect(self.ctl.yeni_sohbet)
         self.yeni_dugmesi = b
         c.addWidget(b)
 
-        g = _ikon_dugmesi("caddy-undo.svg", "Geri al")
-        g.setToolTip("Geri al\n"
-                     "Son AI değişikliğini geri alır.\n"
-                     "Senin kendi elle yaptığın işe DOKUNMAZ — tepede senin "
-                     "değişikliğin varsa durur ve söyler.")
+        g = _ikon_dugmesi("caddy-undo.svg", "Undo")
+        g.setToolTip("Undo\n"
+                     "Undoes the last AI change.\n"
+                     "Never touches your own manual edits — if yours is on "
+                     "top of the stack, it stops and tells you.")
         g.clicked.connect(self.geri_al)
         self.geri_dugmesi = g
         c.addWidget(g)
 
-        i = _ikon_dugmesi("caddy-redo.svg", "İleri al")
-        i.setToolTip("İleri al\n"
-                     "Geri aldığın değişikliği TEKRAR uygular.\n"
-                     "Yanlışlıkla geri aldıysan işini geri getirir.\n"
-                     "Geri al'a basmadan önce KAPALIDIR.\n"
-                     "DIKKAT: geri aldıktan sonra yeni bir kod çalıştırırsan "
-                     "ileri geçmişi silinir — panel bunu sana söyler.")
+        i = _ikon_dugmesi("caddy-redo.svg", "Redo")
+        i.setToolTip("Redo\n"
+                     "Re-applies a change you undid.\n"
+                     "Brings your work back if you undid it by mistake.\n"
+                     "Disabled until you press Undo.\n"
+                     "NOTE: running new code after an undo clears the redo "
+                     "history — the panel will tell you.")
         i.clicked.connect(self.ileri_al)
         # Bos yiginda basilabilir bir dugme yalan soyler. Ileri alinacak
         # bir sey olustugunda aciliyor (bkz. _ileri_dugmesini_tazele).
@@ -434,11 +434,11 @@ class CaddyPanel(QtWidgets.QWidget):
         # Kullanicinin sozu: "kayıt yerine dolap gibi kütüphane gibi bir
         # sembol". Sag tik menusundeki ayni islev duruyor — kullanici onu
         # BULAMADI, gorunur bir dugme gerekiyordu.
-        k = _ikon_dugmesi("caddy-kayitlar.svg", "Kayıt")
-        k.setToolTip("Kayıtlar\n"
-                     "Eski sohbetleri listeler. Birini seçip DEVAM ET "
-                     "dersen o sohbet bağlamıyla birlikte kaldığı yerden "
-                     "sürer; günlük klasörünü de buradan açabilirsin.")
+        k = _ikon_dugmesi("caddy-kayitlar.svg", "History")
+        k.setToolTip("History\n"
+                     "Lists past chats. Pick one and press Resume to "
+                     "continue it where it left off, with its context; "
+                     "you can also open the log folder from here.")
         k.clicked.connect(self._kayitlari_ac)
         self.kayit_dugmesi = k
         c.addWidget(k)
@@ -472,9 +472,9 @@ class CaddyPanel(QtWidgets.QWidget):
             kutu.setItemData(i, tam + "\n" + ipucu, QtCore.Qt.ToolTipRole)
             if deger == simdiki:
                 kutu.setCurrentIndex(i)
-        kutu.setToolTip("Yanıt hızı / güvenilirlik dengesi.\n"
-                        "Sonraki mesajdan itibaren geçerli olur "
-                        "(bağlam korunur).")
+        kutu.setToolTip("Speed / reliability trade-off.\n"
+                        "Applies from the next message "
+                        "(context is kept).")
         kutu.currentIndexChanged.connect(self._model_degisti)
         self.model_secici = kutu
         return kutu
@@ -505,18 +505,18 @@ class CaddyPanel(QtWidgets.QWidget):
             if deger == simdiki:
                 kutu.setCurrentIndex(i)
         kutu.setToolTip(
-            "Modelin ne kadar düşüneceği.\n"
-            "Ölçüldü: beklediğin sürenin %91-94'ü düşünme, çıktı yazma "
-            "değil.\nHızlı = 3.1 kat hızlı (116 sn → 37 sn).\n"
-            "KALİTE FARKI ÖLÇÜLMEDİ — hızlıda ne kaybettiğini bilmiyoruz.\n"
-            "Sonraki mesajdan itibaren geçerli olur (bağlam korunur).")
+            "How much the model thinks.\n"
+            "Measured: 91-94% of the wait is thinking, not writing.\n"
+            "Fast = 3.1x quicker (116 s → 37 s).\n"
+            "Quality difference NOT measured — what Fast loses is unknown.\n"
+            "Applies from the next message (context is kept).")
         kutu.currentIndexChanged.connect(self._efor_degisti)
         self.efor_secici = kutu
         return kutu
 
     def _efor_degisti(self, i: int) -> None:
         config.eforu_ayarla(self.efor_secici.itemData(i))
-        self._ayar_uygula("Düşünme", self.efor_secici.currentText())
+        self._ayar_uygula("Thinking", self.efor_secici.currentText())
 
     def _ayar_uygula(self, ad: str, deger: str) -> None:
         """Surec argumanini etkileyen ayar degisti — GERCEKTEN uygula.
@@ -528,11 +528,11 @@ class CaddyPanel(QtWidgets.QWidget):
         ile yeni argumanlarla basliyor, baglam kaybolmuyor.
         """
         if self.ctl.transport.ayarlar_degisti():
-            not_ = f"{ad}: {deger} — sonraki mesajdan itibaren geçerli " \
-                   "(bağlam korunur)."
+            not_ = f"{ad}: {deger} — applies from the next message " \
+                   "(context is kept)."
         else:
-            not_ = f"{ad}: {deger} — şu anki yanıt bitince geçerli olacak " \
-                   "(akan cevabı kesmedim)."
+            not_ = f"{ad}: {deger} — applies once the current reply finishes " \
+                   "(the streaming reply was not interrupted)."
         self.mesaj_ekle("sistem", not_)
         # GUNLUGE de yaziliyor: baslik oturumun BASLANGIC degerini gosterir,
         # ortada degistirilirse logu sonradan inceleyen bunu goremezdi.
@@ -562,17 +562,17 @@ class CaddyPanel(QtWidgets.QWidget):
         c = QtWidgets.QHBoxLayout()
         self.giris = QtWidgets.QPlainTextEdit()
         self.giris.setPlaceholderText(
-            "Ne yapmak istiyorsun?   (Ctrl+Enter ile gönder)")
+            "What do you want to build?   (Ctrl+Enter to send)")
         self.giris.setFixedHeight(64)
         self.giris.installEventFilter(self)
         c.addWidget(self.giris, 1)
 
         dikey = QtWidgets.QVBoxLayout()
-        self.btn_gonder = QtWidgets.QPushButton("Gönder")
+        self.btn_gonder = QtWidgets.QPushButton("Send")
         self.btn_gonder.clicked.connect(self.gonder)
         dikey.addWidget(self.btn_gonder)
 
-        self.btn_iptal = QtWidgets.QPushButton("İptal")
+        self.btn_iptal = QtWidgets.QPushButton("Cancel")
         self.btn_iptal.setEnabled(False)
         self.btn_iptal.clicked.connect(self.ctl.iptal)
         dikey.addWidget(self.btn_iptal)
@@ -591,8 +591,8 @@ class CaddyPanel(QtWidgets.QWidget):
         # ilk ekranının yarısını yiyordu.
         self.mesaj_ekle(
             "sistem",
-            f"CADdy hazır · {config.model()} · claude {s}\n"
-            "Ne yapmak istediğini yaz — örnek: “10 mm kenarlı bir küp yap”.")
+            f"CADdy ready · {config.model()} · claude {s}\n"
+            "Describe what you want — e.g. “make a 10 mm cube”.")
 
     # -- olaylar -----------------------------------------------------------
 
@@ -620,7 +620,7 @@ class CaddyPanel(QtWidgets.QWidget):
         # yaptigi son islemi de geri aliyordu.
         oldu, aciklama = self.ctl.geri_al()
         self.mesaj_ekle("sistem",
-                        f"Geri alındı: {aciklama}" if oldu else aciklama)
+                        f"Undone: {aciklama}" if oldu else aciklama)
         self._ileri_dugmesini_tazele()
 
     def _ileri_dugmesini_tazele(self) -> None:
@@ -652,7 +652,7 @@ class CaddyPanel(QtWidgets.QWidget):
         # ConversationController.ileri_al docstring'inde.
         oldu, aciklama = self.ctl.ileri_al()
         self.mesaj_ekle("sistem",
-                        f"İleri alındı: {aciklama}" if oldu else aciklama)
+                        f"Redone: {aciklama}" if oldu else aciklama)
         self._ileri_dugmesini_tazele()
 
     def _bilgi_satiri(self, metin: str, ipucu: str = "") -> None:
@@ -662,10 +662,10 @@ class CaddyPanel(QtWidgets.QWidget):
     # -- canli akis --------------------------------------------------------
 
     _ASAMA_ADI = {
-        "baglaniyor": "bağlanıyor",
-        "istek gonderildi": "istek gönderildi",
-        "dusunuyor": "düşünüyor",
-        "yaziyor": "yazıyor",
+        "baglaniyor": "connecting",
+        "istek gonderildi": "request sent",
+        "dusunuyor": "thinking",
+        "yaziyor": "writing",
     }
 
     def _asama(self, asama: str) -> None:
@@ -684,12 +684,12 @@ class CaddyPanel(QtWidgets.QWidget):
     # diye Turkce metinden tahmin yurutmek kirilgan ve yaniltici olur.
     # Gecen sure ise dogrudan olculen gercek.
     _OGUT = (
-        (150, "Bu istek model için çok büyük görünüyor. İptal edip tek bir "
-              "parçasını iste — örneğin önce sadece konumu/ölçüyü belirle, "
-              "şekli sonra ekle."),
-        (75, "Uzun sürüyor. İstersen İptal edip isteği ikiye böl; adım adım "
-             "gitmek genelde toplamda daha hızlı bitiriyor."),
-        (30, "Büyük bir istek — model uzun düşünüyor, takılmadı."),
+        (150, "This request looks too big for one step. Cancel and ask "
+              "for one part of it — e.g. fix the position/size first, add "
+              "the shape later."),
+        (75, "This is taking a while. You can Cancel and split the request; "
+             "going step by step is usually faster overall."),
+        (30, "Big request — the model is thinking hard, it is not stuck."),
     )
 
     def _ilerlemeyi_yaz(self) -> None:
@@ -708,7 +708,7 @@ class CaddyPanel(QtWidgets.QWidget):
         if not self._tiklayici.isActive():
             return
         gecen = int(time.monotonic() - self._t0)
-        parca = [self._asama_ad or "çalışıyor", f"{gecen} sn"]
+        parca = [self._asama_ad or "working", f"{gecen} s"]
         if self._dusunce_tk:
             # "düşünce" degil "token": olculen sey token sayisi, kullanici
             # da oyle adlandirilmasini istedi.
@@ -718,7 +718,7 @@ class CaddyPanel(QtWidgets.QWidget):
         if self._ilerleme is None:
             return
 
-        ogut = "İptal'e basarak durdurabilirsin"
+        ogut = "Press Cancel to stop"
         for esik, yazi in self._OGUT:
             if gecen >= esik:
                 ogut = yazi
@@ -727,7 +727,7 @@ class CaddyPanel(QtWidgets.QWidget):
 
     def _ilerlemeyi_baslat(self) -> None:
         self._t0 = time.monotonic()
-        self._asama_ad = "bağlanıyor"
+        self._asama_ad = "connecting"
         self._dusunce_tk = 0
         if self._ilerleme is None:
             self._ilerleme = SaranEtiket("")
@@ -757,7 +757,7 @@ class CaddyPanel(QtWidgets.QWidget):
         # Yalnizca bloklardan onceki duz metni canli gosteriyoruz.
         gorunen = self._canli_metin.split("```")[0].rstrip()
         if len(self._canli_metin.split("```")) > 1:
-            gorunen += "\n… (kod yazılıyor)"
+            gorunen += "\n… (writing code)"
         self._canli.setText(gorunen)
         self._en_alta()
 
@@ -800,13 +800,13 @@ class CaddyPanel(QtWidgets.QWidget):
         CLI kendi oturum dosyasindan yukluyor, yani baglam kaybi yok.
         """
         d = QtWidgets.QDialog(self)
-        d.setWindowTitle("Kayıtlar — eski sohbetler")
+        d.setWindowTitle("History — past chats")
         d.resize(620, 420)
         y = QtWidgets.QVBoxLayout(d)
         y.addWidget(QtWidgets.QLabel(
-            "Bir sohbeti seçip <b>Devam et</b> dersen o sohbet kaldığı "
-            "yerden sürer.<br>Model kutusundaki seçim geçerli olmaya "
-            "devam eder; FreeCAD belgesine dokunulmaz."))
+            "Pick a chat and press <b>Resume</b> to continue where it "
+            "left off.<br>The model selection stays as it is; the FreeCAD "
+            "document is not touched."))
 
         liste = QtWidgets.QListWidget(d)
         liste.setAlternatingRowColors(True)
@@ -817,20 +817,20 @@ class CaddyPanel(QtWidgets.QWidget):
             if not k.surdurulebilir:
                 # Kimliksiz gunluk okunur ama surdurulemez. Gizlemek yerine
                 # gosterip SEBEBINI yazmak, "dugme neden calismadi"dan iyi.
-                oge.setToolTip("Bu günlükte oturum kimliği yok — "
-                               "sürdürülemez, yalnızca okunabilir.")
+                oge.setToolTip("This log has no session id — "
+                               "it can be read but not resumed.")
                 oge.setForeground(QtGui.QColor("#888888"))
             liste.addItem(oge)
         if not kayit_listesi:
-            liste.addItem(QtWidgets.QListWidgetItem("(kayıt yok)"))
+            liste.addItem(QtWidgets.QListWidgetItem("(no history)"))
         y.addWidget(liste, 1)
 
         dugmeler = QtWidgets.QDialogButtonBox(d)
-        devam = dugmeler.addButton("Devam et",
+        devam = dugmeler.addButton("Resume",
                                    QtWidgets.QDialogButtonBox.AcceptRole)
-        dugmeler.addButton("Klasörü aç", QtWidgets.QDialogButtonBox.ActionRole
+        dugmeler.addButton("Open folder", QtWidgets.QDialogButtonBox.ActionRole
                            ).clicked.connect(self._klasoru_ac)
-        dugmeler.addButton("Kapat", QtWidgets.QDialogButtonBox.RejectRole
+        dugmeler.addButton("Close", QtWidgets.QDialogButtonBox.RejectRole
                            ).clicked.connect(d.reject)
         devam.setEnabled(False)
         y.addWidget(dugmeler)
@@ -859,13 +859,13 @@ class CaddyPanel(QtWidgets.QWidget):
         # silmek, o ana kadar calistirilan kod kartlarini da goturur.
         # Ayrac olarak sistem satiri yeterli.
         self.mesaj_ekle("sistem",
-                        "Sürdürülen sohbet: %s\n(%s)"
+                        "Resumed chat: %s\n(%s)"
                         % (kayit.etiket(), kayit.dosya.name))
         for rol, metin in kayitlar.son_mesajlar(kayit.dosya):
             self.mesaj_ekle("user" if rol == "kullanici" else "ai", metin)
         self.mesaj_ekle("sistem",
-                        "Yukarısı hatırlatma olsun diye günlükten okundu; "
-                        "modelin kendi hafızası tam sohbeti taşıyor.")
+                        "The messages above are a reminder read from the log; "
+                        "the model itself has the full conversation.")
         self._belgeyi_eslestir(kayit)
         self.ctl.sohbeti_surdur(kayit.oturum, kayit.dosya)
 
@@ -913,22 +913,22 @@ class CaddyPanel(QtWidgets.QWidget):
 
         # DURUM_KAPALI — tek soru soran dal.
         cevap = QtWidgets.QMessageBox.question(
-            self, "Sohbetin belgesi",
-            durum["mesaj"] + "\n\nBelgeyi açayım mı? "
-            "(Açık belgen kapanmaz, yanına yeni sekme gelir.)",
+            self, "Chat document",
+            durum["mesaj"] + "\n\nOpen the document? "
+            "(Your open document stays open; this opens in a new tab.)",
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
             QtWidgets.QMessageBox.Yes)
         if cevap != QtWidgets.QMessageBox.Yes:
             self.mesaj_ekle("sistem",
-                            "Belge açılmadı — kod şu an açık olan belgede "
-                            "çalışır.")
+                            "Document not opened — code will run in the "
+                            "currently open document.")
             return
         doc, hata = kayitlar.belgeyi_ac(durum["yol"])
         if doc is None:
-            self.mesaj_ekle("sistem", hata + "\nKod şu an açık olan "
-                                             "belgede çalışır.")
+            self.mesaj_ekle("sistem", hata + "\nCode will run in the currently "
+                                             "open document.")
         else:
-            self.mesaj_ekle("sistem", "Belge açıldı: %s" % durum["yol"])
+            self.mesaj_ekle("sistem", "Document opened: %s" % durum["yol"])
 
     def _durum(self, durum: str) -> None:
         calisiyor = durum == "calisiyor"
@@ -940,7 +940,7 @@ class CaddyPanel(QtWidgets.QWidget):
                 # Iptal, kalici sureci de olduruyor — bu bir saniyeden uzun
                 # surebiliyor ve o sirada ekranda hicbir sey degismezse
                 # "tiklamadi mi" sanilir. Akista tek satir.
-                self.mesaj_ekle("sistem", "iptal ediliyor…")
+                self.mesaj_ekle("sistem", "cancelling…")
         self.btn_gonder.setEnabled(not calisiyor)
         self.btn_iptal.setEnabled(calisiyor)
 
@@ -959,17 +959,17 @@ class CaddyPanel(QtWidgets.QWidget):
         # Belge basina bir kez dolu gelir: ilk AI degisikliginden onceki kopya.
         if getattr(sonuc, "yedek", ""):
             self.mesaj_ekle("sistem",
-                            "İlk değişiklikten önce yedek alındı:\n"
+                            "Backup saved before the first change:\n"
                             + sonuc.yedek)
         if sonuc.cikti:
             self.mesaj_ekle("sistem", sonuc.cikti)
         for u in sonuc.uyarilar:
-            self.mesaj_ekle("sistem", "uyarı: " + u)
+            self.mesaj_ekle("sistem", "warning: " + u)
         # FreeCAD'in kendi konsolu (Report view'daki turuncu/kirmizi).
         for u in sonuc.konsol_hata:
-            self.mesaj_ekle("sistem", "FreeCAD HATA: " + u)
+            self.mesaj_ekle("sistem", "FreeCAD ERROR: " + u)
         for u in sonuc.konsol_uyari:
-            self.mesaj_ekle("sistem", "FreeCAD uyarı: " + u)
+            self.mesaj_ekle("sistem", "FreeCAD warning: " + u)
         # Deterministik geometri kontrolu. Panelde YALNIZCA bulgular
         # gosteriliyor; kosan kontrollerin tam listesi modele gidiyor ama
         # kullaniciyi ilgilendiren sey neyin bozuk oldugu. Bulgu yoksa
@@ -977,7 +977,7 @@ class CaddyPanel(QtWidgets.QWidget):
         d = getattr(sonuc, "dogrulama", None)
         if d is not None:
             for b in d.bulgular:
-                self.mesaj_ekle("sistem", "geometri: " + str(b))
+                self.mesaj_ekle("sistem", "geometry: " + str(b))
         if not sonuc.basarili:
             self.mesaj_ekle("sistem", sonuc.hata_izi.strip().splitlines()[-1])
 

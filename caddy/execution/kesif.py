@@ -1,31 +1,31 @@
-"""MEVCUT belgenin bastan asagi olculmesi — `kesif()`, modelin ilk adimi.
+"""Measuring the EXISTING document top to bottom — `kesif()`, the model's first step.
 
-NEDEN VAR. Kullanicinin istegi: "sifirdan bir sey yapilacaksa normal
-surece devam etsin, ama VAR OLAN bir seyin uzerine yapacaksa once ne
-oldugunu tam anlasin, her yerini olcsun, kullaniciya da soylesin — sonra
-profesyonel ve bilgili bir cevap versin: 'evet bu bardaga kulp
-ekleyebiliriz, kulbun araligi 24-12 mm olabilir, sen nereye eklemek
-istiyorsun'."
+WHY IT EXISTS. The user's request: "if something is built from scratch, carry
+on as usual, but if it builds ON TOP of something that EXISTS, first fully
+understand what it is, measure every part of it, tell the user too — then
+give a professional, informed answer: 'yes, we can add a handle to this
+cup, the handle span could be 24-12 mm, where do you want it'."
 
-Gunluk (2026-08-21 incelemesi) bunun neden gerektigini gosteriyor: model
-mevcut geometriyi TAHMIN ederek ise basliyordu. `baa70fa4`'te ilk soru
-"agiz capi ne kadar" idi ve model capi bilmiyordu; `b2938bd0`'da vidanin
-neresinin nerede oldugunu anlamak icin bes tur harcandi. Ikisinde de olcum
-ZATEN mumkundu, yalnizca kimse basta yapmiyordu.
+The logs show why this was needed: the model started work by GUESSING the
+existing geometry. In one session the first question was "what is the rim
+diameter" and the model did not know it; in another, five turns were spent
+figuring out which part of a screw was where. In both, measuring was
+ALREADY possible, nobody just did it up front.
 
-OLCEN KIM: MODEL, host degil.
-Ilk tasarimda host olcup baglama koyuyordu ("bir tur kazanir" diye).
-Kullanici bunu reddetti ve hakliydi: NE OLCULECEGINE ISE BAKARAK karar
-verilir. Host kor kor her nesnenin uc kesitini alir — cogu turda
-gereksiz, her turda token. Model ise "kulp eklenecek" bilgisiyle neyin
-onemli oldugunu bilir. Ustelik model olcunce olcum SOHBETTE gorunur:
-kullanici hangi sayinin nereden geldigini gorur ve gerekirse kodu
-duzeltip yeniden calistirir. Host'un yaptigi olcum gorunmez bir sihirdir.
+WHO MEASURES: THE MODEL, not the host.
+In the first design the host measured and put it in the context ("saves a
+turn"). The user rejected that, rightly: WHAT to measure is decided BY
+LOOKING AT THE TASK. The host blindly takes three sections of every object
+— unnecessary on most turns, tokens on every turn. The model knows, from
+"a handle will be added", what matters. Also, when the model measures, the
+measurement is VISIBLE in the chat: the user sees where each number came
+from and can fix the code and rerun it if needed. A host measurement is
+invisible magic.
 
-Bu yuzden burasi bir NAMESPACE YARDIMCISI: model `kesif()` yaziyor,
-cikti print ile kendisine donuyor (bkz. conversation._ciktiyi_yolla).
+So this is a NAMESPACE HELPER: the model writes `kesif()`, and the output
+comes back to it via print (see conversation._ciktiyi_yolla).
 
-KATMAN KURALI (MANTIK 12): burada Qt YOK.
+LAYER RULE: no Qt here.
 """
 
 from __future__ import annotations
@@ -37,27 +37,27 @@ import FreeCAD as App
 from .. import log
 from . import dogrulama, olcum
 
-# Kesifte en fazla kac nesne olculur ve toplam sure siniri. Ikisi de ust
-# sinir; asilirsa kesif DURUR ve durdugu metne yazilir (dogrulama.py'deki
-# durustluk kuralinin aynisi).
-# 8 -> 24: OLCULDU (MANTIK 39), 52 nesnelik gercek bir belgede kesif 8
-# nesnede durdu ama sure butcesinin (3.0 sn) yalnizca 0.48 sn'ini kullandi.
-# Yani freni SAYI koyuyordu, oysa asil kaynak SURE. Sayiyi buyutup freni
-# sureye birakiyoruz; siralama da onceliklendirildi (bkz. _oncelik).
+# Maximum number of objects measured by the survey, and the total time
+# limit. Both are upper bounds; when exceeded the survey STOPS and says so
+# in its text (the same honesty rule as in dogrulama.py).
+# 8 -> 24: MEASURED on a real 52-object document, the survey stopped at 8
+# objects but used only 0.48 s of its time budget (3.0 s). So the COUNT was
+# the brake, while the real resource is TIME. We raise the count and leave
+# braking to time; the order was prioritised too (see _oncelik).
 AZAMI_NESNE = 24
 SURE_BUTCESI = 3.0
 
-# Kesif disi tipler: bunlar "mevcut is" degil, iskele.
+# Types outside the survey: these are scaffolding, not "existing work".
 _ATLANAN = (
     "App::Origin", "App::Plane", "App::Line", "App::Point", "App::Part",
     "PartDesign::Plane", "PartDesign::Line", "PartDesign::Point",
     "App::DocumentObjectGroup",
 )
-# "App::Point" SONRADAN eklendi. Olculdu (LOG/2026-08-31_ed2bc86b.txt):
-# `saglik()` belge taramasinda `KUSUR Origin001: KATI YOK` yazdi. O nesne
-# bir datum NOKTASI (`App::Point`, Shape=Vertex) — katisi olmamasi normal.
-# Listede `App::Plane` ve `App::Line` vardi, `App::Point` unutulmustu;
-# ucu ayni iskele takiminin parcasi.
+# "App::Point" was ADDED LATER. Measured: the `saglik()` document scan wrote
+# `DEFECT Origin001: NO SOLID`. That object is a datum POINT (`App::Point`,
+# Shape=Vertex) — having no solid is normal. The list had `App::Plane` and
+# `App::Line`, `App::Point` was forgotten; all three belong to the same
+# scaffolding set.
 
 
 def _atlanir_mi(o) -> bool:
@@ -66,17 +66,17 @@ def _atlanir_mi(o) -> bool:
 
 
 def _oncelik(o) -> tuple:
-    """Kesif sirasi: ONCE isin kendisi, SONRA iskele.
+    """Survey order: the actual work FIRST, scaffolding AFTER.
 
-    OLCULDU (LOG/2026-08-26_34ac9988.txt, MANTIK 39): 52 nesnelik bir
-    belgede yalnizca 8'i olculdu ve o 8 slotun 3'u hacimsiz ESKIZLERE gitti
-    (`YelkenAltKesit1`, `YelkenAltKesit2`, `YelkenOrtaKesit1`), cunku
-    siralama `doc.Objects` sirasiydi. Yani modelin cakismasini sordugumuz
-    yelkenlerin cogu hic olculmedi.
+    MEASURED: in a 52-object document only 8 were measured, and 3 of those
+    8 slots went to volume-less SKETCHES (`YelkenAltKesit1`,
+    `YelkenAltKesit2`, `YelkenOrtaKesit1`), because the order was
+    `doc.Objects` order. So most of the sails whose overlap we were asking
+    about were never measured.
 
-    Anahtar (kucuk = once): hacimli kati > yuzeyli sekil > mesh > geri
-    kalan (eskiz, tel, 2B). Esitlikte gorunur olan once — kullanicinin
-    ekranda gordugu sey, isin kendisidir.
+    Key (smaller = first): solid with volume > shape with faces > mesh >
+    the rest (sketch, wire, 2D). On a tie the visible one first — what the
+    user sees on screen is the work itself.
     """
     kati = yuzey = mesh = False
     try:
@@ -102,36 +102,37 @@ def _oncelik(o) -> tuple:
     return (sinif, gorunur)
 
 
-# Bir nesneyi HAMMADDE olarak tuketen alanlar. Part/PartDesign/Draft'ta
-# baska ad kullanan her sey buraya giriyor; bilinmeyen bir tip cikarsa
-# nesne tuketilmemis sayilir (sessizce elemektense fazla gostermek yeg).
+# Properties through which an object CONSUMES another as raw material.
+# Everything in Part/PartDesign/Draft that uses another name goes here; if
+# an unknown type shows up the object counts as not consumed (showing too
+# much beats silently dropping).
 _TUKETEN_ALANLAR = ("Base", "Tool", "Shapes", "Source", "Objects",
                     "Profile", "Sections", "Spine", "Sketch", "Group")
 
 
 def tuketilmis_mi(o) -> bool:
-    """Bu nesne baska bir nesnenin HAMMADDESI mi (kesme tabani, ayna kaynagi)?
+    """Is this object another object's RAW MATERIAL (cut base, mirror source)?
 
-    OLCULDU (LOG/2026-08-27_9564dc71.txt): kamyonet oturumunda cakisma
-    raporundaki 813 "ICINDEN GECIYOR" satirinin **627'si (%77)** boyle
-    nesnelerdi — `KabinDetay x Kabin` 37 844 mm3, `Teker1 x CamIc1` 904 mm3.
-    Ikisi de kusur degil: Kabin, KabinDetay'in kesilmemis hali; CamIc1 bir
-    kesme silindiri, parca degil takim. Model her turda "bunlar gizli
-    kaynak nesneler, yeni bir sorun yok" diye feragat cumlesi yazmak
-    zorunda kaldi — MANTIK 32'deki 31 kez tekrarlanan yanlis alarmin
-    aynisi, yeni kilikta.
+    MEASURED: in a pickup-truck session, **627 (77%)** of the 813
+    "INTERSECTS" lines in the overlap report were such objects —
+    `KabinDetay x Kabin` 37 844 mm3, `Teker1 x CamIc1` 904 mm3. Neither is
+    a defect: Kabin is the uncut version of KabinDetay; CamIc1 is a cutting
+    cylinder, a tool rather than a part. Every turn the model had to write a
+    disclaimer "these are hidden source objects, no new problem" — the same
+    false alarm repeated 31 times earlier, in a new disguise.
 
-    IKI SART BIRDEN ARANIYOR, ve ikisi de olcumle geldi:
+    TWO CONDITIONS ARE REQUIRED TOGETHER, and both came from measurement:
 
-    * Yalnizca GORUNURLUK yetmez — kullanici gercek bir parcayi gecici
-      olarak gizlemis olabilir; o parca hala parcadir.
-    * Yalnizca REFERANS da yetmez. Ilk deneme boyleydi ve ayni belgede
-      `KapiKolu`yu eledi: o bir `Part::Mirroring` kaynagi, ama FreeCAD
-      ayna kaynagini GIZLEMEZ — kol ekranda duran gercek bir parca.
-      Oysa `Part::Cut`/`MultiFuse` tabanlarini gizler.
+    * VISIBILITY alone is not enough — the user may have temporarily hidden
+      a real part; it is still a part.
+    * REFERENCE alone is not enough either. The first attempt was like that
+      and in the same document it dropped `KapiKolu`: it is a
+      `Part::Mirroring` source, but FreeCAD does NOT hide mirror sources —
+      the handle is a real part on screen. `Part::Cut`/`MultiFuse`, on the
+      other hand, do hide their bases.
 
-    Yani olcut sudur: **baskasinin hammaddesi VE FreeCAD onu gizlemis.**
-    Gizlemediyse sonuca dahildir, olculur.
+    So the criterion is: **someone else's raw material AND FreeCAD hid it.**
+    If it was not hidden it is part of the result and gets measured.
     """
     if getattr(o, "Visibility", True):
         return False
@@ -158,11 +159,11 @@ def tuketilmis_mi(o) -> bool:
 
 
 def ilgili_nesneler(doc) -> list:
-    """Kesfedilmeye deger nesneler — iskele haric, govde olanlar.
+    """Objects worth surveying — the bodies, without scaffolding.
 
-    ONCELIK SIRALI (bkz. _oncelik): butce dolarsa atlanan sey eskiz olsun,
-    parca olmasin. Siralama KARARLI (`sorted` stabil), yani ayni siniftaki
-    nesneler belge sirasini koruyor.
+    SORTED BY PRIORITY (see _oncelik): if the budget runs out, what gets
+    skipped should be a sketch, not a part. The sort is STABLE (`sorted`),
+    so objects of the same class keep document order.
     """
     if doc is None:
         return []
@@ -171,30 +172,30 @@ def ilgili_nesneler(doc) -> list:
 
 
 def kesif(nesne=None, yaz: bool = True) -> str:
-    """Modelin cagirdigi giris noktasi: belgeyi (ya da tek nesneyi) olcer.
+    """The entry point the model calls: measures the document (or one object).
 
-    Tek satir: `kesif()`. Ciktisi print ile modele donuyor, yani "once ne
-    oldugunu anla" adimi TEK BLOK ve tek tur.
+    One line: `kesif()`. Its output comes back to the model via print, so
+    the "first understand what is there" step is ONE BLOCK and one turn.
     """
     if nesne is not None:
         metin = "\n".join(_bir_nesne(nesne))
     else:
         metin = kesif_metni()
     if not metin:
-        metin = ("kesif: belgede olculecek bir sey yok — bos belge. "
-                 "Sifirdan basliyorsun.")
+        metin = ("survey: nothing to measure in the document — empty "
+                 "document. You are starting from scratch.")
     if yaz:
         print(metin)
     return metin
 
 
 def _delik_dokumu(sekil) -> str:
-    """Silindirik yuzleri capa gore gruplar: 'Ø3.4x4, Ø8x2'.
+    """Groups cylindrical faces by diameter: 'Ø3.4x4, Ø8x2'.
 
-    Delik envanteri, mevcut bir parcaya bir sey eklerken en cok sorulan
-    sey: "vida deligi var mi, kac mm". Silindirik yuz saymak bunu tam
-    vermiyor (bir cikinti da silindirik olabilir) ama modele dogru soruyu
-    sorduracak kadar veriyor.
+    A hole inventory is the most asked thing when adding to an existing
+    part: "is there a screw hole, how many mm". Counting cylindrical faces
+    does not give it exactly (a boss can be cylindrical too), but enough to
+    make the model ask the right question.
     """
     try:
         yuzler = sekil.Faces
@@ -214,11 +215,11 @@ def _delik_dokumu(sekil) -> str:
         return ""
     parcalar = [f"Ø{olcum._sayi(2 * r)}x{n}"
                 for r, n in sorted(sayac.items(), reverse=True)]
-    return "silindirik yuzler: " + ", ".join(parcalar[:6])
+    return "cylindrical faces: " + ", ".join(parcalar[:6])
 
 
 def _bir_nesne(o) -> list[str]:
-    """Tek nesnenin kesif satirlari. ASLA istisna firlatmaz."""
+    """Survey lines for one object. NEVER raises."""
     satirlar: list[str] = []
     ad = o.Name
     etiket = f" '{o.Label}'" if getattr(o, "Label", "") != ad else ""
@@ -229,38 +230,39 @@ def _bir_nesne(o) -> list[str]:
         if d.get("satir"):
             satirlar.append("    " + d["satir"])
     except Exception as e:                                       # noqa: BLE001
-        log.uyari(f"kesif olcumu: {ad}: {e}")
+        log.uyari(f"survey measurement: {ad}: {e}")
 
     m = dogrulama._mesh_al(o)
     if m is not None:
-        # Uc yukseklikten kesit: taban, orta, ust. Kupa/silindir/koni gibi
-        # donel govdelerde bu uc sayi seklin TAMAMINI anlatiyor — model
-        # "agiz capi 55, taban 45, yani hafif konik" diyebiliyor.
+        # Sections at three heights: bottom, middle, top. For revolved
+        # bodies like cups/cylinders/cones these three numbers describe the
+        # WHOLE shape — the model can say "rim 55, base 45, so slightly
+        # conical".
         try:
             b = m.BoundBox
             h = b.ZLength
-            for etiketi, z in (("taban", b.ZMin + h * 0.05),
-                               ("orta", b.ZMin + h * 0.5),
-                               ("agiz/ust", b.ZMin + h * 0.95)):
+            for etiketi, z in (("bottom", b.ZMin + h * 0.05),
+                               ("middle", b.ZMin + h * 0.5),
+                               ("rim/top", b.ZMin + h * 0.95)):
                 k = olcum.kesit_capi(o, z=z, yaz=False)
                 if k.get("satir"):
                     satirlar.append(f"    {etiketi}: " + k["satir"])
         except Exception as e:                                   # noqa: BLE001
-            log.uyari(f"kesif kesiti: {ad}: {e}")
+            log.uyari(f"survey section: {ad}: {e}")
 
-        # Duvar kalinligi: baskiya uygunlugun asil sorusu ve isin atarak
-        # olculuyor (bkz. olcum.duvar_kalinligi).
+        # Wall thickness: the real question of printability, measured by
+        # ray casting (see olcum.duvar_kalinligi).
         try:
             k = olcum.duvar_kalinligi(o, yaz=False)
             if k.get("satir"):
                 satirlar.append("    " + k["satir"])
         except Exception as e:                                   # noqa: BLE001
-            log.uyari(f"kesif duvar: {ad}: {e}")
+            log.uyari(f"survey wall: {ad}: {e}")
 
         try:
             hazir, engeller, _ = dogrulama.baskiya_hazir_mesh(m)
-            satirlar.append(f"    baskiya hazir = "
-                            f"{'EVET' if hazir else 'HAYIR'}"
+            satirlar.append(f"    print-ready = "
+                            f"{'YES' if hazir else 'NO'}"
                             + ("" if hazir else
                                " (" + ", ".join(t for t, _a in engeller) + ")"))
         except Exception:
@@ -278,22 +280,22 @@ def _bir_nesne(o) -> list[str]:
 
 def kesif_metni(doc=None, azami: int = AZAMI_NESNE,
                 sure_butcesi: float = SURE_BUTCESI) -> str:
-    """Belgenin olculmus ozeti. Bos belgede bos string doner."""
+    """Measured summary of the document. Empty string for an empty document."""
     doc = doc or App.ActiveDocument
     nesneler = ilgili_nesneler(doc)
     if not nesneler:
         return ""
 
     t0 = time.time()
-    satirlar = [f"KESIF — {len(nesneler)} nesne olculdu (deterministik, "
-                f"tahmin degil):"]
+    satirlar = [f"SURVEY — {len(nesneler)} objects measured (deterministic, "
+                f"not guessed):"]
 
     try:
         b = doc.BoundBox if hasattr(doc, "BoundBox") else None
     except Exception:
         b = None
     if b is not None:
-        satirlar.append(f"belge sinirlari: {olcum._sayi(b.XLength)}x"
+        satirlar.append(f"document bounds: {olcum._sayi(b.XLength)}x"
                         f"{olcum._sayi(b.YLength)}x{olcum._sayi(b.ZLength)} mm")
 
     atlanan = 0
@@ -304,11 +306,11 @@ def kesif_metni(doc=None, azami: int = AZAMI_NESNE,
         try:
             satirlar.extend(_bir_nesne(o))
         except Exception as e:                                   # noqa: BLE001
-            log.uyari(f"kesif: {o.Name}: {e}")
+            log.uyari(f"survey: {o.Name}: {e}")
 
     if atlanan:
-        satirlar.append(f"  ... {atlanan} nesne olculMEDI (sinir asildi). "
-                        f"Gerekiyorsa adiyla olc: kesif(doc.getObject('ad'))")
+        satirlar.append(f"  ... {atlanan} objects NOT measured (limit reached). "
+                        f"If needed, measure by name: kesif(doc.getObject('name'))")
 
-    satirlar.append(f"olcum suresi: {time.time() - t0:.2f} sn")
+    satirlar.append(f"measurement time: {time.time() - t0:.2f} s")
     return "\n".join(satirlar)

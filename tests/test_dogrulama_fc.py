@@ -88,10 +88,10 @@ r = dg.dogrula(doc, ["Iyi"])
 _yaz("       " + r.metin().replace("\n", "\n       "))
 kontrol("bulgu yok", r.temiz, [str(b) for b in r.bulgular])
 kontrol("bakilan 1", r.bakilan == 1, r.bakilan)
-kontrol("olcum yazildi", any("hacim=4000" in o for o in r.olcumler), r.olcumler)
+kontrol("olcum yazildi", any("volume=4000" in o for o in r.olcumler), r.olcumler)
 kontrol("kosan kontroller listelendi", len(r.kosan) >= 4, r.kosan)
 kontrol("kosMAYAN kontrol de yazildi (sessizce temiz sayilmiyor)",
-        any("kesisme" in a for a in r.atlanan), r.atlanan)
+        any("self-intersection" in a for a in r.atlanan), r.atlanan)
 
 # ------------------------------------------------------------------ ters kati
 bolum("TERS KATI — isValid() bunu yakalamiyor")
@@ -103,10 +103,10 @@ kontrol("On kabul: hacim negatif", ters_sekil.Volume < 0, ters_sekil.Volume)
 _koy("Ters", ters_sekil)
 r2 = dg.dogrula(doc, ["Ters"])
 _yaz("       " + r2.metin().replace("\n", "\n       "))
-kontrol("ters kati YAKALANDI", any(b.tur == "ters kati" for b in r2.bulgular),
+kontrol("ters kati YAKALANDI", any(b.tur == "reversed solid" for b in r2.bulgular),
         [str(b) for b in r2.bulgular])
 kontrol("bulgu isValid'e degil hacme dayaniyor",
-        any("negatif" in b.ayrinti for b in r2.bulgular),
+        any("negative" in b.ayrinti for b in r2.bulgular),
         [b.ayrinti for b in r2.bulgular])
 
 # ------------------------------------------------------- bilesikte toplam sifir
@@ -120,7 +120,7 @@ _koy("Bilesik", bilesik)
 r3 = dg.dogrula(doc, ["Bilesik"])
 _yaz("       " + r3.metin().replace("\n", "\n       "))
 kontrol("toplama bakan bir kontrol kacirirdi — biz yakaladik",
-        any(b.tur == "ters kati" for b in r3.bulgular),
+        any(b.tur == "reversed solid" for b in r3.bulgular),
         [str(b) for b in r3.bulgular])
 
 # ----------------------------------------------------------------- acik kabuk
@@ -133,7 +133,7 @@ kontrol("On kabul: isClosed() False", kabuk.isClosed() is False,
 _koy("Kabuk", kabuk)
 r4 = dg.dogrula(doc, ["Kabuk"])
 _yaz("       " + r4.metin().replace("\n", "\n       "))
-kontrol("acik kabuk YAKALANDI", any(b.tur == "acik kabuk" for b in r4.bulgular),
+kontrol("acik kabuk YAKALANDI", any(b.tur == "open shell" for b in r4.bulgular),
         [str(b) for b in r4.bulgular])
 
 # ------------------------------------------------------------ kurt masali yok
@@ -158,12 +158,12 @@ kontrol("parametrik kutu temiz", r6.temiz, [str(x) for x in r6.bulgular])
 bolum("butce ve siniralar")
 r7 = dg.dogrula(doc, ["Iyi", "Ters", "Kabuk"], azami_nesne=1)
 kontrol("nesne siniri uygulandi", r7.bakilan == 1, r7.bakilan)
-kontrol("atlanan SOYLENIYOR", any("nesne siniri" in a for a in r7.atlanan),
+kontrol("atlanan SOYLENIYOR", any("object limit" in a for a in r7.atlanan),
         r7.atlanan)
 
 r8 = dg.dogrula(doc, ["Iyi", "Ters"], sure_butcesi=-1.0)
 kontrol("sure siniri uygulandi", r8.bakilan == 0, r8.bakilan)
-kontrol("sure asimi SOYLENIYOR", any("sure siniri" in a for a in r8.atlanan),
+kontrol("sure asimi SOYLENIYOR", any("time limit" in a for a in r8.atlanan),
         r8.atlanan)
 
 r9 = dg.dogrula(doc, [])
@@ -184,7 +184,7 @@ s = ex.calistir('k = doc.addObject("Part::Box", "Yeni")\nk.Length = 5\n',
 kontrol("calisti", s.basarili, s.hata_izi[-300:])
 kontrol("eklenen bulundu", "Yeni" in s.eklenen, s.eklenen)
 kontrol("dogrulama kostu", s.dogrulama is not None)
-kontrol("dogrulama metni sonuca girdi", "dogrulama:" in s.modele_metin(),
+kontrol("dogrulama metni sonuca girdi", "verification:" in s.modele_metin(),
         s.modele_metin()[:300])
 
 # ASIL SINAV: hicbir nesne EKLEMEYEN bir tur. Eski surumde bu turda hicbir
@@ -256,30 +256,30 @@ _DUZLEM = _yuzey([(-10, -10, 0), (10, -10, 0), (10, 10, 0), (-10, 10, 0)])
 _haller = [
     # (ad, sekil_a, sekil_b, beklenen)
     ("kati ic ice", _Part.makeBox(10, 10, 10),
-     _Part.makeBox(10, 10, 10, _V(5, 0, 0)), "ICINDEN GECIYOR"),
+     _Part.makeBox(10, 10, 10, _V(5, 0, 0)), "INTERSECTS"),
     # DEGME KUSUR DEGIL: bu projede yelken direge bilerek deger. section()
     # burada 40 mm veriyor — yani section tek basina yaniltir, hacim yanilmaz.
     ("kati yan yana DEGEN", _Part.makeBox(10, 10, 10),
-     _Part.makeBox(10, 10, 10, _V(10, 0, 0)), "degiyor"),
+     _Part.makeBox(10, 10, 10, _V(10, 0, 0)), "touching"),
     ("kati uzak", _Part.makeBox(10, 10, 10),
-     _Part.makeBox(10, 10, 10, _V(50, 0, 0)), "ayri"),
+     _Part.makeBox(10, 10, 10, _V(50, 0, 0)), "apart"),
     # Logdaki asil vaka: KALINLIKSIZ yelken. common() hacmi 0 verir,
     # kesisme bir EGRIDIR.
     ("yuzey X gibi kesisen", _DUZLEM,
      _yuzey([(-10, 0, -10), (10, 0, -10), (10, 0, 10), (-10, 0, 10)]),
-     "ICINDEN GECIYOR"),
+     "INTERSECTS"),
     ("yuzey KENARI icinden gecen", _DUZLEM,
      _yuzey([(0, 0, 0), (10, 0, 0), (10, 0, 10), (0, 0, 10)]),
-     "ICINDEN GECIYOR"),
+     "INTERSECTS"),
     ("yuzey uc uca DEGEN", _DUZLEM,
      _yuzey([(10, -10, 0), (30, -10, 0), (30, 10, 0), (10, 10, 0)]),
-     "degiyor"),
+     "touching"),
     ("kati icinden gecen yuzey", _A_kati,
      _yuzey([(-5, 5, -5), (15, 5, -5), (15, 5, 15), (-5, 5, 15)]),
-     "ICINDEN GECIYOR"),
+     "INTERSECTS"),
     ("katinin YUZUNE yatan yuzey", _A_kati,
      _yuzey([(0, 10, 0), (10, 10, 0), (10, 10, 10), (0, 10, 10)]),
-     "degiyor"),
+     "touching"),
 ]
 
 for _i, (_ad, _s1, _s2, _bek) in enumerate(_haller):
@@ -301,7 +301,7 @@ _degen_b = _nesne("OnKabulB", _Part.makeBox(10, 10, 10, _V(610, 0, 0)))
 _dd = _olcum._cift_olc(_degen_a, _degen_b)
 kontrol("ON KABUL: degen kati ciftinde section GERCEKTEN uzunluk veriyor",
         _dd["kesit_uzunluk"] > 1.0, _dd["kesit_uzunluk"])
-kontrol("...ama hukum yine de 'degiyor'", _dd["hukum"] == "degiyor",
+kontrol("...ama hukum yine de 'touching'", _dd["hukum"] == "touching",
         _dd["hukum"])
 
 bolum("cakisma_kontrol — toplu tarama ve raporu")
@@ -309,7 +309,7 @@ _r = _olcum.cakisma_kontrol(_degen_a, _degen_b, yaz=False)
 kontrol("degme raporda GECIS diye gecmiyor", not _r["gecisler"],
         _r["gecisler"])
 kontrol("rapor 'ICINDEN GECEN CIFT YOK' diyor",
-        "ICINDEN GECEN CIFT YOK" in _r["satir"], _r["satir"])
+        "NO INTERSECTING PAIRS" in _r["satir"], _r["satir"])
 _gecen_a = _nesne("GecenA", _Part.makeBox(20, 20, 20, _V(200, 200, 0)))
 _gecen_b = _nesne("GecenB", _Part.makeBox(20, 20, 20, _V(210, 200, 0)))
 _r2 = _olcum.cakisma_kontrol(_gecen_a, _gecen_b, yaz=False)
@@ -317,7 +317,7 @@ kontrol("gecis yakalandi", len(_r2["gecisler"]) == 1, _r2["satir"])
 kontrol("gecis satirinda HACIM yaziyor",
         "mm3" in _r2["satir"], _r2["satir"])
 kontrol("tek nesneyle cagirinca uyariyor",
-        "en az iki nesne"
+        "at least two objects"
         in _olcum.cakisma_kontrol(_gecen_a, yaz=False).get("satir", ""),
         _olcum.cakisma_kontrol(_gecen_a, yaz=False).get("satir", ""))
 
@@ -337,7 +337,7 @@ kontrol("ON KABUL: boolean girdisi sonucla GERCEKTEN ust uste",
 kontrol("akrabalik goruluyor", dg._akraba_mi(_kes, _bk_a))
 _rap_bool = dg.dogrula(_cd, ["Kesilmis"])
 kontrol("boolean girdisi cakisma BULGUSU uretmiyor",
-        not any("icinden geciyor" in str(b) for b in _rap_bool.bulgular),
+        not any("intersects" in str(b) for b in _rap_bool.bulgular),
         [str(b) for b in _rap_bool.bulgular])
 
 # BBOX ON ELEMESI: uzak ciftler boolean'a hic girmemeli, yoksa 52 nesnelik
@@ -353,9 +353,9 @@ bolum("dogrulama otomatik cakisma taramasi — host soyluyor")
 # kusur turu buydu.
 _rap = dg.dogrula(_cd, ["GecenA"])
 kontrol("cakisma kontrolu KOSAN listesinde",
-        any("cakisma" in k for k in _rap.kosan), _rap.kosan)
+        any("overlap" in k for k in _rap.kosan), _rap.kosan)
 kontrol("gecis BULGU olarak raporlandi",
-        any("icinden geciyor" in str(b) for b in _rap.bulgular),
+        any("intersects" in str(b) for b in _rap.bulgular),
         [str(b) for b in _rap.bulgular])
 kontrol("bulguda karsi nesnenin adi var",
         any("GecenB" in str(b) for b in _rap.bulgular),
@@ -365,7 +365,7 @@ kontrol("bulguda karsi nesnenin adi var",
 # donmemek icin kullanicinin verdigi karar.
 _rap2 = dg.dogrula(_cd, ["OnKabulA"])
 kontrol("DEGME bulgu sayilmiyor",
-        not any("icinden geciyor" in str(b) for b in _rap2.bulgular),
+        not any("intersects" in str(b) for b in _rap2.bulgular),
         [str(b) for b in _rap2.bulgular])
 
 # TEKRAR EDEN BULGU TEK SATIRDA TOPLANIYOR (MANTIK 32/33.4: ayni satirin 31
@@ -375,13 +375,13 @@ _yigin = _cd.addObject("Part::Box", "Yigin")
 _yigin.Length = _yigin.Width = _yigin.Height = 30
 _cd.recompute()
 _rap3 = dg.dogrula(_cd, ["Yigin"])
-_gecis_satirlari = [str(b) for b in _rap3.bulgular if "icinden geciyor" in str(b)]
+_gecis_satirlari = [str(b) for b in _rap3.bulgular if "intersects" in str(b)]
 _yaz("       yiginda bulgu satiri: %d" % len(_gecis_satirlari))
 kontrol("cok sayida gecis tek satirda TOPLANIYOR",
         len(_gecis_satirlari) <= dg.CAKISMA_AZAMI_SATIR + 1,
         _gecis_satirlari)
 kontrol("toplama satiri kac cift oldugunu SOYLUYOR",
-        any("cift" in s for s in _gecis_satirlari), _gecis_satirlari)
+        any("pairs" in s for s in _gecis_satirlari), _gecis_satirlari)
 
 # Hiz: kullanicinin sarti "yavaslatmiyorsa ekleyelim".
 import time as _time
@@ -462,7 +462,7 @@ _adlar = " ".join(d["satir"] for d in _s["gecisler"])
 kontrol("argumansiz taramada kesme tabani GECMIYOR",
         "Dis" not in _adlar and "Ic x" not in _adlar, _adlar)
 kontrol("basligi kac nesnenin elendigini SOYLUYOR",
-        "listeye alinmadi" in _s["satir"], _s["satir"].splitlines()[0])
+        "left out" in _s["satir"], _s["satir"].splitlines()[0])
 
 # ACIKCA sorulan cift elenmez: model neyi sorduysa cevabini alir.
 _s2 = _ol.cakisma_kontrol(_kesim, _dis, yaz=False)
@@ -488,7 +488,7 @@ kontrol("odak cift sayisini dusuruyor",
 kontrol("odakli ciftlerin HEPSI odagi iceriyor",
         all("Kesim" in d["satir"] for d in _odakli["ciftler"]),
         [d["satir"] for d in _odakli["ciftler"]])
-kontrol("baslikta odagin adi geciyor", "odak Kesim" in _odakli["satir"],
+kontrol("baslikta odagin adi geciyor", "focus Kesim" in _odakli["satir"],
         _odakli["satir"].splitlines()[0])
 
 # Odak nesnesinin KENDISI tuketilmis olsa bile elenmez — sorulan odur.
@@ -506,8 +506,8 @@ kontrol("kesme tabani Dis bulgu olarak raporlanmiyor",
 kontrol("kesme takimi Ic bulgu olarak raporlanmiyor",
         "'Ic'" not in _bulgu and "(Ic ile)" not in _bulgu, _bulgu[:300])
 kontrol("kosan satiri elemeyi soyluyor",
-        any("kesme tabani" in s for s in _rp.kosan),
-        [s for s in _rp.kosan if "cakisma" in s])
+        any("cut bases" in s for s in _rp.kosan),
+        [s for s in _rp.kosan if "overlap" in s])
 
 
 # ==========================================================================
@@ -532,10 +532,10 @@ _sd.recompute()
 
 _r = _ol.saglik(_ak, yaz=False)
 kontrol("saglik acik kabugu KUSUR sayiyor ('KATI YOK')",
-        len(_r["kusurlu"]) == 1 and "KATI YOK" in _r["satir"], _r["satir"])
+        len(_r["kusurlu"]) == 1 and "NO SOLID" in _r["satir"], _r["satir"])
 _r = _ol.saglik(_sag, yaz=False)
 kontrol("saglam kutu temiz",
-        not _r["kusurlu"] and "KUSUR YOK" in _r["satir"], _r["satir"])
+        not _r["kusurlu"] and "NO DEFECTS" in _r["satir"], _r["satir"])
 
 bolum("saglik — birden cok kati KUSUR degil, BILGI")
 # Model gunlukte `len(Solids) != 1` yaziyordu; oldugu gibi kusur saysaydik
@@ -546,7 +546,7 @@ _bl.Shape = Part.makeCompound([Part.makeBox(5, 5, 5),
 _sd.recompute()
 _r = _ol.saglik(_bl, yaz=False)
 kontrol("iki katili sekil kusurlu DEGIL ama '2 ayri kati' deniyor",
-        not _r["kusurlu"] and "2 ayri kati" in _r["satir"], _r["satir"])
+        not _r["kusurlu"] and "2 separate solids" in _r["satir"], _r["satir"])
 
 bolum("saglik — argumansiz cagri tum belgeyi tariyor")
 _r = _ol.saglik(yaz=False)
@@ -571,7 +571,7 @@ kontrol("ON KABUL: nokta seklinin YUZU ve KATISI yok",
 _r = _ol.saglik(_nk, yaz=False)
 kontrol("yuzu olmayan sekil KUSUR sayilmiyor", not _r["kusurlu"], _r["satir"])
 kontrol("neden bakilmadigi SOYLENIYOR (sessizce atlanmiyor)",
-        "kati testleri uygulanmadi" in _r["satir"], _r["satir"])
+        "solid tests not applied" in _r["satir"], _r["satir"])
 _r = _ol.saglik(yaz=False)
 kontrol("iskele elenirken GERCEK is elenmiyor",
         "Saglam" in [k["ad"] for k in _r["nesneler"]])
@@ -608,7 +608,7 @@ _sd.recompute()
 kontrol("kapali mesh temiz", not _ol.saglik(_km, yaz=False)["kusurlu"])
 _r = _ol.saglik(_dm, yaz=False)
 kontrol("delikli mesh 'KAPALI KATI DEGIL' diyor",
-        len(_r["kusurlu"]) == 1 and "KAPALI KATI DEGIL" in _r["satir"],
+        len(_r["kusurlu"]) == 1 and "NOT A CLOSED SOLID" in _r["satir"],
         _r["satir"])
 
 bolum("simetri — bilinen cevapli kati")
@@ -622,13 +622,13 @@ _as.Shape = Part.makeBox(40, 20, 10).cut(
 _sd.recompute()
 _r = _ol.simetri(_as, "x", yaz=False)
 _x = _r["eksenler"]["x"]
-kontrol("x ekseninde ASIMETRIK", _x["hukum"] == "ASIMETRIK", _r["satir"])
+kontrol("x ekseninde ASIMETRIK", _x["hukum"] == "ASYMMETRIC", _r["satir"])
 kontrol("ayna duzlemi bbox ortasi (x=20)", abs(_x["merkez"] - 20.0) < 1e-9,
         _x["merkez"])
 kontrol("fark hacmi ELLE HESAPLA ayni (432 mm3)",
         abs(_x["fark"] - 432.0) < 1.0, _x["fark"])
 kontrol("fark BOLGESI asimetrinin gercek yerini gosteriyor (x 30..36)",
-        "fark bolgesi" in _r["satir"]
+        "difference region" in _r["satir"]
         and any(abs(b.XMax - 36.0) < 0.5 for b in _x["kutular"]),
         [(b.XMin, b.XMax) for b in _x["kutular"]])
 
@@ -640,16 +640,16 @@ _sm.Shape = Part.makeBox(40, 20, 10).cut(
 _sd.recompute()
 kontrol("iki taraftan esit kesilen parca x'te simetrik",
         _ol.simetri(_sm, "x", yaz=False)["eksenler"]["x"]["hukum"]
-        == "simetrik")
+        == "symmetric")
 
 bolum("simetri — eksen verilmezse UCU birden, mesh nokta bulutuyla")
 _r = _ol.simetri(_as, yaz=False)
 kontrol("uc eksen de olculdu ve y simetrik cikti",
         set(_r["eksenler"]) == {"x", "y", "z"}
-        and _r["eksenler"]["y"]["hukum"] == "simetrik", _r["satir"])
+        and _r["eksenler"]["y"]["hukum"] == "symmetric", _r["satir"])
 _mx = _ol.simetri(_km, "x", yaz=False)["eksenler"]["x"]
 kontrol("mesh'te nokta yontemi kullanildi ve kup simetrik",
-        _mx.get("yontem") == "nokta" and _mx["hukum"] == "simetrik", _mx)
+        _mx.get("yontem") == "points" and _mx["hukum"] == "symmetric", _mx)
 
 # --------------------------------------------------------------------------
 bolum("cakisma — blogun kendi ciktisi ile tarama TEKRARLANMIYOR")
@@ -668,7 +668,7 @@ _dd.recompute()
 _ol.bildirilen_gecisleri_sifirla()
 _t1 = dg.dogrula(_dd, ["TekA"])
 kontrol("kayit bosken gecis BULGU olarak yaziliyor",
-        any("icinden geciyor" in str(b) for b in _t1.bulgular),
+        any("intersects" in str(b) for b in _t1.bulgular),
         [str(b) for b in _t1.bulgular])
 
 # 2) `yaz=True` cagrisi cifti kaydeder; ayni tarama artik tekrarlamaz.
@@ -680,14 +680,14 @@ kontrol("sira onemsiz — anahtar sirali",
         _ol.gecis_bildirildi_mi("TekB", "TekA"))
 _t2 = dg.dogrula(_dd, ["TekA"])
 kontrol("bildirilen gecis BULGU olarak tekrarlanmiyor",
-        not any("icinden geciyor" in str(b) for b in _t2.bulgular),
+        not any("intersects" in str(b) for b in _t2.bulgular),
         [str(b) for b in _t2.bulgular])
 # DURUSTLUK: bastirilan sey sessiz kalmaz, yoksa model "tarama temiz cikti"
 # sanar. Bu, projedeki "olcemedigini soyle" kuralinin aynisi.
 kontrol("bastirma olcum satirinda soyleniyor",
-        any("zaten yazili" in o for o in _t2.olcumler), _t2.olcumler)
+        any("already written" in o for o in _t2.olcumler), _t2.olcumler)
 kontrol("yanlis 'icinden gecen yok' hukmu verilmiyor",
-        not any("icinden gecen yok" in o for o in _t2.olcumler), _t2.olcumler)
+        not any("none intersect" in o for o in _t2.olcumler), _t2.olcumler)
 
 # 3) `yaz=False` KAYDETMEZ. O cagri hicbir sey yazdirmaz (gorsel yolu onu
 #    boyle kullaniyor); bastirilirsa bulgu gercekten kaybolurdu.
@@ -697,7 +697,7 @@ kontrol("yaz=False cifti kaydetmiyor",
         not _ol.gecis_bildirildi_mi("TekA", "TekB"))
 _t3 = dg.dogrula(_dd, ["TekA"])
 kontrol("yaz=False sonrasi bulgu duruyor",
-        any("icinden geciyor" in str(b) for b in _t3.bulgular),
+        any("intersects" in str(b) for b in _t3.bulgular),
         [str(b) for b in _t3.bulgular])
 
 # 4) BASKA bir cift bastirilmaz: kayit ciftin kendisine bagli, genel bir

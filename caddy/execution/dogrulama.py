@@ -1,53 +1,54 @@
-"""Kod calistiktan sonra DETERMINISTIK geometri kontrolu.
+"""DETERMINISTIC geometry check after code runs.
 
-NEDEN VAR. CADdy'de iki dogrulama katmani olmasi gerekiyordu, bir tanesi
-vardi. Gorsel kontrol (§8e) ANLAMSAL hatayi yakaliyor — "kulak yanlis yere
-kondu", "parcalar birbirine degmiyor". Yakalayamadigi sey, goze normal
-gorunen bozuk topoloji. Onu deterministik kontrol yakalar, ve o katman yoktu.
+WHY IT EXISTS. CADdy needed two verification layers and had one. The visual
+check catches SEMANTIC mistakes — "the ear went to the wrong place", "the
+parts do not touch". What it cannot catch is broken topology that looks
+normal to the eye. A deterministic check catches that, and that layer was
+missing.
 
-Bolunme sudur:
+The split is:
 
-    deterministik kontrol  ->  gecti/kaldi kararini VERIR
-    gorsel kontrol         ->  deterministigin kodlamadigi hatayi yakalar
+    deterministic check  ->  DECIDES pass/fail
+    visual check         ->  catches what the deterministic one does not encode
 
-Fikir earthtojake/text-to-cad'in `inspection-and-validation.md` dosyasindan
-alindi. Oradaki iki uyari FreeCAD 1.1.1'de OLCULDU ve ikisi de dogru cikti:
+The idea comes from earthtojake/text-to-cad's `inspection-and-validation.md`.
+Its two warnings were MEASURED on FreeCAD 1.1.1 and both held:
 
-  1. `isValid()` TERS KATIYI YAKALAMIYOR. Part.makeBox(10,10,10).reversed()
-     icin isValid() -> True, Volume -> -999.9999. Topolojik gecerlilik ters
-     yonlu bir govdeyi gecerli sayar; onu yalnizca HACMIN ISARETI yakalar.
-     Ters kati 3B'de "dunyada delik" gibi gorunur ve boolean'lari bozar.
+  1. `isValid()` DOES NOT CATCH A REVERSED SOLID. For
+     Part.makeBox(10,10,10).reversed(), isValid() -> True, Volume ->
+     -999.9999. Topological validity accepts an inside-out body; only the
+     SIGN OF THE VOLUME catches it. A reversed solid looks like "a hole in
+     the world" in 3D and breaks booleans.
 
-  2. HACIM ASLA TOPLANMAZ, kati kati bakilir. Olculdu: icinde +1000 ve -1000
-     olan bir bilesigin `.Volume` degeri **0.0**. Toplama bakan bir kontrol
-     hicbir sey gormez.
+  2. VOLUMES ARE NEVER SUMMED, each solid is checked on its own. Measured:
+     a compound containing +1000 and -1000 has `.Volume` **0.0**. A check
+     looking at the total sees nothing.
 
-Ucuncusu kendi olcumumuz:
+The third is our own measurement:
 
-  3. ACIK KABUK da isValid()'i geciyor. Bes yuzlu kutu: isValid() -> True,
-     isClosed() -> False, Solids -> 0. Yani "gecerli" ama basilamaz.
+  3. AN OPEN SHELL passes isValid() too. A five-faced box: isValid() ->
+     True, isClosed() -> False, Solids -> 0. "Valid", yet unprintable.
 
-Dorduncusu MESH tarafinda, ayni kalibin tekrari:
+The fourth is on the MESH side, the same pattern again:
 
-  4. `mesh.isSolid()` de tek basina yetmiyor. Olculdu: birbirinin icine
-     giren iki kutunun mesh'i icin isSolid() -> True ama
-     hasSelfIntersections() -> True ve countComponents() -> 2. "Kapali"
-     olmak basilabilir olmak demek degil.
+  4. `mesh.isSolid()` alone is not enough either. Measured: for the mesh of
+     two interpenetrating boxes isSolid() -> True but
+     hasSelfIntersections() -> True and countComponents() -> 2. Being
+     "closed" does not mean printable.
 
-MALIYET (olculdu, 36 yuzlu katida): isValid 0.043 sn, isClosed ~0, Solids
-ve Volume 0.001 sn, BoundBox ~0. isValid yuz sayisiyla buyuyor, o yuzden
-hem sure hem nesne sayisi butceli.
-Mesh tarafi (olculdu, 12850 facet): isSolid 0.008, hasSelfIntersections
-0.024, hasNonManifolds 0.005, countComponents 0.001 sn.
+COST (measured, 36-face solid): isValid 0.043 s, isClosed ~0, Solids and
+Volume 0.001 s, BoundBox ~0. isValid grows with face count, so both time
+and object count are budgeted.
+Mesh side (measured, 12850 facets): isSolid 0.008, hasSelfIntersections
+0.024, hasNonManifolds 0.005, countComponents 0.001 s.
 
-DURUSTLUK KURALI. Rapor, KOSAN kontrolleri kosmayanlardan ayirir. Kosmamis
-bir kontrol sessizce "temiz" sayilmaz; adi `atlanan`a yazilir ve sebebiyle
-birlikte modele gider. Sebep: model gormedigi bir kontrolu gecmis sayip
-"dogrulandi" diye rapor ediyor — kaynak dosyanin deyimiyle *"report only
-checks that were actually run"*.
+HONESTY RULE. The report separates checks that RAN from those that did not.
+A check that did not run is not silently counted as "clean"; its name goes
+into `atlanan` and reaches the model with the reason. Why: a model counts a
+check it never saw as passed and reports "verified" — in the source file's
+words, *"report only checks that were actually run"*.
 
-KATMAN KURALI (MANTIK 12): burada Qt YOK, yalnizca FreeCAD. Arayuzsuz
-sinanabilmeli.
+LAYER RULE: no Qt here, only FreeCAD. It must be testable without a GUI.
 """
 
 from __future__ import annotations
@@ -59,14 +60,14 @@ import FreeCAD as App
 
 from .. import log
 
-# Tek calistirmada kontrol edilecek en fazla nesne ve toplam sure. Ikisi de
-# ust sinir; asilirsa kontrol DURUR ve durdugu rapora yazilir.
+# Maximum objects checked in one run, and total time. Both are upper
+# bounds; when exceeded the check STOPS and says so in the report.
 AZAMI_NESNE = 25
-SURE_BUTCESI = 1.5          # saniye
+SURE_BUTCESI = 1.5          # seconds
 
-# Kati uretmesi BEKLENMEYEN tipler. Bir eskizin katisi olmamasi kusur degil;
-# bunlari "kati uretmedi" diye raporlamak kurt masali olur ve model gercek
-# bulgulari da ciddiye almaz.
+# Types NOT EXPECTED to produce a solid. A sketch having no solid is not a
+# defect; reporting these as "no solid produced" would be crying wolf, and
+# the model would stop taking real findings seriously.
 _KATI_BEKLENMEYEN = (
     "Sketcher::",
     "Part::Part2DObject",
@@ -104,20 +105,20 @@ class Rapor:
         return not self.bulgular
 
     def metin(self) -> str:
-        """Modele giden metin. Kisa tutuluyor — her calistirmada gonderiliyor."""
+        """Text sent to the model. Kept short — it is sent after every run."""
         if not self.kosan and not self.atlanan:
             return ""
-        p = [f"dogrulama: {self.bakilan} nesne, {self.sure_sn:.2f} sn"]
+        p = [f"verification: {self.bakilan} objects, {self.sure_sn:.2f} s"]
         if self.kosan:
-            p.append("  kosan kontroller: " + ", ".join(self.kosan))
+            p.append("  checks run: " + ", ".join(self.kosan))
         for a in self.atlanan:
-            p.append("  KOSMAYAN: " + a)
+            p.append("  NOT RUN: " + a)
         for o in self.olcumler:
             p.append("  " + o)
         for b in self.bulgular:
-            p.append("  BULGU " + str(b))
+            p.append("  FINDING " + str(b))
         if not self.bulgular and self.kosan:
-            p.append("  bulgu yok (yalnizca yukarida kosan kontroller icin)")
+            p.append("  no findings (only for the checks run above)")
         return "\n".join(p)
 
 
@@ -127,42 +128,47 @@ def _kati_beklenir_mi(o) -> bool:
 
 
 def _sayi(x) -> str:
+    # Same formatting as olcum._sayi: no scientific notation (a log showed
+    # "volume=1.2e+06 mm3" for a 200x200x30 plate).
     try:
-        return f"{float(x):.6g}"
+        v = float(x)
+        if abs(v) >= 10000:
+            return f"{v:.0f}"
+        return f"{v:.6g}"
     except Exception:
         return str(x)
 
 
 def _mesh_al(o):
-    """Nesnenin mesh'i (Mesh::Feature) ya da None. ASLA patlamaz."""
+    """The object's mesh (Mesh::Feature) or None. NEVER raises."""
     try:
         m = getattr(o, "Mesh", None)
     except Exception:
         return None
-    # Mesh::Feature'in Mesh'i bir MeshObject; baska tiplerde ayni adda
-    # alakasiz bir ozellik olabilir, o yuzden metoda bakiyoruz.
+    # A Mesh::Feature's Mesh is a MeshObject; other types may have an
+    # unrelated property with the same name, so we check for a method.
     return m if m is not None and hasattr(m, "CountFacets") else None
 
 
 def _bir_mesh(o, m, rapor: Rapor) -> None:
-    """Mesh nesnesinin kontrolu.
+    """Checks a mesh object.
 
-    NEDEN AYRI BIR YOL. Mesh::Feature'in `Shape`'i YOKTUR. Eski surumde
-    _bir_nesne ilk satirda `Shape is None` diye donuyordu, yani mesh'ler
-    dogrulamanin gozune HIC gorunmuyordu. Gunluk incelemesi (2026-08-21)
-    bunun bedelini olctu: son dort gercek oturumun ana nesnesi mesh idi ve
-    bu katman o oturumlarin hicbirinde tek bir kontrol kosmadi. Monkey
-    indirilen modeli mesh olarak getirdigi icin asil is akisi da bu.
+    WHY A SEPARATE PATH. A Mesh::Feature has NO `Shape`. In the old version
+    _bir_nesne returned on the first line with `Shape is None`, so meshes
+    were NEVER visible to verification. A log review measured the cost: the
+    main object of the last four real sessions was a mesh, and this layer
+    did not run a single check in any of them. Downloaded models arrive as
+    meshes, so this is the main workflow too.
 
-    `isSolid()` DE YALAN SOYLUYOR — olculdu: birbirinin icine giren iki
-    kutunun mesh'i icin isSolid() -> True, hasSelfIntersections() -> True,
-    countComponents() -> 2. Yani "kapali" olmak yetmiyor; kesisme ve parca
-    sayisi ayrica sorulmali. isValid() icin bulunan kalibin (bkz. modul
-    basligi) mesh'teki karsiligi.
+    `isSolid()` LIES TOO — measured: for the mesh of two interpenetrating
+    boxes isSolid() -> True, hasSelfIntersections() -> True,
+    countComponents() -> 2. Being "closed" is not enough; intersections and
+    component count must be asked separately. The mesh counterpart of the
+    isValid() pattern (see the module header).
 
-    MALIYET (olculdu, 12850 facet): isSolid 0.008, hasSelfIntersections
-    0.024, hasNonManifolds 0.005, countComponents 0.001 sn. Toplami sure
-    butcesinin ellide biri — hepsi kosuyor.
+    COST (measured, 12850 facets): isSolid 0.008, hasSelfIntersections
+    0.024, hasNonManifolds 0.005, countComponents 0.001 s. Together a
+    fiftieth of the time budget — they all run.
     """
     ad = o.Name
     hazir, engeller, olcumler = baskiya_hazir_mesh(m)
@@ -171,19 +177,19 @@ def _bir_mesh(o, m, rapor: Rapor) -> None:
         rapor.bulgular.append(Bulgu(ad, tur, ayrinti))
     if olcumler:
         rapor.olcumler.append(f"{ad}: " + " ".join(olcumler))
-    # Bu satir modelin "hazir mi" sorusuna kanaatle degil olcumle cevap
-    # vermesi icin. Kullanici bunu neredeyse her oturumda soruyor.
+    # This line lets the model answer "is it ready" with a measurement, not
+    # an opinion. Users ask this in almost every session.
     rapor.olcumler.append(
-        f"{ad}: baskiya hazir = {'EVET' if hazir else 'HAYIR'}")
+        f"{ad}: print-ready = {'YES' if hazir else 'NO'}")
 
 
 def baskiya_hazir_mesh(m) -> tuple[bool, list[tuple[str, str]], list[str]]:
-    """(hazir_mi, [(tur, ayrinti)...], [olcum...]). ASLA patlamaz.
+    """(ready, [(kind, detail)...], [measurement...]). NEVER raises.
 
-    "Baskiya hazir" = 3B yazicinin dilimleyicisinin kabul edecegi hal:
-    kapali (su sizdirmaz), kendiyle kesismeyen, non-manifold noktasi
-    olmayan, tek parca ve hacmi pozitif bir mesh. Bunlarin hepsini FreeCAD
-    hazir veriyor; tek eksik onlari soruyor olmakti.
+    "Print-ready" = a state a 3D printer's slicer will accept: a closed
+    (watertight), non-self-intersecting, manifold, single-component mesh
+    with positive volume. FreeCAD provides all of these out of the box;
+    the only missing piece was asking.
     """
     engeller: list[tuple[str, str]] = []
     olcumler: list[str] = []
@@ -204,60 +210,61 @@ def baskiya_hazir_mesh(m) -> tuple[bool, list[tuple[str, str]], list[str]]:
 
     hacim = sor(lambda: float(m.Volume))
     if hacim is not None:
-        olcumler.append(f"hacim={_sayi(hacim)} mm3")
+        olcumler.append(f"volume={_sayi(hacim)} mm3")
 
     kapali = sor(lambda: bool(m.isSolid()))
     if kapali is False:
-        engeller.append(("kapali degil",
-                         "mesh su sizdirmaz degil (acik kenar/delik var); "
-                         "dilimleyici bunu ya reddeder ya da tahmin ederek "
-                         "kapatir"))
+        engeller.append(("not closed",
+                         "the mesh is not watertight (open edges/holes); "
+                         "a slicer will either reject it or close it by "
+                         "guessing"))
 
     kesisme = sor(lambda: bool(m.hasSelfIntersections()))
     if kesisme:
-        engeller.append(("kendiyle kesisme",
-                         "yuzeyler birbirinin icinden geciyor. isSolid() "
-                         "bunu YAKALAMAZ — olculdu"))
+        engeller.append(("self-intersection",
+                         "surfaces pass through each other. isSolid() does "
+                         "NOT catch this — measured"))
 
     manifold = sor(lambda: bool(m.hasNonManifolds()))
     if manifold:
         engeller.append(("non-manifold",
-                         "bir kenari ikiden fazla yuzey paylasiyor; "
-                         "dilimleyicide delik/artifact uretir"))
+                         "an edge is shared by more than two faces; "
+                         "produces holes/artifacts in the slicer"))
 
     bozuk = sor(lambda: bool(m.hasCorruptedFacets()))
     if bozuk:
-        engeller.append(("bozuk facet", "dejenere ucgen var"))
+        engeller.append(("corrupt facet", "degenerate triangle present"))
 
     parca = sor(lambda: int(m.countComponents()), 1)
     if parca is not None:
-        olcumler.append(f"parca={parca}")
+        olcumler.append(f"components={parca}")
         if parca > 1:
             engeller.append((
-                "cok parca",
-                f"{parca} ayri kabuk var. Kasitliysa sorun degil; degilse "
-                f"biri artik parcadir — kulp ayirma denemelerinde tam bu "
-                f"olusuyordu"))
+                "multiple components",
+                f"{parca} separate shells. Fine if intended; otherwise one "
+                f"of them is a leftover — this is exactly what happened in "
+                f"the handle-separation attempts"))
 
     if hacim is not None and hacim <= 0 and facet:
-        engeller.append(("hacim pozitif degil",
-                         f"hacim {_sayi(hacim)} — normaller ters donmus "
-                         f"olabilir (flipNormals/harmonizeNormals)"))
+        engeller.append(("volume not positive",
+                         f"volume {_sayi(hacim)} — normals may be flipped "
+                         f"(flipNormals/harmonizeNormals)"))
 
     return (not engeller), engeller, olcumler
 
 
 def _desen_kontrolu(o, sekil, rapor: Rapor) -> None:
-    """PartDesign deseni GERCEKTEN cogaltmis mi?
+    """Did the PartDesign pattern REALLY multiply?
 
-    OLCULDU ve bu, sessiz yanlisin en kotu turu: `PartDesign::PolarPattern`
-    bir PRIMITIF uzerinde (AdditiveCylinder gibi) calistirildiginda hata
-    VERMIYOR, State "Up-to-date" diyor, hacim degismiyor — yani tek kopya
-    birakiyor. Model "6 delik actim" der, belgede bir delik vardir.
-    (Desenler yalnizca ESKIZ TABANLI ozelliklerde — Pad/Pocket — calisiyor.)
+    MEASURED, and this is the worst kind of silent wrong: a
+    `PartDesign::PolarPattern` applied to a PRIMITIVE (like
+    AdditiveCylinder) gives NO error, State says "Up-to-date", the volume
+    does not change — it leaves a single copy. The model says "I made 6
+    holes", the document has one. (Patterns only work on SKETCH-BASED
+    features — Pad/Pocket.)
 
-    Kontrol: desenin sekli, beslendigi BaseFeature'in seklinden farkli
-    olmali. Ayni hacimse desen GORUNMEZ kalmistir.
+    Check: the pattern's shape must differ from the shape of the
+    BaseFeature it builds on. Same volume means the pattern stayed INVISIBLE.
     """
     tip = getattr(o, "TypeId", "") or ""
     if not any(tip.endswith(x) for x in
@@ -273,19 +280,19 @@ def _desen_kontrolu(o, sekil, rapor: Rapor) -> None:
         return
     if h0 and abs(h1 - h0) <= max(1e-6, 1e-6 * abs(h0)):
         rapor.bulgular.append(Bulgu(
-            o.Name, "desen tek kopya birakti",
-            f"hacim {_sayi(h1)} — {taban.Name} ile AYNI, yani desen "
-            f"uygulanmadi. Hata verilmez ve State 'Up-to-date' gorunur. "
-            f"Genellikle sebep: desen bir PRIMITIFE baglanmis; yalnizca "
-            f"eskiz tabanli ozellikte (Pad/Pocket) calisir. Ayrica "
-            f"Originals dolu mu ve body.Tip desene tasinmis mi bak"))
+            o.Name, "pattern left a single copy",
+            f"volume {_sayi(h1)} — SAME as {taban.Name}, so the pattern was "
+            f"not applied. No error is raised and State shows 'Up-to-date'. "
+            f"Usual cause: the pattern is attached to a PRIMITIVE; it only "
+            f"works on sketch-based features (Pad/Pocket). Also check that "
+            f"Originals is filled and body.Tip was moved to the pattern"))
 
 
 def _bir_nesne(o, rapor: Rapor) -> None:
-    """Tek nesnenin kontrolu. Hicbir kosulda ISTISNA FIRLATMAZ.
+    """Checks one object. NEVER RAISES under any condition.
 
-    Dogrulama, calismasi basarili olmus bir islemin ustune kosuyor. Burada
-    patlamak, iyi biten bir isi kotu bitirmek olur.
+    Verification runs on top of an operation that succeeded. Failing here
+    would turn a job that ended well into one that ended badly.
     """
     ad = o.Name
     try:
@@ -302,8 +309,8 @@ def _bir_nesne(o, rapor: Rapor) -> None:
     try:
         if sekil.isNull():
             if _kati_beklenir_mi(o):
-                rapor.bulgular.append(Bulgu(ad, "bos sekil",
-                                            "nesnenin sekli yok"))
+                rapor.bulgular.append(Bulgu(ad, "empty shape",
+                                            "the object has no shape"))
             return
     except Exception:
         return
@@ -313,13 +320,13 @@ def _bir_nesne(o, rapor: Rapor) -> None:
     try:
         if not sekil.isValid():
             rapor.bulgular.append(
-                Bulgu(ad, "gecersiz topoloji",
-                      "Shape.isValid() False — sonraki boolean'lar bunun "
-                      "uzerine kurulursa hata ZINCIRIN SONUNDA cikar"))
+                Bulgu(ad, "invalid topology",
+                      "Shape.isValid() False — if later booleans build on "
+                      "this, the error shows up AT THE END OF THE CHAIN"))
     except Exception:
         pass
 
-    # --- hacim isareti: KATI KATI, asla toplayarak degil -------------------
+    # --- volume sign: SOLID BY SOLID, never by summing --------------------
     katilar = []
     try:
         katilar = list(sekil.Solids)
@@ -336,24 +343,24 @@ def _bir_nesne(o, rapor: Rapor) -> None:
             toplam += h
             if h < 0:
                 rapor.bulgular.append(
-                    Bulgu(ad, "ters kati",
-                          f"kati {i} hacmi negatif ({_sayi(h)}). isValid() "
-                          f"bunu YAKALAMAZ; 3B'de dunyada delik gibi gorunur "
-                          f"ve boolean'lari bozar"))
+                    Bulgu(ad, "reversed solid",
+                          f"solid {i} has negative volume ({_sayi(h)}). "
+                          f"isValid() does NOT catch this; in 3D it looks "
+                          f"like a hole in the world and breaks booleans"))
             elif h == 0:
                 rapor.bulgular.append(
-                    Bulgu(ad, "sifir hacim", f"kati {i} bos"))
+                    Bulgu(ad, "zero volume", f"solid {i} is empty"))
         try:
             b = sekil.BoundBox
             rapor.olcumler.append(
-                f"{ad}: kati={len(katilar)} hacim={_sayi(toplam)} mm3 "
+                f"{ad}: solids={len(katilar)} volume={_sayi(toplam)} mm3 "
                 f"bbox={_sayi(b.XLength)}x{_sayi(b.YLength)}x"
                 f"{_sayi(b.ZLength)} mm")
         except Exception:
             pass
         return
 
-    # --- kati yoksa: kabuk kapali mi ---------------------------------------
+    # --- no solid: is the shell closed -------------------------------------
     kabuklar = []
     try:
         kabuklar = list(sekil.Shells)
@@ -370,38 +377,40 @@ def _bir_nesne(o, rapor: Rapor) -> None:
                 pass
         if acik:
             rapor.bulgular.append(
-                Bulgu(ad, "acik kabuk",
-                      f"{acik} kabuk kapali degil — isValid() bunu gecirir "
-                      f"ama basilamaz ve kati islemleri kabul etmez"))
+                Bulgu(ad, "open shell",
+                      f"{acik} shell(s) not closed — isValid() lets this "
+                      f"through, but it cannot be printed and solid "
+                      f"operations reject it"))
         return
 
-    # Ne kati ne kabuk: eskiz, tel, yuz. Kusur degil, bilgi.
+    # Neither solid nor shell: sketch, wire, face. Not a defect, information.
     if _kati_beklenir_mi(o):
         try:
-            rapor.olcumler.append(f"{ad}: kati degil ({sekil.ShapeType})")
+            rapor.olcumler.append(f"{ad}: not a solid ({sekil.ShapeType})")
         except Exception:
             pass
 
 
 
 
-# Cakisma taramasinin sure butcesi. Her calistirmadan sonra kosuyor, yani
-# turun gecikmesine dogrudan biniyor. Olculdu (52 nesnelik belge, dokunulan
-# 1 nesne): 0.02 sn. Butce, patolojik durumlar icin tavan.
+# Time budget of the overlap scan. It runs after every execution, so it adds
+# directly to the turn's latency. Measured (52-object document, 1 touched
+# object): 0.02 s. The budget is a ceiling for pathological cases.
 CAKISMA_BUTCESI = 1.0
-# Kac cakisma bulgusu tek tek yazilir; fazlasi tek satirda toplanir.
-# Gerekcesi olculdu (MANTIK 32): ayni bulgunun 31 kez tekrarlanmasi hem
-# ciktiyi hem baglami doldurdu.
+# How many overlap findings are written one by one; the rest are collapsed
+# into one line. The reason was measured: the same finding repeated 31
+# times filled both the output and the context.
 CAKISMA_AZAMI_SATIR = 5
 
 
 def _akraba_mi(a, b) -> bool:
-    """Iki nesne ayni bagimlilik zincirinde mi (biri otekinin girdisi mi).
+    """Are the two objects in the same dependency chain (is one the other's input).
 
-    NEDEN SART: `Part::Cut`in Base ve Tool nesneleri belgede DURUR ve sonuc
-    onlarla tamamen ust uste biner (olculdu: Kesilmis.OutList = [A, B]).
-    Bunu cakisma diye raporlamak, MANTIK 32'deki 31 kez tekrarlanan yanlis
-    alarmin aynisini uretirdi — kullanicinin hicbir seyi bozuk degilken.
+    WHY IT IS REQUIRED: the Base and Tool objects of a `Part::Cut` STAY in
+    the document and the result overlaps them completely (measured:
+    Cut.OutList = [A, B]). Reporting that as an overlap would produce the
+    same false alarm that repeated 31 times — while nothing of the user's
+    is broken.
     """
     for x, y in ((a, b), (b, a)):
         try:
@@ -415,38 +424,41 @@ def _akraba_mi(a, b) -> bool:
 
 def _cakisma_taramasi(doc, adlar, rapor: "Rapor",
                       sure_butcesi: float = CAKISMA_BUTCESI) -> None:
-    """Dokunulan nesneler baska bir parcanin ICINDEN geciyor mu.
+    """Do the touched objects pass THROUGH another part.
 
-    NEDEN HOST YAPIYOR (olculdu, MANTIK 39): model uc kareye bakip
-    "cakisma yok" dedi ve yanildi; kullanici gordu. Goruntu bu soruyu
-    kapatamiyor — 900x640 karede ~4 piksel/mm. Modelin sormayi unutma
-    ihtimalini ortadan kaldirmanin yolu, HOST'un olcup raporlamasi.
+    WHY THE HOST DOES IT (measured): the model looked at three frames, said
+    "no overlap" and was wrong; the user saw it. An image cannot settle this
+    question — ~4 pixels/mm in a 900x640 frame. The way to remove the chance
+    of the model forgetting to ask is for the HOST to measure and report.
 
-    KAPSAM DAR TUTULUYOR: yalnizca kodun dokundugu nesneler x sinir kutusu
-    onlarla kesisen adaylar. 52 nesnelik belgede bile birkac cift eder;
-    tam tarama (1326 cift) 0.33 sn suruyordu ve her turda odenemez.
+    THE SCOPE IS KEPT NARROW: only objects the code touched x candidates
+    whose bounding box intersects them. Even a 52-object document gives a
+    few pairs; a full scan (1326 pairs) took 0.33 s and cannot be paid on
+    every turn.
 
-    DEGME BULGU DEGILDIR. Bu projede yelken direge, kupeste govdeye
-    bilerek deger; her temasi kusur saymak MANTIK 32'deki 31 kez
-    tekrarlanan yanlis alarmi geri getirirdi. Kusur = ICINDEN GECMEK.
+    TOUCHING IS NOT A FINDING. In real models a sail touches the mast, a
+    rail touches the hull, on purpose; counting every contact as a defect
+    would bring back the false alarm that repeated 31 times. Defect =
+    PASSING THROUGH.
 
-    TUKETILMIS NESNE DE BULGU DEGILDIR (2026-08-27). `Part::Cut` yapan bir
-    tur uc nesneye birden dokunur: sonuc, taban ve takim. Taban sonucun
-    icinden "geciyor" gorunur — cunku sonuc ondan oyulmustur. Olculdu
-    (LOG/2026-08-27_9564dc71.txt): rapordaki bulgularin cogu buydu. Hem
-    dokunulan hem aday listesinden eleniyor (bkz. kesif.tuketilmis_mi).
+    A CONSUMED OBJECT IS NOT A FINDING EITHER. A turn that does a
+    `Part::Cut` touches three objects at once: result, base and tool. The
+    base appears to "pass through" the result — because the result was
+    carved out of it. Measured: most findings in the report were this. It
+    is dropped from both the touched and the candidate lists (see
+    kesif.tuketilmis_mi).
 
-    GRUP DA PARCA DEGILDIR (2026-09-04). FreeCAD bir
-    `App::DocumentObjectGroup`a `.Shape` VERIYOR — cocuklarin bilesigi
-    (olculdu: 2 kutuluk grupta Compound, 2 kati, hacim = ikisinin toplami).
-    Yani grup, cocuklarinin her cakismasini kendi adiyla IKINCI kez
-    bildiriyordu. Olculdu (LOG/2026-09-04_92416f9e.txt, satir 2912-2914):
-    uc BULGU satirinin ikisi yankiydi — `REF_Cihaz x D_sol_k4` ile
-    `REF_Cihaz x D_sag`, ikisi de 2520 mm3, ikisi de zaten yazilmis
-    `D_sol_k4 x REF_OnPanel` / `D_sag x REF_OnPanel` cifti. `_akraba_mi`
-    burada yetmiyor: grubu KENDI cocuguna karsi koruyor, ama gruba karsi
-    UCUNCU bir nesneyi korumuyor. Aday havuzu gruplari zaten eliyordu
-    (kesif._ATLANAN); eksik olan DOKUNULAN tarafiydi.
+    A GROUP IS NOT A PART EITHER. FreeCAD GIVES an
+    `App::DocumentObjectGroup` a `.Shape` — the compound of its children
+    (measured: in a 2-box group, a Compound, 2 solids, volume = the sum of
+    both). So the group reported every overlap of its children A SECOND
+    TIME under its own name. Measured in a real session: two of three
+    FINDING lines were echoes — `REF_Cihaz x D_sol_k4` and
+    `REF_Cihaz x D_sag`, both 2520 mm3, both the already-reported
+    `D_sol_k4 x REF_OnPanel` / `D_sag x REF_OnPanel` pair. `_akraba_mi` is
+    not enough here: it protects the group against ITS OWN child, but not a
+    THIRD object against the group. The candidate pool already dropped
+    groups (kesif._ATLANAN); the TOUCHED side was what was missing.
     """
     from . import olcum
 
@@ -464,9 +476,9 @@ def _cakisma_taramasi(doc, adlar, rapor: "Rapor",
     if not dokunulan:
         return
 
-    # Aday havuzu: belgedeki olculebilir, hacimli/yuzeyli parcalar. Eskiz ve
-    # 2B iskele disarida — kesisme egrileri her yerde cikar ve hicbiri kusur
-    # degil.
+    # Candidate pool: measurable parts in the document with volume/faces.
+    # Sketches and 2D scaffolding stay out — intersection curves show up
+    # everywhere and none of them is a defect.
     adaylar = []
     for o in _kesif.ilgili_nesneler(doc):
         s = olcum._sekil_al(o)
@@ -476,8 +488,8 @@ def _cakisma_taramasi(doc, adlar, rapor: "Rapor",
             continue
         adaylar.append(o)
 
-    rapor.kosan.append("cakisma (dokunulan nesneler x bbox kesisen komsular; "
-                       "kesme tabani/ayna kaynagi haric)")
+    rapor.kosan.append("overlap (touched objects x bbox-intersecting neighbours; "
+                       "excluding cut bases/mirror sources)")
 
     gecisler = []
     bakilan = 0
@@ -498,15 +510,15 @@ def _cakisma_taramasi(doc, adlar, rapor: "Rapor",
             if not olcum._bbox_kesisiyor_mu(a, b):
                 continue
             if _akraba_mi(a, b):
-                # Boolean'in girdisi sonucuyla ust uste biner; kusur degil.
+                # A boolean's input overlaps its result; not a defect.
                 continue
             bakilan += 1
             d = olcum._cift_olc(a, b)
             if d.get("gecis"):
-                # Blogun KENDI `cakisma_kontrol` ciktisi bu cifti zaten
-                # yazdiysa tekrarlamiyoruz — ayni sayi, iki cumle, tek
-                # istem (olculdu, LOG/2026-08-31_f5a6a5ac.txt; gerekcesi
-                # olcum._bildirilen_gecisler'de).
+                # If the block's OWN `cakisma_kontrol` output already wrote
+                # this pair we do not repeat it — same number, two
+                # sentences, one prompt (measured; reason in
+                # olcum._bildirilen_gecisler).
                 if olcum.gecis_bildirildi_mi(d["a"], d["b"]):
                     zaten_yazili += 1
                     continue
@@ -514,70 +526,71 @@ def _cakisma_taramasi(doc, adlar, rapor: "Rapor",
 
     if bakilmayan:
         rapor.atlanan.append(
-            f"cakisma: {bakilmayan} cift (sure siniri {sure_butcesi:g} sn "
-            f"asildi)")
+            f"overlap: {bakilmayan} pairs (time limit {sure_butcesi:g} s "
+            f"exceeded)")
 
-    # ONEM SIRASI. Eskiden liste belge sirasindaydi ve kesme KEYFIYDI:
-    # 5 satirlik tavan, en agir gecisi listenin disinda birakabiliyordu.
-    # Olculdu (LOG/2026-08-28_c503a8a4.txt): raporda 7 gecis vardi, ilk
-    # 5'i yazildi ve "kalanlari cakisma_kontrol() ile gor" dendi — model
-    # o cagriyi yapmadi. Artik once yutulma orani, sonra hacim: bir sey
-    # kesilecekse en HAFIFI kesilsin.
+    # ORDER OF IMPORTANCE. The list used to be in document order and the cut
+    # was ARBITRARY: the 5-line ceiling could leave the heaviest overlap
+    # out. Measured: the report had 7 overlaps, the first 5 were written
+    # with "see the rest with cakisma_kontrol()" — the model never made
+    # that call. Now engulfment ratio first, then volume: if something has
+    # to be cut, cut the LIGHTEST.
     gecisler.sort(key=lambda x: (x.get("oran", 0.0), x.get("hacim", 0.0)),
                   reverse=True)
     for d in gecisler[:CAKISMA_AZAMI_SATIR]:
-        rapor.bulgular.append(Bulgu(d["a"], "icinden geciyor",
+        rapor.bulgular.append(Bulgu(d["a"], "intersects",
                                     d["satir"].split("— ", 1)[-1]
-                                    + f" ({d['b']} ile)"))
+                                    + f" (with {d['b']})"))
     if len(gecisler) > CAKISMA_AZAMI_SATIR:
         kalan = gecisler[CAKISMA_AZAMI_SATIR:]
         rapor.bulgular.append(Bulgu(
-            f"{len(kalan)} cift daha", "icinden geciyor",
-            "en agirlari yukarida (yutulma oranina gore sirali); "
-            "kalanlarin en buyugu %s x %s, ortak hacim %s mm3 — "
-            "hepsi icin cakisma_kontrol()"
+            f"{len(kalan)} more pairs", "intersects",
+            "the heaviest are above (sorted by engulfment ratio); "
+            "the largest of the rest is %s x %s, common volume %s mm3 — "
+            "use cakisma_kontrol() for all of them"
             % (kalan[0]["a"], kalan[0]["b"],
                olcum._sayi(kalan[0].get("hacim", 0.0)))))
-    # DURUSTLUK: bastirilan sey SESSIZ kalmaz. Model yukaridaki
-    # `cakisma_kontrol` ciktisina bakmali, "tarama bir sey bulmadi"
-    # sanmamali.
+    # HONESTY: what is suppressed does not stay SILENT. The model should look
+    # at the `cakisma_kontrol` output above, not assume "the scan found
+    # nothing".
     if zaten_yazili:
         rapor.olcumler.append(
-            f"cakisma: {zaten_yazili} gecis blogun kendi cakisma_kontrol "
-            f"ciktisinda zaten yazili — burada tekrarlanmadi")
+            f"overlap: {zaten_yazili} intersection(s) already written in the "
+            f"block's own cakisma_kontrol output — not repeated here")
     if bakilan and not gecisler and not zaten_yazili:
         rapor.olcumler.append(
-            f"cakisma: {bakilan} cift olculdu, icinden gecen yok "
-            f"(degme kusur sayilmaz)")
+            f"overlap: {bakilan} pairs measured, none intersect "
+            f"(touching is not a defect)")
 
 def dogrula(doc, adlar, azami_nesne: int = AZAMI_NESNE,
             sure_butcesi: float = SURE_BUTCESI) -> Rapor:
-    """`adlar` icindeki nesneleri deterministik olarak kontrol eder.
+    """Deterministically checks the objects in `adlar`.
 
-    `adlar` genelde kodun DOKUNDUGU nesneler (eklenen + degisen). Yalnizca
-    eklenenlere bakmak yetmez: "pad.Length = 20" hicbir nesne EKLEMEZ ama
-    modeli bozabilir — o durumda eski surumde hicbir kontrol kosmuyordu.
+    `adlar` is usually the objects the code TOUCHED (added + changed).
+    Looking only at added ones is not enough: "pad.Length = 20" ADDS no
+    object but can break the model — in the old version no check ran in
+    that case.
     """
     rapor = Rapor()
     if doc is None or not adlar:
         return rapor
 
     t0 = time.time()
-    rapor.kosan = ["bos sekil", "topoloji gecerliligi",
-                   "kati hacim isareti (kati kati)", "kapali kabuk",
-                   "mesh: kapalilik/kesisme/manifold/parca/hacim",
-                   "desen gercekten cogaltti mi"]
-    # Kendiyle kesisme BRep tarafinda ucuz degil — OCC'de boolean testi
-    # gerektiriyor. MESH tarafinda hazir ve ucuz (olculdu: 12850 facet'te
-    # 0.024 sn), orada kosuyor.
-    rapor.atlanan.append("kendiyle kesisme, KATI (BRep) nesnelerde "
-                         "(OCC'de pahali; mesh'te kosuyor)")
+    rapor.kosan = ["empty shape", "topology validity",
+                   "solid volume sign (per solid)", "closed shell",
+                   "mesh: closed/self-intersection/manifold/components/volume",
+                   "pattern really multiplied"]
+    # Self-intersection is not cheap on the BRep side — OCC needs a boolean
+    # test. On the MESH side it is built in and cheap (measured: 0.024 s at
+    # 12850 facets), so it runs there.
+    rapor.atlanan.append("self-intersection on SOLID (BRep) objects "
+                         "(expensive in OCC; runs on meshes)")
 
-    # GRUPLAR ELENIYOR, ve eleme SAYI SINIRINDAN ONCE. Grubun `.Shape`i
-    # cocuklarinin bilesigi oldugu icin olcum satiri cocugun satirinin
-    # birebir kopyasi oluyor (olculdu, sentetik belge: "GRUP: kati=1
-    # hacim=1000" ile "A: kati=1 hacim=1000"), ustelik 25 nesnelik kotadan
-    # slot yiyor. Gerekcesi _cakisma_taramasi'nin docstring'inde.
+    # GROUPS ARE DROPPED, and BEFORE the count limit. A group's `.Shape` is
+    # the compound of its children, so its measurement line is an exact copy
+    # of the child's (measured, synthetic document: "GROUP: solids=1
+    # volume=1000" next to "A: solids=1 volume=1000"), and it also eats a
+    # slot from the 25-object quota. Reason in _cakisma_taramasi's docstring.
     from . import kesif as _kesif
     sirali = []
     for a in adlar:
@@ -587,7 +600,7 @@ def dogrula(doc, adlar, azami_nesne: int = AZAMI_NESNE,
         sirali.append(a)
     if len(sirali) > azami_nesne:
         rapor.atlanan.append(
-            f"{len(sirali) - azami_nesne} nesne (nesne siniri {azami_nesne})")
+            f"{len(sirali) - azami_nesne} objects (object limit {azami_nesne})")
         sirali = sirali[:azami_nesne]
 
     kalan_zamansiz = 0
@@ -603,35 +616,35 @@ def dogrula(doc, adlar, azami_nesne: int = AZAMI_NESNE,
 
     if kalan_zamansiz:
         rapor.atlanan.append(
-            f"{kalan_zamansiz} nesne (sure siniri {sure_butcesi:g} sn asildi)")
+            f"{kalan_zamansiz} objects (time limit {sure_butcesi:g} s exceeded)")
 
-    # CAKISMA TARAMASI. Nesne bazli kontrollerden AYRI, cunku sorusu farkli:
-    # ötekiler "bu nesne kendi icinde saglam mi" diye sorar, bu "baska bir
-    # parcanin icinden geciyor mu" diye. Olculdu (MANTIK 39): modelin
-    # goruntuye bakip kacirdigi tek kusur turu buydu.
+    # OVERLAP SCAN. SEPARATE from the per-object checks because the question
+    # is different: the others ask "is this object sound in itself", this
+    # asks "does it pass through another part". Measured: this was the only
+    # kind of defect the model missed by looking at images.
     try:
         _cakisma_taramasi(doc, adlar, rapor)
     except Exception as e:                                       # noqa: BLE001
-        log.uyari(f"cakisma taramasi yapilamadi: {e}")
+        log.uyari(f"overlap scan failed: {e}")
 
     rapor.sure_sn = time.time() - t0
     return rapor
 
 
 class Izleyici:
-    """Kodun DOKUNDUGU nesneleri toplar (App.addDocumentObserver).
+    """Collects the objects the code TOUCHED (App.addDocumentObserver).
 
-    Neden gerekli: `onceki`/`sonraki` nesne kumesi farki yalnizca EKLENENI
-    verir. Cok yaygin bir tur — "su pad'i 3 mm uzat" — hicbir nesne eklemez.
-    Dokunulan nesne kumesi olmadan o turda kontrol edecek bir sey bulunamaz.
+    Why: the difference between the `onceki`/`sonraki` object sets only
+    gives what was ADDED. A very common turn — "make that pad 3 mm longer"
+    — adds no object. Without the set of touched objects there is nothing
+    to check on that turn.
 
-    Touched bayragina bakmak da yetmez: kodun kendi icinde `doc.recompute()`
-    cagirmasi SERBEST ve yaygin (eskiz olusturup pad'lemek icin gerekli),
-    o recompute bayraklari temizler. Gozlemci ise araya girmeden yakalar —
-    olculdu.
+    Looking at the Touched flag is not enough either: code calling
+    `doc.recompute()` itself is ALLOWED and common (needed to create a
+    sketch and pad it), and that recompute clears the flags. The observer
+    catches it without getting in the way — measured.
 
-    Geri cagrimlar ASLA istisna firlatmamali: FreeCAD'in sinyal zincirinde
-    calisiyorlar.
+    The callbacks must NEVER raise: they run inside FreeCAD's signal chain.
     """
 
     def __init__(self) -> None:
@@ -644,7 +657,7 @@ class Izleyici:
         except Exception:
             pass
 
-    # FreeCAD'in cagirdigi adlar — degistirilemez.
+    # Names called by FreeCAD — cannot be changed.
     def slotCreatedObject(self, nesne):
         self._ekle(nesne)
 
@@ -665,8 +678,8 @@ class Izleyici:
             self._acik = False
 
     def coz(self) -> None:
-        # Sizan bir gozlemci kullanicinin HER hareketinde atesler ve sessizce
-        # birikir. Cozme finally'de cagriliyor.
+        # A leaked observer fires on EVERY user action and silently piles
+        # up. Detaching is called in a finally.
         if not self._acik:
             return
         try:

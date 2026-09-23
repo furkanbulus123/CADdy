@@ -250,7 +250,7 @@ def mesh_onar(nesne=None, yaz: bool = True) -> dict:
 def kati_yap(nesne=None, azami_facet: int = AZAMI_FACET, yaz: bool = True):
     """Mesh'i KATIYA cevirir — parametrik araclarin kapisi.
 
-    NEDEN GEREKLI: Monkey'in indirdigi her sey mesh. Mesh'te fillet yok,
+    NEDEN GEREKLI: ice aktarilan (STL/OBJ/3MF) her sey mesh. Mesh'te fillet yok,
     pocket yok, boolean zor. Katiya cevirince FreeCAD'in tum Part/PartDesign
     araclari acilir.
 
@@ -1058,23 +1058,23 @@ def _mesh_on_kontrol(m, yaz: bool) -> str:
         facet = int(m.CountFacets)
         kusurlar = []
         if not m.isSolid():
-            kusurlar.append("kapali degil")
+            kusurlar.append("not closed")
         if m.hasNonManifolds():
             kusurlar.append("non-manifold")
         if m.hasSelfIntersections():
-            kusurlar.append("kendiyle kesisen")
+            kusurlar.append("self-intersecting")
         parca = int(m.countComponents())
         if parca > 1:
-            kusurlar.append(f"{parca} ayrik parca")
+            kusurlar.append(f"{parca} separate components")
     except Exception:                                            # noqa: BLE001
         return ""
     if not kusurlar:
         return ""
     metin = ", ".join(kusurlar)
     if yaz:
-        print(f"kesit_konturu: mesh saglam degil ({metin}); {facet} facet "
-              f"kabuga cevrilecek — bu uzun surebilir ve kesit hic "
-              f"cikmayabilir")
+        print(f"section_contour: the mesh is not sound ({metin}); {facet} facets "
+              f"will be converted to a shell — this may take long and no "
+              f"section may come out")
     return metin
 
 
@@ -1148,7 +1148,7 @@ def kesit_konturu(nesne=None, z=None, sik: float = 0.8, yaz: bool = True):
     hedef = _hedef(nesne)
     if hedef is None:
         if yaz:
-            print("kesit_konturu: nesne yok")
+            print("section_contour: no object")
         return {} if isinstance(z, (list, tuple)) else []
 
     coklu = isinstance(z, (list, tuple))
@@ -1159,7 +1159,7 @@ def kesit_konturu(nesne=None, z=None, sik: float = 0.8, yaz: bool = True):
         m = _mesh_al(hedef)
         if m is None:
             if yaz:
-                print("kesit_konturu: nesnenin ne sekli ne mesh'i var")
+                print("section_contour: the object has neither a shape nor a mesh")
             return {} if coklu else []
         # Pahali donusumden ONCE 0.05 saniyelik bakis (bkz. _mesh_on_kontrol).
         mesh_kusuru = _mesh_on_kontrol(m, yaz)
@@ -1169,7 +1169,7 @@ def kesit_konturu(nesne=None, z=None, sik: float = 0.8, yaz: bool = True):
         bb = sekil.BoundBox
     except Exception:                                            # noqa: BLE001
         if yaz:
-            print("kesit_konturu: sinir kutusu okunamadi")
+            print("section_contour: could not read the bounding box")
         return {} if coklu else []
 
     if z is None:
@@ -1189,8 +1189,8 @@ def kesit_konturu(nesne=None, z=None, sik: float = 0.8, yaz: bool = True):
         # KAYDIRMIYORUZ — sorulmayan soruyu cevaplamak olurdu.
         if ham_z < bb.ZMin - pay or ham_z > bb.ZMax + pay:
             if yaz:
-                print(f"kesit_konturu: z={_sayi(ham_z)} parcanin disinda "
-                      f"(z {_sayi(bb.ZMin)}..{_sayi(bb.ZMax)}) — kesit yok")
+                print(f"section_contour: z={_sayi(ham_z)} is outside the part "
+                      f"(z {_sayi(bb.ZMin)}..{_sayi(bb.ZMax)}) — no section")
             sonuc[ham_z] = []
             continue
 
@@ -1200,14 +1200,14 @@ def kesit_konturu(nesne=None, z=None, sik: float = 0.8, yaz: bool = True):
         elif kz > bb.ZMax - pay:
             kz = bb.ZMax - pay
         if yaz and abs(kz - ham_z) > 1e-12:
-            print(f"kesit_konturu: z={_sayi(ham_z)} tam ucta — {_sayi(kz)}'e "
-                  f"kaydirildi (ucta kesit bozuk cikiyor)")
+            print(f"section_contour: z={_sayi(ham_z)} is exactly at the end — moved "
+                  f"to {_sayi(kz)} (a section at the very end comes out broken)")
         elif yaz and duz_zler:
             yakin = [d for d in duz_zler if abs(d - kz) <= pay * 10]
             if yakin:
-                print(f"kesit_konturu: UYARI z={_sayi(kz)} yatay bir yuzeye "
-                      f"denk geliyor — bu yukseklikte kesit belirsiz. "
-                      f"Altini/ustunu ayri sor: {_sayi(kz - pay * 20)} ve "
+                print(f"section_contour: WARNING z={_sayi(kz)} lies on a horizontal "
+                      f"face — the section is ambiguous at this height. "
+                      f"Ask below/above separately: {_sayi(kz - pay * 20)} and "
                       f"{_sayi(kz + pay * 20)}")
 
         konturlar, teller = _bir_kesit(sekil, kz, sik)
@@ -1221,10 +1221,10 @@ def kesit_konturu(nesne=None, z=None, sik: float = 0.8, yaz: bool = True):
     # §35.2'nin dersi: genel ogut tetiklenmez, ADI KONMUS emir tetiklenir —
     # o yuzden "dikkat et" degil, "bu yolu birak, baska olcum kullan".
     if yaz and mesh_kusuru and not any(sonuc.values()):
-        print(f"kesit_konturu: {len(sonuc)} yukseklikte de kontur cikmadi — "
-              f"sebep YUKSEKLIK SECIMI DEGIL, mesh ({mesh_kusuru}); kabuk "
-              f"saglam cikmadi. Bu nesnede kesit yolu kapali, baska bir "
-              f"olcum kullan (bbox tarama, olc(), mesafe()).")
+        print(f"section_contour: no contour at any of the {len(sonuc)} heights — "
+              f"the cause is NOT the height choice but the mesh ({mesh_kusuru}); "
+              f"the shell did not come out sound. Sections will not work on "
+              f"this object, use another measurement (bbox scan, measure(), distance()).")
 
     if coklu:
         return sonuc
@@ -1257,17 +1257,17 @@ def _bir_kesit(sekil, z: float, sik: float):
 
 def _kesit_yaz(z: float, konturlar: list, teller: list) -> None:
     if not konturlar:
-        print(f"kesit_konturu: z={_sayi(z)} kesitinde kontur yok")
+        print(f"section_contour: no contour in the z={_sayi(z)} section")
         return
-    print(f"kesit_konturu: z={_sayi(z)} — {len(konturlar)} kontur "
-          f"(en uzundan kisaya)")
+    print(f"section_contour: z={_sayi(z)} — {len(konturlar)} contour(s) "
+          f"(longest first)")
     for i, k in enumerate(konturlar):
         xs = [p[0] for p in k]
         ys = [p[1] for p in k]
         cevre = _sayi(teller[i].Length) if i < len(teller) else "?"
-        print(f"    [{i}] {len(k)} nokta  x={_sayi(min(xs))}.."
+        print(f"    [{i}] {len(k)} points  x={_sayi(min(xs))}.."
               f"{_sayi(max(xs))}  y={_sayi(min(ys))}..{_sayi(max(ys))}"
-              f"  cevre={cevre} mm")
+              f"  perimeter={cevre} mm")
 
 
 def _yakin(p, q, tol: float = 1e-7) -> bool:

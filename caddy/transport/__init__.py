@@ -1,5 +1,5 @@
-"""claude.exe ile konusma katmani.
+"""The layer that talks to claude.exe.
 
-Burasi QtCore (QProcess, Signal) kullanir ama QtWidgets'a DOKUNMAZ — arayuzden
-bagimsizdir ve tek basina test edilebilir.
+It uses QtCore (QProcess, Signal) but never touches QtWidgets — it is
+independent of the UI and can be tested on its own.
 """

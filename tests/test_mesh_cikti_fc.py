@@ -104,17 +104,17 @@ kontrol("facet olcumu yazildi", any("facet=" in o for o in r.olcumler),
         r.olcumler)
 kontrol("bbox olcumu yazildi", any("bbox=" in o for o in r.olcumler),
         r.olcumler)
-kontrol("baskiya hazir EVET", any("baskiya hazir = EVET" in o
+kontrol("baskiya hazir EVET", any("print-ready = YES" in o
                                   for o in r.olcumler), r.olcumler)
 kontrol("mesh kontrolu KOSAN listesinde",
         any("mesh" in k for k in r.kosan), r.kosan)
 kontrol("kendiyle kesisme artik KATI icin atlaniyor (mesh'te kosuyor)",
-        any("KATI" in a for a in r.atlanan), r.atlanan)
+        any("SOLID" in a for a in r.atlanan), r.atlanan)
 
 hazir, engeller, olcumler = dg.baskiya_hazir_mesh(iyi.Mesh)
 kontrol("baskiya_hazir_mesh: hazir", hazir, engeller)
 kontrol("baskiya_hazir_mesh: engel yok", not engeller, engeller)
-kontrol("hacim olculdu", any("hacim=" in o for o in olcumler), olcumler)
+kontrol("hacim olculdu", any("volume=" in o for o in olcumler), olcumler)
 
 
 # ===================================================== 2. ACIK MESH
@@ -129,10 +129,10 @@ r = dg.dogrula(doc, ["Acik"])
 _yaz("       " + r.metin().replace("\n", "\n       "))
 kontrol("bulgu uretildi", not r.temiz, r.metin())
 kontrol("bulgu 'kapali degil'",
-        any(b.tur == "kapali degil" for b in r.bulgular),
+        any(b.tur == "not closed" for b in r.bulgular),
         [str(b) for b in r.bulgular])
 kontrol("baskiya hazir HAYIR",
-        any("baskiya hazir = HAYIR" in o for o in r.olcumler), r.olcumler)
+        any("print-ready = NO" in o for o in r.olcumler), r.olcumler)
 
 
 # ===================================================== 3. KESISEN MESH
@@ -153,13 +153,13 @@ kontrol("hasSelfIntersections True", kesisen_mesh.hasSelfIntersections())
 r = dg.dogrula(doc, ["Kesisen"])
 _yaz("       " + r.metin().replace("\n", "\n       "))
 kontrol("kesisme bulgusu var",
-        any(b.tur == "kendiyle kesisme" for b in r.bulgular),
+        any(b.tur == "self-intersection" for b in r.bulgular),
         [str(b) for b in r.bulgular])
 kontrol("cok parca bulgusu var",
-        any(b.tur == "cok parca" for b in r.bulgular),
+        any(b.tur == "multiple components" for b in r.bulgular),
         [str(b) for b in r.bulgular])
 kontrol("isSolid True olmasina RAGMEN hazir degil",
-        any("baskiya hazir = HAYIR" in o for o in r.olcumler), r.olcumler)
+        any("print-ready = NO" in o for o in r.olcumler), r.olcumler)
 
 
 # ===================================================== 4. MALIYET
@@ -185,10 +185,10 @@ kontrol("mesh nesnesi bbox aliyor (Shape yokken Mesh.BoundBox)",
         "20x20x10 mm" in metin, metin[:400])
 kontrol("facet sayisi baglamda", "facet=" in metin, metin[:400])
 kontrol("acik mesh 'ACIK(delik var)' diye isaretli",
-        "ACIK(delik var)" in metin, metin[:600])
-kontrol("kapali mesh 'kapali' diye isaretli", "kapali" in metin, metin[:600])
+        "OPEN(has holes)" in metin, metin[:600])
+kontrol("kapali mesh 'kapali' diye isaretli", "closed" in metin, metin[:600])
 kontrol("cok parcali mesh parca sayisi ile geliyor",
-        "parca=2" in metin, metin[:800])
+        "components=2" in metin, metin[:800])
 
 
 # ===================================================== 6. CIKTI KANALI
@@ -207,19 +207,19 @@ s = yurutucu.calistir(
     "n = doc.getObject('Iyi')\nprint('donen:', baski_kontrol(n))",
     "baski kontrol saglam")
 kontrol("baski_kontrol namespace'te", s.basarili, s.hata_izi)
-kontrol("baski_kontrol EVET dedi", "baskiya hazir = EVET" in s.cikti, s.cikti)
+kontrol("baski_kontrol EVET dedi", "print-ready = YES" in s.cikti, s.cikti)
 kontrol("baski_kontrol True dondu", "donen: True" in s.cikti, s.cikti)
 
 s = yurutucu.calistir(
     "n = doc.getObject('Acik')\nprint('donen:', baski_kontrol(n))",
     "baski kontrol delikli")
-kontrol("delikli meshte HAYIR", "baskiya hazir = HAYIR" in s.cikti, s.cikti)
-kontrol("sebep de yazildi", "kapali degil" in s.cikti, s.cikti)
+kontrol("delikli meshte HAYIR", "print-ready = NO" in s.cikti, s.cikti)
+kontrol("sebep de yazildi", "not closed" in s.cikti, s.cikti)
 kontrol("baski_kontrol False dondu", "donen: False" in s.cikti, s.cikti)
 
 s = yurutucu.calistir("print(baski_kontrol())", "tum mesh'ler")
 kontrol("argumansiz baski_kontrol tum mesh'lere bakti",
-        s.cikti.count("baskiya hazir") >= 3, s.cikti)
+        s.cikti.count("print-ready") >= 3, s.cikti)
 
 
 # ===================================================== 6b. OLCUM
@@ -240,9 +240,9 @@ s = yurutucu.calistir(
     "agiz capi")
 _yaz("       " + s.cikti.replace("\n", "\n       "))
 kontrol("kesit_capi kostu", s.basarili, s.hata_izi)
-kontrol("dairesel oldugunu anladi", "dairesel" in s.cikti, s.cikti)
+kontrol("dairesel oldugunu anladi", "circular" in s.cikti, s.cikti)
 kontrol("cap dogru olculdu (~55.47)",
-        "cap: 55.4" in s.cikti or "cap: 55.5" in s.cikti, s.cikti)
+        "diameter=55.4" in s.cikti or "diameter=55.5" in s.cikti, s.cikti)
 kontrol("TEK turda geri geldi (cikti modele giden metinde)",
         "cap:" in s.modele_metin(), s.modele_metin()[:200])
 
@@ -255,10 +255,10 @@ _mesh_koy("Oval", oval_mesh)
 
 s = yurutucu.calistir("kesit_capi(doc.getObject('Oval'))", "oval kesit")
 _yaz("       " + s.cikti.strip())
-kontrol("oval 'dairesel' DEMEDI", "dairesel" not in s.cikti, s.cikti)
-kontrol("kisa cap ~50", "kisa cap=50" in s.cikti or "kisa cap=49.9" in s.cikti,
+kontrol("oval 'dairesel' DEMEDI", "circular" not in s.cikti, s.cikti)
+kontrol("kisa cap ~50", "minor dia=50" in s.cikti or "minor dia=49.9" in s.cikti,
         s.cikti)
-kontrol("uzun cap ~60", "uzun cap=60" in s.cikti or "uzun cap=59.9" in s.cikti,
+kontrol("uzun cap ~60", "major dia=60" in s.cikti or "major dia=59.9" in s.cikti,
         s.cikti)
 
 # Belirli yukseklikte kesit
@@ -268,13 +268,13 @@ kontrol("verilen z'de olcum yapildi", "z=30" in s.cikti, s.cikti)
 # olc: tek cagrida temel olculer
 s = yurutucu.calistir("olc(doc.getObject('Iyi'))", "olc")
 _yaz("       " + s.cikti.strip())
-kontrol("olc boy yazdi", "boy=20x20x10" in s.cikti, s.cikti)
-kontrol("olc hacim yazdi", "hacim=" in s.cikti, s.cikti)
-kontrol("olc kapali/acik durumunu yazdi", "kapali" in s.cikti, s.cikti)
+kontrol("olc boy yazdi", "size=20x20x10" in s.cikti, s.cikti)
+kontrol("olc hacim yazdi", "volume=" in s.cikti, s.cikti)
+kontrol("olc kapali/acik durumunu yazdi", "closed" in s.cikti, s.cikti)
 
 s = yurutucu.calistir("olc(doc.getObject('TekrarKutuYok'))", "olc bos")
 kontrol("olmayan nesnede olc patlamiyor", s.basarili, s.hata_izi)
-kontrol("olc bulunamadi dedi", "bulunamadi" in s.cikti, s.cikti)
+kontrol("olc bulunamadi dedi", "no object" in s.cikti, s.cikti)
 
 # Kati (BRep) nesnede de calismali
 _kati = doc.addObject("Part::Box", "Kutu")
@@ -282,13 +282,13 @@ _kati.Length = 30
 doc.recompute()
 s = yurutucu.calistir("olc(doc.getObject('Kutu'))", "olc kati")
 _yaz("       " + s.cikti.strip())
-kontrol("kati nesnede de olcuyor", "hacim=" in s.cikti and "yuz=6" in s.cikti,
+kontrol("kati nesnede de olcuyor", "volume=" in s.cikti and "faces=6" in s.cikti,
         s.cikti)
 
 # Yetersiz nokta: sessizce yanlis sayi UYDURMAMALI
 s = yurutucu.calistir(
     "kesit_capi(doc.getObject('Kupa'), z=1000, band=0.01)", "bos kesit")
-kontrol("bos kesitte uyarip duruyor", "kesit bulunamadi" in s.cikti, s.cikti)
+kontrol("bos kesitte uyarip duruyor", "no section found" in s.cikti, s.cikti)
 
 # YATIK NESNE: kesit bir halka degil. Testin ilk kosusunda buradan
 # "kisa cap=7.25e-11" gibi inandirici ama YANLIS bir sayi geliyordu.
@@ -297,10 +297,10 @@ _mesh_koy("Yatik", yatik)
 s = yurutucu.calistir("d = kesit_capi(doc.getObject('Yatik'))\n"
                       "print('guvenilir:', d.get('guvenilir'))", "yatik kesit")
 _yaz("       " + s.cikti.strip())
-kontrol("yatik nesnede 'YUVARLAK DEGIL' dedi", "YUVARLAK DEGIL" in s.cikti,
+kontrol("yatik nesnede 'YUVARLAK DEGIL' dedi", "NOT ROUND" in s.cikti,
         s.cikti)
 kontrol("guvenilir=False isaretledi", "guvenilir: False" in s.cikti, s.cikti)
-kontrol("'cap' diye bir sayi UYDURMADI", "kisa cap=" not in s.cikti, s.cikti)
+kontrol("'cap' diye bir sayi UYDURMADI", "minor dia=" not in s.cikti, s.cikti)
 
 
 # ===================================================== 6c. KESIF
@@ -324,24 +324,24 @@ doc.recompute()
 s = yurutucu.calistir("kesif(doc.getObject('Bardak'))", "bardak kesfi")
 _yaz("       " + s.cikti.replace("\n", "\n       "))
 kontrol("kesif kostu", s.basarili, s.hata_izi)
-kontrol("taban kesiti var", "taban:" in s.cikti, s.cikti)
-kontrol("orta kesiti var (uzun ucgenlere ragmen)", "orta:" in s.cikti, s.cikti)
-kontrol("agiz kesiti var", "agiz/ust:" in s.cikti, s.cikti)
-kontrol("DUVAR kalinligi olculdu", "duvar=" in s.cikti, s.cikti)
-kontrol("duvar ~2 mm", "duvar=2." in s.cikti, s.cikti)
+kontrol("taban kesiti var", "bottom:" in s.cikti, s.cikti)
+kontrol("orta kesiti var (uzun ucgenlere ragmen)", "middle:" in s.cikti, s.cikti)
+kontrol("agiz kesiti var", "rim/top:" in s.cikti, s.cikti)
+kontrol("DUVAR kalinligi olculdu", "wall=" in s.cikti, s.cikti)
+kontrol("duvar ~2 mm", "wall=2." in s.cikti, s.cikti)
 kontrol("konikligi gorebilecek veri var (taban != agiz)",
-        s.cikti.count("dis cap=") >= 3, s.cikti)
-kontrol("baskiya hazir bilgisi var", "baskiya hazir" in s.cikti, s.cikti)
+        s.cikti.count("outer dia=") >= 3, s.cikti)
+kontrol("baskiya hazir bilgisi var", "print-ready" in s.cikti, s.cikti)
 
 s = yurutucu.calistir("kesif(doc.getObject('Plaka'))", "plaka kesfi")
 _yaz("       " + s.cikti.replace("\n", "\n       "))
-kontrol("delik dokumu cikti", "silindirik yuzler" in s.cikti, s.cikti)
+kontrol("delik dokumu cikti", "cylindrical faces" in s.cikti, s.cikti)
 kontrol("M3 gecme deligi Ø3.4 olarak goruldu", "Ø3.4x2" in s.cikti, s.cikti)
 
 s = yurutucu.calistir("kesif()", "tum belge kesfi")
-kontrol("argumansiz kesif tum belgeyi olctu", "KESIF —" in s.cikti, s.cikti[:200])
-kontrol("nesne sayisi yazildi", "nesne olculdu" in s.cikti, s.cikti[:200])
-kontrol("olcum suresi yazildi", "olcum suresi" in s.cikti, s.cikti[-200:])
+kontrol("argumansiz kesif tum belgeyi olctu", "SURVEY —" in s.cikti, s.cikti[:200])
+kontrol("nesne sayisi yazildi", "objects measured" in s.cikti, s.cikti[:200])
+kontrol("olcum suresi yazildi", "measurement time" in s.cikti, s.cikti[-200:])
 kontrol("kesif sure butcesi icinde", s.sure_sn < 3.0, s.sure_sn)
 
 # Iskele nesneleri (Origin, duzlemler) kesfe girmemeli
@@ -386,13 +386,13 @@ doc.recompute()
 
 s = yurutucu.calistir("olc(doc.getObject('YatikKutu'))", "yatik olcu")
 _yaz("       " + s.cikti.strip())
-kontrol("yatik nesne YATIK diye isaretlendi", "YATIK" in s.cikti, s.cikti)
+kontrol("yatik nesne YATIK diye isaretlendi", "TILTED" in s.cikti, s.cikti)
 kontrol("kendi ekseninde GERCEK olcu verildi (30x10x5)",
         "30x10x5" in s.cikti, s.cikti)
 kontrol("eksene hizali bbox da duruyor (19.33)", "19.33" in s.cikti, s.cikti)
 
 s = yurutucu.calistir("olc(doc.getObject('DuzKutu'))", "duz olcu")
-kontrol("duz nesnede YATIK uyarisi YOK", "YATIK" not in s.cikti, s.cikti)
+kontrol("duz nesnede YATIK uyarisi YOK", "TILTED" not in s.cikti, s.cikti)
 
 # MESAFE — "degiyorlar mi" sorusu
 _ka = doc.addObject("Mesh::Feature", "KureA")
@@ -410,15 +410,15 @@ _yaz("       " + s.cikti.strip())
 kontrol("mesh-mesh mesafe olculdu", s.basarili, s.hata_izi)
 kontrol("mesafe dogru (~4 mm)", "deger: 4.0" in s.cikti or "deger: 3.9" in s.cikti,
         s.cikti)
-kontrol("mesh yonteminin sinirini SOYLUYOR", "mesh noktalari" in s.cikti, s.cikti)
+kontrol("mesh yonteminin sinirini SOYLUYOR", "mesh points" in s.cikti, s.cikti)
 kontrol("cKDTree ile hizli", s.sure_sn < 2.0, s.sure_sn)
 
 s = yurutucu.calistir(
     "mesafe(doc.getObject('DuzKutu'), doc.getObject('YatikKutu'))", "kati mesafe")
 _yaz("       " + s.cikti.strip())
-kontrol("kati-kati distToShape kullanildi", "en yakin noktalar" in s.cikti,
+kontrol("kati-kati distToShape kullanildi", "closest points" in s.cikti,
         s.cikti)
-kontrol("degdiklerini soyledi", "degiyorlar" in s.cikti, s.cikti)
+kontrol("degdiklerini soyledi", "they touch" in s.cikti, s.cikti)
 
 # OLCU — FreeCAD'in KENDI olcum motoru (Measure.Measurement)
 s = yurutucu.calistir("olcu(doc.getObject('Plaka2'), 'Face7')", "delik capi")
@@ -430,8 +430,8 @@ _pl.Shape = Part.makeBox(40, 40, 5).cut(
 doc.recompute()
 s = yurutucu.calistir("olcu(doc.getObject('Delikli'), 'Face7')", "delik capi")
 _yaz("       " + s.cikti.strip())
-kontrol("Measure.Measurement yaricapi verdi", "yaricap=1.7" in s.cikti, s.cikti)
-kontrol("cap da yazildi", "cap=3.4" in s.cikti, s.cikti)
+kontrol("Measure.Measurement yaricapi verdi", "radius=1.7" in s.cikti, s.cikti)
+kontrol("cap da yazildi", "diameter=3.4" in s.cikti, s.cikti)
 
 # DUVAR KALINLIGI — isin atma
 s = yurutucu.calistir(
@@ -441,11 +441,11 @@ _yaz("       " + s.cikti.strip())
 kontrol("duvar kalinligi olculdu", s.basarili, s.hata_izi)
 kontrol("~2 mm buldu (gercek duvar 2.0)",
         "en ince: 1.9" in s.cikti or "en ince: 2.0" in s.cikti, s.cikti)
-kontrol("kac olcum yaptigini soyluyor", "olcum" in s.cikti, s.cikti)
+kontrol("kac olcum yaptigini soyluyor", "measurements" in s.cikti, s.cikti)
 
 s = yurutucu.calistir("duvar_kalinligi(doc.getObject('KureA'))", "dolu govde")
 kontrol("dolu govdede yanlis sayi UYDURMUYOR",
-        "duvar bulunamadi" in s.cikti, s.cikti)
+        "no wall found" in s.cikti, s.cikti)
 
 
 # ===================================================== 7. TEKRAR KORUMASI
@@ -462,9 +462,9 @@ kontrol("2. kosu ENGELLENDI", b.engellendi, b.ozet)
 kontrol("engellenen kosu basarili degil", not b.basarili)
 kontrol("engellenen kosu nesne EKLEMEDI",
         len(doc.Objects) == onceki_sayi + 1, len(doc.Objects))
-kontrol("ozet 'ENGELLENDI' diyor", "ENGELLENDI" in b.ozet, b.ozet)
+kontrol("ozet 'BLOCKED' diyor", "BLOCKED" in b.ozet, b.ozet)
 kontrol("sebep aciklamasi kullaniciya donuk",
-        "bir kez daha bas" in b.hata_izi, b.hata_izi[:200])
+        "press Run once" in b.hata_izi, b.hata_izi[:200])
 
 c = yurutucu.calistir(kod, "tekrar denemesi")
 kontrol("3. kosu (kullanici israr etti) CALISTI",

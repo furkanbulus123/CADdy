@@ -124,7 +124,7 @@ kontrol("model listesi opus+sonnet",
 # Kalite sozu TAM etikette duruyor; kutuda gorunen KISA etiket panelin
 # asgari genisligini dusurmek icin kisaldi (bkz. test_panel_fc.py).
 kontrol("model tam etiketleri kalite soyluyor",
-        all("kalite" in m[2] for m in _cfg.MODELLER),
+        all("quality" in m[2] for m in _cfg.MODELLER),
         [m[2] for m in _cfg.MODELLER])
 kontrol("kisa etiketler gercekten kisa",
         all(len(m[1]) < 14 for m in _cfg.MODELLER),
@@ -185,7 +185,7 @@ for _ad, _parca in [
     # kontrolu gecmis sayip "dogrulandi" dememesi bu maddeye bagli.
     ("dogrulama raporu maddesi", "VERIFICATION REPORT"),
     ("yalnizca kosan kontrol iddia edilir", "Claim only what the report"),
-    ("ters kati ve acik kabuk adiyla aniliyor", "ters kati"),
+    ("ters kati ve acik kabuk adiyla aniliyor", "reversed solid"),
     # MANTIK 19: olculdu, modelin "Ctrl+Z ile geri don" demesi 13 dakika
     # kaybettirdi ve bir kez de "geri alindigini varsayip" kod uretti.
     ("geri alma maddesi", "UNDOING YOUR OWN WORK"),
@@ -253,18 +253,18 @@ for _ad, _parca in [
     ("yutulma orani anlatiliyor", "TAMAMEN GOMULU"),
     ("yazan blok kendi kanitini basar", "END EVERY WRITING BLOCK WITH ITS OWN PROOF"),
     ("tek blok cok is yapabilir", "one block may do"),
-    ("odak bicimi tavsiye ediliyor", "cakisma_kontrol(odak=obj)"),
+    ("odak bicimi tavsiye ediliyor", "check_overlap(focus=obj)"),
     ("tuketilmis nesneler eleniyor", "hidden raw material"),
     # PLAN S8 / MANTIK 46: bu iki yardimci sozlesmede ANLATILMAZSA model
     # varliklarini bilmez ve elle yazmaya devam eder — eklemenin tamami
     # bosa gider. Bu yuzden metnin dusmesi teste takilmali.
-    ("saglik anlatiliyor", "saglik()"),
+    ("saglik anlatiliyor", "health()"),
     ("isValid'in yetmedigi soyleniyor", "isValid() ALONE IS NOT ENOUGH"),
-    ("simetri anlatiliyor", "simetri(obj)"),
+    ("simetri anlatiliyor", "symmetry(obj)"),
 ]:
     kontrol("sozlesme: " + _ad, _parca in _sz)
 kontrol("zaman asimi sessizlige bakiyor",
-        "SESSIZLIK" in (_cfg.zaman_asimi.__doc__ or "").upper(),
+        "SILENCE" in (_cfg.zaman_asimi.__doc__ or "").upper(),
         _cfg.zaman_asimi.__doc__)
 yaz("     zaman asimi: %d sn sessizlik" % _cfg.zaman_asimi())
 
@@ -282,10 +282,10 @@ kontrol("konsol UYARISI yakalandi",
         any("test uyarisi 1" in u for u in _ks.konsol_uyari), _ks.konsol_uyari)
 kontrol("konsol HATASI yakalandi",
         any("test hatasi 1" in u for u in _ks.konsol_hata), _ks.konsol_hata)
-kontrol("ozette uyari sayisi gorunuyor", "uyari" in _ks.ozet, _ks.ozet)
+kontrol("ozette uyari sayisi gorunuyor", "warning" in _ks.ozet, _ks.ozet)
 _mm = _ks.modele_metin()
-kontrol("modele giden metinde FreeCAD uyarisi var", "FreeCAD uyari" in _mm)
-kontrol("modele giden metinde FreeCAD hatasi var", "FreeCAD HATA" in _mm)
+kontrol("modele giden metinde FreeCAD uyarisi var", "FreeCAD warning" in _mm)
+kontrol("modele giden metinde FreeCAD hatasi var", "FreeCAD ERROR" in _mm)
 yaz("     ozet: %s" % _ks.ozet)
 
 # Gozlemci COZULMUS olmali: sonraki calistirmaya sizmasin.
@@ -426,7 +426,7 @@ kontrol("ama kod CIKTISI yine de modele gidiyor",
         "8000" in _gonderilen.get("istem", ""),
         _gonderilen.get("istem", "")[:120])
 kontrol("modele 'goruntuye bakmis gibi konusma' deniyor",
-        "GONDERILEMEDI" in _gonderilen.get("istem", ""),
+        "could NOT be sent" in _gonderilen.get("istem", ""),
         _gonderilen.get("istem", "")[:200])
 ctl._gorsel_tur = 0
 _msj.clear()
@@ -457,13 +457,13 @@ _ist = _yakalanan.get("istem", "")
 kontrol("butce dolsa da CIKTI modele gidiyor", "3080 mm2" in _ist,
         repr(_ist[:200]))
 kontrol("gorsel gonderilmedigi SOYLENIYOR (resme bakmis gibi konusmasin)",
-        "GONDERILEMEDI" in _ist, repr(_ist[:300]))
+        "could NOT be sent" in _ist, repr(_ist[:300]))
 kontrol("gorsel gercekten eklenmedi", not _yakalanan.get("gorsel"))
 kontrol("bastirma GUNLUGE yaziliyor (log'da sebep gorunsun)",
-        any("GORSEL GONDERILMEDI" in m for m in _gunluk_satirlari),
+        any("IMAGE NOT SENT" in m for m in _gunluk_satirlari),
         _gunluk_satirlari)
 kontrol("ciktinin gonderildigi de gunlukte",
-        any("CIKTI yine de gonderildi" in m for m in _gunluk_satirlari),
+        any("OUTPUT sent anyway" in m for m in _gunluk_satirlari),
         _gunluk_satirlari)
 
 # Cikti YOKSA bos bir tur harcanmamali.
@@ -528,10 +528,10 @@ ctl._son_eklenen = []
 ctl._gorsel_cok = True
 _cok, _not = ctl._kac_kare()
 kontrol("model istedi ama yeni nesne yok -> TEK kare", _cok is False, _cok)
-kontrol("indirimin sebebi modele soyleniyor", "tek kare gonderildi" in _not,
+kontrol("indirimin sebebi modele soyleniyor", "one was sent" in _not,
         _not[:80])
 kontrol("model yerine ne yapacagi da soyleniyor",
-        "cakisma_kontrol" in _not, _not[-120:])
+        "check_overlap" in _not, _not[-120:])
 
 ctl._son_eklenen = ["Kutu"]
 ctl._gorsel_cok = True
@@ -623,7 +623,7 @@ kontrol("model kutusu kisaldi (yer efor kutusuna gitti)",
         all(len(m[1]) <= 8 for m in _cfg.MODELLER),
         [m[1] for m in _cfg.MODELLER])
 kontrol("model kutusunun KALITE notu ipucunda duruyor",
-        all("kalite" in m[2] for m in _cfg.MODELLER),
+        all("quality" in m[2] for m in _cfg.MODELLER),
         [m[2] for m in _cfg.MODELLER])
 
 # OLCULEN HATA: --model ve --effort surec BASLARKEN veriliyor, surec ise
@@ -660,10 +660,10 @@ kontrol("oturum acmak dosya olusturmuyor", not list(_gecici.glob("*.txt")),
 _g.kullanici("ilk mesaj")
 _dosya = next(_gecici.glob("*.txt"))
 kontrol("ilk kayitla dosya dogdu", _dosya.exists(), _dosya)
-kontrol("ON KABUL: baslik once '(bilinmiyor)' yaziyor",
-        "(bilinmiyor)" in _dosya.read_text(encoding="utf-8"))
+kontrol("ON KABUL: baslik once '(unknown)' yaziyor",
+        "(unknown)" in _dosya.read_text(encoding="utf-8"))
 _bas = _dosya.read_text(encoding="utf-8")
-kontrol("baslikta EFOR satiri da var", "efor   :" in _bas,
+kontrol("baslikta EFOR satiri da var", "effort  :" in _bas,
         _bas.splitlines()[:7])
 kontrol("efor satiri gercek ayari yaziyor",
         any(x[2] in _bas for x in _cfg.EFORLAR if x[0] == _cfg.efor()),
@@ -671,14 +671,14 @@ kontrol("efor satiri gercek ayari yaziyor",
 _g.ai("merhaba", model="claude-opus-5", sure_sn=1.0)
 _icerik = _dosya.read_text(encoding="utf-8")
 kontrol("ilk yanittan sonra baslikta GERCEK model var",
-        "model  : claude-opus-5" in _icerik,
+        "model   : claude-opus-5" in _icerik,
         _icerik.splitlines()[:6])
-kontrol("'(bilinmiyor)' kalmadi", "(bilinmiyor)" not in _icerik,
+kontrol("'(unknown)' kalmadi", "(unknown)" not in _icerik,
         _icerik.splitlines()[:6])
 _g.ai("ikinci", model="claude-sonnet-5", sure_sn=1.0)
 _icerik2 = _dosya.read_text(encoding="utf-8")
 kontrol("baslik BIR KEZ yaziliyor (sonraki turlar bozmuyor)",
-        "model  : claude-opus-5" in _icerik2, _icerik2.splitlines()[:6])
+        "model   : claude-opus-5" in _icerik2, _icerik2.splitlines()[:6])
 kontrol("tur satirlari yine de kendi modelini yaziyor",
         "claude-sonnet-5" in _icerik2, _icerik2[-300:])
 
@@ -730,7 +730,7 @@ kontrol("bilgi satirinda 'token' yazıyor", "token" in gorulen["bilgi"],
 kontrol("bilgi satirinda DOLAR YOK", "$" not in gorulen["bilgi"],
         gorulen["bilgi"])
 kontrol("dolar aciklamasi ipucunda kaldi",
-        "abonelik" in gorulen["ipucu"].lower(), gorulen["ipucu"][:120])
+        "subscription" in gorulen["ipucu"].lower(), gorulen["ipucu"][:120])
 yaz("     bilgi satiri: %s" % gorulen["bilgi"])
 
 yaz("3) SOHBET GUNLUGU (1 session = 1 dosya)")
@@ -739,7 +739,7 @@ kontrol("gunluk dosyasi olustu", dosya is not None and os.path.isfile(str(dosya)
         dosya)
 if dosya and os.path.isfile(str(dosya)):
     icerik = open(str(dosya), encoding="utf-8").read()
-    kontrol("kullanici mesaji yazildi", "KULLANICI" in icerik and ISTEK in icerik)
+    kontrol("kullanici mesaji yazildi", "USER" in icerik and ISTEK in icerik)
     kontrol("AI yaniti yazildi", "AI" in icerik)
     kontrol("oturum kimligi basligi var", s.oturum[:8] in icerik)
     # Kok dizin CADDY_LOG_DIR ile degistirilebiliyor (MANTIK 37: testler
@@ -797,8 +797,8 @@ if gorulen["bloklar"]:
         # Calistirma da gunluge yazilmis olmali
         if dosya:
             icerik2 = open(str(dosya), encoding="utf-8").read()
-            kontrol("calistirma gunluge yazildi", "CALISTIRMA" in icerik2)
-            kontrol("kod onerisi gunluge yazildi", "KOD ONERISI" in icerik2)
+            kontrol("calistirma gunluge yazildi", "RUN" in icerik2)
+            kontrol("kod onerisi gunluge yazildi", "CODE" in icerik2)
 
         doc.undo()
         doc.recompute()
@@ -843,7 +843,7 @@ if s2:
 yaz("     tur 1: %.1f sn (soguk) · tur 2: %.1f sn (ayni surec)"
     % (s.sure_ms / 1000.0, _gecen2))
 yaz("     bilgi satiri: %s" % gorulen["bilgi"])
-kontrol("bilgi satirinda baglam var", "bağlam" in gorulen["bilgi"],
+kontrol("bilgi satirinda baglam var", "context" in gorulen["bilgi"],
         gorulen["bilgi"])
 kontrol("bos blokta '0 kod blogu' yazmiyor",
         "0 kod" not in gorulen["bilgi"], gorulen["bilgi"])

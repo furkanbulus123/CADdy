@@ -1,18 +1,19 @@
-"""3B gorunumu PNG olarak yakalar.
+"""Captures the 3D view as PNG.
 
-Neden burada, ui/ altinda degil: `conversation.py` bunu cagirmak zorunda
-(gorsel kontrol turunu o yonetiyor) ve KATMAN KURALI geregi conversation
-ui/'yi import edemez. Bu modul widget uretmez, yalnizca goruntu dondurur.
+Why here and not under ui/: `conversation.py` has to call it (it runs the
+visual-check turn), and by the LAYER RULE conversation cannot import ui/.
+This module creates no widgets, it only returns images.
 
-Neden PNG BAYTI donduruyor da dosya yolu degil: goruntu modele stream-json
-girdisinde base64 `image` blogu olarak gidiyor (bkz. transport). Diske kalici
-bir dosya birakmanin gereksi yok - gecici dosya okunup hemen siliniyor.
+Why it returns PNG BYTES and not a file path: the image goes to the model
+as a base64 `image` block in the stream-json input (see transport). There
+is no reason to leave a file on disk - the temporary file is read and
+deleted right away.
 
-FreeCAD'de gorunum yakalamanin iki yolu var ve ikisi de GUI oturumu ister;
-freecadcmd'de ActiveView yoktur, bu yuzden burasi BASSIZ TEST EDILEMEZ
-(tests/_probe_goruntu.py bunu dogruladi: Gui.getMainWindow bile yok).
-O yuzden her adim tek tek korunuyor ve basarisizlikta None donuyor -
-gorsel kontrol calismazsa sohbet yine de yurumeli.
+FreeCAD has two ways to capture the view and both need a GUI session;
+freecadcmd has no ActiveView, so this CANNOT BE TESTED HEADLESS (not even
+Gui.getMainWindow exists there). So every step is guarded individually and
+returns None on failure - the chat must keep working even if the visual
+check does not.
 """
 
 from __future__ import annotations
@@ -22,15 +23,15 @@ import tempfile
 
 from . import log
 
-# Panelde gosterilecek makul bir boyut. Buyutmek token maliyetini dogrudan
-# artirir (olculdu: 200x120'lik bir test resmi bile ~2.3k token'lik bir
-# istege dönüştü), kucultmek detayi kaybettirir.
+# A reasonable size for the panel. Bigger raises the token cost directly
+# (measured: even a 200x120 test image turned into a ~2.3k-token request),
+# smaller loses detail.
 GENISLIK = 900
 YUKSEKLIK = 640
 
 
 def yakalanabilir_mi() -> bool:
-    """GUI oturumu var mi ve aktif bir 3B gorunum acik mi."""
+    """Is there a GUI session with an active 3D view."""
     try:
         import FreeCADGui as Gui
     except Exception:
@@ -43,42 +44,42 @@ def yakalanabilir_mi() -> bool:
 
 
 def yakala(genislik: int = GENISLIK, yukseklik: int = YUKSEKLIK) -> bytes | None:
-    """Aktif 3B gorunumu PNG bayti olarak dondurur; olmazsa None."""
+    """Returns the active 3D view as PNG bytes; None on failure."""
     try:
         import FreeCADGui as Gui
     except Exception as e:
-        log.uyari(f"gorunum yakalanamadi (GUI yok): {e}")
+        log.uyari(f"could not capture the view (no GUI): {e}")
         return None
 
     try:
         gorunum = Gui.ActiveDocument.ActiveView
     except Exception as e:
-        log.uyari(f"aktif 3B gorunum yok: {e}")
+        log.uyari(f"no active 3D view: {e}")
         return None
 
-    # Gecici dosyayi ONCE kapatiyoruz: Windows'ta acik bir dosyaya baska bir
-    # surec/kutuphane yazamaz, saveImage sessizce basarisiz olur.
+    # The temporary file is closed FIRST: on Windows another process/library
+    # cannot write to an open file, and saveImage fails silently.
     tut = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
     yol = tut.name
     tut.close()
 
     try:
         try:
-            # "Current" = kullanicinin ekranda gordugu arka plan. Kullanici
-            # "mevcut gorunum" dedi: ayni seye baksinlar.
+            # "Current" = the background the user sees on screen. The user
+            # said "the current view": both should look at the same thing.
             gorunum.saveImage(yol, genislik, yukseklik, "Current")
         except TypeError:
-            # Bazi surumlerde arka plan argumani yok.
+            # Some versions have no background argument.
             gorunum.saveImage(yol, genislik, yukseklik)
 
         with open(yol, "rb") as f:
             veri = f.read()
         if not veri:
-            log.uyari("gorunum yakalandi ama dosya bos")
+            log.uyari("view captured but the file is empty")
             return None
         return veri
     except Exception as e:
-        log.uyari(f"saveImage basarisiz: {e}")
+        log.uyari(f"saveImage failed: {e}")
         return _widget_ile_yakala()
     finally:
         try:
@@ -89,35 +90,36 @@ def yakala(genislik: int = GENISLIK, yukseklik: int = YUKSEKLIK) -> bytes | None
 
 def yakala_cok(genislik: int = GENISLIK,
                yukseklik: int = YUKSEKLIK) -> list[bytes]:
-    """Uc aciyi yakalar: KULLANICININ ACISI + on + ust.
+    """Captures three angles: THE USER'S ANGLE + front + top.
 
-    NEDEN UC KARE. Tek kare, tek acidan bakmak demek ve gunlukte bunun
-    bedeli olculdu (2026-08-20 baa70fa4): model tek kareden ust uste IKI
-    yanlis teshis koydu ("kulp havada duruyor", "iki karanlik delik var")
-    ve ikincisinin onerdigi duzeltme hasari buyuttu. Baska bir oturumda
-    (b2938bd0) kullanici sahneyi kendisi cevirip "ben cevirdim sen direkt
-    al goruntu bak" demek zorunda kaldi — yani kameraman kullanici oldu.
+    WHY THREE FRAMES. One frame means looking from one angle, and the logs
+    measured the cost: from a single frame the model made TWO wrong
+    diagnoses in a row ("the handle is floating", "there are two dark
+    holes"), and the fix suggested by the second made the damage worse. In
+    another session the user had to rotate the scene and say "I rotated it,
+    just take the image and look" — the user became the camera operator.
 
-    NEDEN ILK KARE HALA KULLANICININ ACISI. "Ayni seye baksinlar" kurali
-    (bkz. yakala) bilincli bir karardi ve korunuyor; on ve ust ONA EK.
-    Ikisi birlikte X-Y ve Y-Z iliskisini kapatiyor — "kulp govdeye degiyor
-    mu" sorusunun cevabi tam olarak burada.
+    WHY THE FIRST FRAME IS STILL THE USER'S ANGLE. The "look at the same
+    thing" rule (see yakala) was a deliberate decision and is kept; front
+    and top are IN ADDITION to it. Together they cover the X-Y and Y-Z
+    relations — exactly where "does the handle touch the body" is answered.
 
-    NEDEN HER ZAMAN DEGIL. Uc kare ~3x token ve modelin uc resmi okumasi
-    demek; hizli bir bakis icin gereksiz. Cagiran karar veriyor
-    (bkz. conversation: once tek kare, cozulmediyse uc kare).
+    WHY NOT ALWAYS. Three frames cost ~3x tokens and make the model read
+    three images; overkill for a quick look. The caller decides
+    (see conversation: one frame first, three if unresolved).
 
-    Kamera GERI YUKLENIYOR: kullanicinin baktigi yer bizim yuzumuzden
-    degismemeli. Yuklenemezse en azindan uyari birakiliyor. Geri yukleme
-    `finally` icinde ve ONCESINDE animasyon kapatiliyor — gerekcesi asagida,
-    "sacma bir yere gidiyor" sikayetinin sebebi tam olarak oydu.
+    The camera IS RESTORED: where the user was looking must not change
+    because of us. If it cannot be restored, at least a warning is left.
+    The restore is in `finally`, and animation is turned off BEFORE it —
+    reason below; it was exactly the cause of the "it jumps somewhere weird"
+    complaint.
     """
     try:
         import FreeCADGui as Gui
 
         gorunum = Gui.ActiveDocument.ActiveView
     except Exception as e:
-        log.uyari(f"cok acili yakalama yapilamadi: {e}")
+        log.uyari(f"multi-angle capture failed: {e}")
         tek = yakala(genislik, yukseklik)
         return [tek] if tek else []
 
@@ -125,30 +127,31 @@ def yakala_cok(genislik: int = GENISLIK,
     try:
         kamera = gorunum.getCamera()
     except Exception as e:
-        log.uyari(f"kamera durumu okunamadi ({e}); acilar denenmeyecek")
+        log.uyari(f"could not read the camera ({e}); angles will not be tried")
 
     kareler: list[bytes] = []
-    ilk = yakala(genislik, yukseklik)          # kullanicinin gordugu aci
+    ilk = yakala(genislik, yukseklik)          # the angle the user sees
     if ilk:
         kareler.append(ilk)
 
     if kamera is None:
         return kareler
 
-    # ANIMASYON KAPATILIYOR. Sikayet: "3 acidan sonra sacma bir yere gidiyor,
-    # kullanicinin ilk baktigi acida kalmiyor". Sebep: viewFront/viewTop
-    # FreeCAD'de CANLANDIRMALI gecis yapar — kamera bir sure boyunca hareket
-    # eder. setCamera ile eski aciyi geri koysak bile SUREN animasyon onu
-    # tekrar hedefe (ust gorunume) tasiyor, yani geri yukleme sessizce
-    # eziliyordu. Ayrica animasyon ortasinda alinan kare de yamuk aciyi
-    # gosterir. Kapatmak ucuz: tek bayrak, gecisler aninda oluyor.
+    # ANIMATION IS TURNED OFF. Complaint: "after the 3 angles it goes
+    # somewhere weird, it does not stay at the angle the user was looking
+    # at". Cause: viewFront/viewTop do an ANIMATED transition in FreeCAD —
+    # the camera moves for a while. Even when setCamera puts the old angle
+    # back, the ONGOING animation carries it to the target (top view) again,
+    # so the restore was silently overridden. A frame taken mid-animation
+    # also shows a skewed angle. Turning it off is cheap: one flag, and
+    # transitions become instant.
     animasyon = None
     try:
         animasyon = gorunum.isAnimationEnabled()
         gorunum.setAnimationEnabled(False)
     except Exception as e:                                       # noqa: BLE001
-        # Surumde yoksa devam: geri yukleme yine de denenir.
-        log.ayik(f"animasyon bayragi ayarlanamadi: {e}")
+        # Missing in this version: carry on, the restore is still attempted.
+        log.ayik(f"could not set the animation flag: {e}")
 
     try:
         for ad in ("viewFront", "viewTop"):
@@ -160,16 +163,16 @@ def yakala_cok(genislik: int = GENISLIK,
                 if kare:
                     kareler.append(kare)
             except Exception as e:                               # noqa: BLE001
-                log.uyari(f"{ad} yakalanamadi: {e}")
+                log.uyari(f"{ad} could not be captured: {e}")
     finally:
-        # GERI YUKLEME finally'de: aradaki her sey patlasa da kullanicinin
-        # baktigi yer geri gelsin. Kullanicinin gorunumunu bozmak, gorsel
-        # kontrolun kendisinden daha pahali bir hata.
+        # RESTORE in finally: whatever fails in between, the user's view
+        # comes back. Wrecking the user's view is a costlier bug than the
+        # visual check itself.
         try:
             gorunum.setCamera(kamera)
             _cizimi_bitir()
         except Exception as e:                                   # noqa: BLE001
-            log.uyari(f"kamera geri yuklenemedi: {e}")
+            log.uyari(f"could not restore the camera: {e}")
         if animasyon:
             try:
                 gorunum.setAnimationEnabled(True)
@@ -181,30 +184,30 @@ def yakala_cok(genislik: int = GENISLIK,
 
 def yakala_yakin(adlar, genislik: int = GENISLIK, yukseklik: int = YUKSEKLIK,
                  cok_aci: bool = False) -> list[bytes]:
-    """Kamerayi VERILEN NESNELERE yaklastirip yakalar.
+    """Zooms the camera to THE GIVEN OBJECTS and captures.
 
-    NEDEN VAR (olculdu, MANTIK 39). Tum model kadraja sigdiginda kare kaba
-    kaliyor: 201 mm'lik gemi 900x640 karede ~4 piksel/mm demek, yani 0.6 mm
-    kalinligindaki bir yelken 2 piksel. Model tam bu yuzden bir cakismayi
-    goremedi. Cozunurlugu buyutmek uc kareyi ~4 kat pahalilastirir ve
-    arkada kalan seyi yine gostermez; KAMERAYI YAKLASTIRMAK ayni token ile
-    ~10 kat detay veriyor.
+    WHY IT EXISTS (measured). When the whole model fits in the frame the
+    image is coarse: a 201 mm ship in a 900x640 frame is ~4 pixels/mm, so a
+    0.6 mm thick sail is 2 pixels. That is exactly why the model missed an
+    overlap. Raising the resolution makes three frames ~4x more expensive
+    and still does not show what is behind; ZOOMING THE CAMERA gives ~10x
+    the detail for the same tokens.
 
-    `adlar`: FreeCAD IC ADLARI (Label degil). Bulunamayan ad sessizce
-    atlanmaz — cagiran taraf hangilerinin bulundugunu bilsin diye uyari
-    birakilir ve bulunanlarla devam edilir.
+    `adlar`: FreeCAD INTERNAL NAMES (not Labels). A name that is not found
+    is not skipped silently — a warning is left so the caller knows which
+    were found, and it carries on with the ones that were.
 
-    Kamera §31.4'teki desenle korunuyor: animasyon KAPALI (canlandirmali
-    gecis geri yuklemeyi eziyordu) ve geri yukleme `finally` icinde.
-    Secim de geri aliniyor — kullanicinin secimini bozmak bizim isimiz
-    degil.
+    The camera is protected with the same pattern as yakala_cok: animation
+    OFF (animated transitions overrode the restore) and the restore in
+    `finally`. The selection is also restored — messing with the user's
+    selection is not our business.
     """
     try:
         import FreeCADGui as Gui
 
         gorunum = Gui.ActiveDocument.ActiveView
     except Exception as e:                                       # noqa: BLE001
-        log.uyari(f"yakin cekim yapilamadi (GUI yok): {e}")
+        log.uyari(f"close-up failed (no GUI): {e}")
         return []
 
     try:
@@ -212,14 +215,14 @@ def yakala_yakin(adlar, genislik: int = GENISLIK, yukseklik: int = YUKSEKLIK,
 
         doc = App.ActiveDocument
     except Exception as e:                                       # noqa: BLE001
-        log.uyari(f"yakin cekim: belge yok: {e}")
+        log.uyari(f"close-up: no document: {e}")
         return []
 
     nesneler = []
     for ad in adlar:
         o = doc.getObject(ad) if doc is not None else None
         if o is None:
-            log.uyari(f"yakin cekim: '{ad}' adinda nesne yok, atlandi")
+            log.uyari(f"close-up: no object named '{ad}', skipped")
         else:
             nesneler.append(o)
     if not nesneler:
@@ -229,7 +232,7 @@ def yakala_yakin(adlar, genislik: int = GENISLIK, yukseklik: int = YUKSEKLIK,
     try:
         kamera = gorunum.getCamera()
     except Exception as e:                                       # noqa: BLE001
-        log.uyari(f"kamera durumu okunamadi ({e}); yakin cekim denenmeyecek")
+        log.uyari(f"could not read the camera ({e}); close-up will not be tried")
         return []
 
     animasyon = None
@@ -237,7 +240,7 @@ def yakala_yakin(adlar, genislik: int = GENISLIK, yukseklik: int = YUKSEKLIK,
         animasyon = gorunum.isAnimationEnabled()
         gorunum.setAnimationEnabled(False)
     except Exception as e:                                       # noqa: BLE001
-        log.ayik(f"animasyon bayragi ayarlanamadi: {e}")
+        log.ayik(f"could not set the animation flag: {e}")
 
     eski_secim = []
     kareler: list[bytes] = []
@@ -250,15 +253,15 @@ def yakala_yakin(adlar, genislik: int = GENISLIK, yukseklik: int = YUKSEKLIK,
         for o in nesneler:
             Gui.Selection.addSelection(doc.Name, o.Name)
 
-        # FreeCAD'in KENDI "secime yaklas" komutu. Yedegi bbox'tan kamera
-        # kurmak degil — o surume gore degisen bir is; yedek, normal
-        # fitAll'a dusup bunu SOYLEMEK.
+        # FreeCAD's OWN "zoom to selection" command. The fallback is not to
+        # build a camera from the bbox — that varies between versions; the
+        # fallback is to drop to a normal fitAll and SAY so.
         yaklasti = False
         try:
             Gui.SendMsgToActiveView("ViewSelection")
             yaklasti = True
         except Exception as e:                                   # noqa: BLE001
-            log.uyari(f"ViewSelection calismadi ({e}); genel kareye dusuldu")
+            log.uyari(f"ViewSelection did not work ({e}); fell back to the full frame")
             try:
                 gorunum.fitAll()
             except Exception:                                    # noqa: BLE001
@@ -276,7 +279,7 @@ def yakala_yakin(adlar, genislik: int = GENISLIK, yukseklik: int = YUKSEKLIK,
                         Gui.SendMsgToActiveView("ViewSelection")
                     _cizimi_bitir()
                 except Exception as e:                           # noqa: BLE001
-                    log.uyari(f"{aci} (yakin) yakalanamadi: {e}")
+                    log.uyari(f"{aci} (close-up) could not be captured: {e}")
                     continue
             kare = yakala(genislik, yukseklik)
             if kare:
@@ -295,7 +298,7 @@ def yakala_yakin(adlar, genislik: int = GENISLIK, yukseklik: int = YUKSEKLIK,
             gorunum.setCamera(kamera)
             _cizimi_bitir()
         except Exception as e:                                   # noqa: BLE001
-            log.uyari(f"kamera geri yuklenemedi (yakin cekim): {e}")
+            log.uyari(f"could not restore the camera (close-up): {e}")
         if animasyon:
             try:
                 gorunum.setAnimationEnabled(True)
@@ -306,11 +309,11 @@ def yakala_yakin(adlar, genislik: int = GENISLIK, yukseklik: int = YUKSEKLIK,
 
 
 def _cizimi_bitir() -> None:
-    """Bekleyen gorunum guncellemesini EKRANA islet.
+    """Flush the pending view update to the SCREEN.
 
-    saveImage OpenGL tamponundan okuyor; aci degistikten hemen sonra
-    cagirilirsa henuz cizilmemis kareyi alabilir. Kamera geri yuklemesinden
-    sonra da ayni sey: kullanici bir an eski/yeni arasi bir kare gorur.
+    saveImage reads from the OpenGL buffer; called right after an angle
+    change it can grab a frame that has not been drawn yet. Same after the
+    camera restore: the user would briefly see a frame between old and new.
     """
     try:
         import FreeCADGui as Gui
@@ -321,18 +324,19 @@ def _cizimi_bitir() -> None:
 
 
 def _widget_ile_yakala() -> bytes | None:
-    """saveImage calismazsa: 3B widget'in kendisini grab et.
+    """If saveImage fails: grab the 3D widget itself.
 
-    Yedek yol, cunku saveImage OpenGL tamponundan okuyor ve bazi surucu /
-    uzak masaustu bilesimlerinde bos cikabiliyor. QWidget.grab() ekranda ne
-    varsa onu alir - kalitesi daha dusuk ama hicbir seyden iyi.
+    A fallback, because saveImage reads from the OpenGL buffer and can come
+    out empty with some driver / remote desktop combinations.
+    QWidget.grab() takes whatever is on screen - lower quality, but better
+    than nothing.
     """
     try:
         import FreeCADGui as Gui
         from PySide import QtCore
 
-        # ActiveView'in Qt widget'ina tasinabilir bir yol yok; ana pencerenin
-        # merkezi alanini grab etmek calisan en basit yontem.
+        # There is no portable way to the ActiveView's Qt widget; grabbing
+        # the main window's central area is the simplest method that works.
         mw = Gui.getMainWindow()
         if mw is None:
             return None
@@ -343,5 +347,5 @@ def _widget_ile_yakala() -> bytes | None:
             return None
         return bytes(tampon.data())
     except Exception as e:
-        log.uyari(f"widget grab da basarisiz: {e}")
+        log.uyari(f"widget grab failed too: {e}")
         return None

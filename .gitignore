@@ -11,8 +11,7 @@ workspace/*.log
 # kendi kayitlarina isaret eder.
 LOG/
 
-# Kisisel gelistirme notlari ve ayri bir eklenti — acik depoya girmez.
-Monkey/
+# Kisisel gelistirme notlari — acik depoya girmez.
 log_incelemesi*.txt
 report.txt
 caddy_gelisim.txt

@@ -1,4 +1,4 @@
-"""Uretilen kodun ayiklanmasi ve calistirilmasi.
+"""Extracting and running the generated code.
 
-Bu paket Qt import ETMEZ — freecadcmd ile bassiz test edilebilir.
+This package does NOT import Qt — it can be tested headless with freecadcmd.
 """

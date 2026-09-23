@@ -501,13 +501,13 @@ kontrol("hacim BaseFeature ile ayni (tek kopya)",
 r = dg.dogrula(doc, ["Desen"])
 _yaz("       " + r.metin().replace("\n", "\n       "))
 kontrol("DOGRULAMA bunu yakaliyor",
-        any(b.tur == "desen tek kopya birakti" for b in r.bulgular),
+        any(b.tur == "pattern left a single copy" for b in r.bulgular),
         [str(x) for x in r.bulgular])
 kontrol("sebebi de yaziyor",
-        any("PRIMITIFE" in b.ayrinti for b in r.bulgular),
+        any("PRIMITIVE" in b.ayrinti for b in r.bulgular),
         [str(x) for x in r.bulgular])
 kontrol("kontrol KOSAN listesinde",
-        any("desen" in k for k in r.kosan), r.kosan)
+        any("pattern" in k for k in r.kosan), r.kosan)
 
 # Eskiz tabanli desen DOGRU calisiyor -> bulgu OLMAMALI
 import Sketcher  # noqa: F401
@@ -544,7 +544,7 @@ kontrol("eskiz tabanli desen GERCEKTEN cogaltti",
         abs(pol2.Shape.Volume - 13760.2) < 5.0, pol2.Shape.Volume)
 r = dg.dogrula(doc, ["Desen2"])
 kontrol("dogru desende YANLIS ALARM yok",
-        not any(b.tur == "desen tek kopya birakti" for b in r.bulgular),
+        not any(b.tur == "pattern left a single copy" for b in r.bulgular),
         [str(x) for x in r.bulgular])
 
 
@@ -652,7 +652,7 @@ s = kos("import MeshPart, Part\n" + _ALAN +
         "print('alan=%.1f' % _alan(k[0]))", "kesit uc kutu")
 kontrol("kutu z=0 artik dogru (eskiden 300)", "alan=599.8" in s.cikti, s.cikti)
 kontrol("kaydirdigini SOYLUYOR (sessizce duzeltmiyor)",
-        "tam ucta" in s.cikti and "kaydirildi" in s.cikti, s.cikti)
+        "exactly at the end" in s.cikti and "moved" in s.cikti, s.cikti)
 
 # IC yatay yuzey: kaydirilamaz (hangi tarafi istedigi cagirana ait),
 # ama uyarilmali ve guvenli komsular yazilmali.
@@ -666,7 +666,7 @@ s = kos("import MeshPart, Part\n"
         "print('---')\n"
         "kesit_konturu(o, 5.0)", "kesit ic omuz")
 _ust, _alt = s.cikti.split("---", 1) if "---" in s.cikti else (s.cikti, "")
-kontrol("IC yatay yuzeyde UYARI veriyor", "UYARI" in _ust, _ust)
+kontrol("IC yatay yuzeyde UYARI veriyor", "WARNING" in _ust, _ust)
 kontrol("uyari guvenli komsu z'leri soyluyor",
         "9.96" in _ust and "10.04" in _ust, _ust)
 kontrol("normal yukseklikte YANLIS ALARM yok", "UYARI" not in _alt, _alt)
@@ -695,7 +695,7 @@ kontrol("parcanin cok disinda BOS liste doner", "sonuc: []" in s.cikti,
         s.cikti)
 kontrol("disaridaki z KAYDIRILMIYOR — sorulmayan soru cevaplanmaz",
         "kaydirildi" not in s.cikti, s.cikti)
-kontrol("ve nedenini soyluyor", "disinda" in s.cikti, s.cikti)
+kontrol("ve nedenini soyluyor", "outside" in s.cikti, s.cikti)
 
 
 # --------------------------------------------------------------------------
@@ -715,9 +715,9 @@ s = kos("import Mesh, FreeCAD\n"
         "o.Mesh = mm\ndoc.recompute()\n"
         "k = kesit_konturu(o, [1.0, 2.0, 3.0])", "bozuk mesh kesiti")
 kontrol("donusumden ONCE uyari veriliyor",
-        "mesh saglam degil" in s.cikti, s.cikti)
+        "mesh is not sound" in s.cikti, s.cikti)
 kontrol("uyari kusurlari ADIYLA sayiyor",
-        "kapali degil" in s.cikti and "ayrik parca" in s.cikti, s.cikti)
+        "not closed" in s.cikti and "separate components" in s.cikti, s.cikti)
 kontrol("facet sayisi da yaziliyor (maliyetin kaynagi)",
         "facet" in s.cikti, s.cikti)
 # Hepsi bos cikan durum: butun ucgenler YATAY (z=0 ve z=10). Arada hicbir
@@ -732,20 +732,20 @@ s = kos("import Mesh, FreeCAD\n"
         "o.Mesh = mm\ndoc.recompute()\n"
         "k = kesit_konturu(o, [4.0, 5.0, 6.0])", "bos kesit sebebi")
 kontrol("hepsi bos cikinca SEBEP soyleniyor",
-        "YUKSEKLIK SECIMI DEGIL" in s.cikti, s.cikti)
+        "NOT the height choice" in s.cikti, s.cikti)
 kontrol("sebep mesh kusurunu ADIYLA tekrar ediyor",
-        "kapali degil" in s.cikti.split("YUKSEKLIK SECIMI DEGIL")[-1], s.cikti)
+        "not closed" in s.cikti.split("NOT the height choice")[-1], s.cikti)
 kontrol("ve baska bir olcum ADIYLA oneriliyor (genel ogut degil)",
-        "olc()" in s.cikti and "bbox" in s.cikti, s.cikti)
+        "measure()" in s.cikti and "bbox" in s.cikti, s.cikti)
 
 # SAGLAM mesh'te tek satir bile gurultu olmamali.
 s = kos("import Mesh\n"
         "o = doc.addObject('Mesh::Feature', 'SaglamKure')\n"
         "o.Mesh = Mesh.createSphere(20.0, 32)\ndoc.recompute()\n"
         "k = kesit_konturu(o, [0.0, 5.0])", "saglam mesh kesiti")
-kontrol("saglam mesh'te uyari YOK", "mesh saglam degil" not in s.cikti,
+kontrol("saglam mesh'te uyari YOK", "mesh is not sound" not in s.cikti,
         s.cikti)
-kontrol("saglam mesh'te kontur var", "kontur yok" not in s.cikti, s.cikti)
+kontrol("saglam mesh'te kontur var", "no contour" not in s.cikti, s.cikti)
 
 # KATI nesnede on kontrol hic kosmaz (mesh dali degil).
 s = kos("import Part\n"
@@ -753,7 +753,7 @@ s = kos("import Part\n"
         "o.Shape = Part.makeBox(10, 10, 10)\ndoc.recompute()\n"
         "k = kesit_konturu(o, 5.0)", "kati on kontrol")
 kontrol("katida mesh on kontrolu kosmuyor",
-        "mesh saglam degil" not in s.cikti, s.cikti)
+        "mesh is not sound" not in s.cikti, s.cikti)
 
 # Mesh SAGLAMKEN bos sonuca mesh sucu ATILMAMALI.
 s = kos("import Mesh\n"

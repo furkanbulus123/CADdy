@@ -150,12 +150,6 @@ function Baglantiyi-Kur($link, $hedefDizin, $ad) {
 
 Baglantiyi-Kur $link $kaynak "CADdy"
 
-# Monkey ayri bir eklenti ve depoda duruyor; FreeCAD onu ancak KENDI
-# junction'iyla gorur. CADdy'nin alt klasoru olarak yuklenmez.
-$monkeyKaynak = Join-Path $kaynak "Monkey"
-if (Test-Path (Join-Path $monkeyKaynak "InitGui.py")) {
-    Baglantiyi-Kur (Join-Path $mod "Monkey") $monkeyKaynak "Monkey"
-}
 
 # --- Sonuc --------------------------------------------------------------
 Write-Host ""

@@ -28,6 +28,13 @@ import FreeCAD as App
 from caddy.execution.executor import CodeExecutor
 
 gecti = basarisiz = 0
+_SATIRLAR = []
+
+
+def print(*a, **k):                                          # noqa: A001
+    # freecadcmd swallows script output and always exits 0, so the lines
+    # also go to tests/_son_executor.txt like the other suites.
+    _SATIRLAR.append(" ".join(str(x) for x in a))
 
 
 def kontrol(ad, kosul, ek=""):
@@ -98,13 +105,13 @@ s4 = ex.calistir(
     "olu sekil")
 kontrol("calisti (hata degil)", s4.basarili, s4.hata_izi)
 kontrol("politika ihlali uyarisi var",
-        any("olu sekil" in u for u in s4.uyarilar), s4.uyarilar)
+        any("dead shape" in u for u in s4.uyarilar), s4.uyarilar)
 
 print("6) acik belge yoksa duzgun mesaj")
 App.closeDocument(doc.Name)
 s5 = ex.calistir('doc.addObject("Part::Box", "X")', "belgesiz")
 kontrol("basarisiz", not s5.basarili)
-kontrol("anlasilir mesaj", "belge" in s5.hata_izi.lower(), s5.hata_izi)
+kontrol("anlasilir mesaj", "document" in s5.hata_izi.lower(), s5.hata_izi)
 
 
 print("7) mesajsiz istisnada ozet BOS KALMIYOR")
@@ -129,7 +136,7 @@ _iz_dolu = ('Traceback (most recent call last):\n'
 o2 = _hata_ozeti(_iz_dolu)
 kontrol("mesaji olan istisnada davranis DEGISMEDI",
         o2 == "RuntimeError: belge bulunamadi", o2)
-kontrol("bos izde comeliyor", _hata_ozeti("") == "hata", _hata_ozeti(""))
+kontrol("bos izde comeliyor", _hata_ozeti("") == "error", _hata_ozeti(""))
 
 # UCTAN UCA: belge kapali oldugu icin ex.calistir burada OCC'ye hic
 # ulasmiyordu; ozeti gercekten uretmek icin mesajsiz istisnayi kendimiz
@@ -143,7 +150,7 @@ s6 = ex2.calistir(
     'raise BosIstisna()\n', "mesajsiz istisna")
 print("   uctan uca ozet:", s6.ozet)
 kontrol("uctan uca: ozet sadece 'No error' degil",
-        s6.ozet.replace("HATA — ", "").strip() != "No error", s6.ozet)
+        s6.ozet.replace("ERROR — ", "").strip() != "No error", s6.ozet)
 kontrol("uctan uca: istisna tipi gorunuyor", "BosIstisna" in s6.ozet, s6.ozet)
 App.closeDocument(doc2.Name)
 
@@ -173,9 +180,9 @@ print("   cikti:", _c.strip().replace("\n", " | ")[:200])
 kontrol("'mesh degil, kontrol edilmedi' DEMIYOR",
         "kontrol edilmedi" not in _c, _c)
 kontrol("kati oldugunu ve mesh urettigini SOYLUYOR",
-        "kati" in _c and "mesh uretilip" in _c, _c)
-kontrol("gercek verdikt veriyor", "baskiya hazir" in _c, _c)
-kontrol("saglam kutu EVET cikiyor", "baskiya hazir = EVET" in _c, _c)
+        "solid" in _c and "was generated" in _c, _c)
+kontrol("gercek verdikt veriyor", "print-ready" in _c, _c)
+kontrol("saglam kutu EVET cikiyor", "print-ready = YES" in _c, _c)
 kontrol("doner deger de dogru", sonuc_k is True, sonuc_k)
 
 # Sekli olmayan nesne hala durustce reddediliyor.
@@ -185,7 +192,7 @@ _yakala2 = io.StringIO()
 with redirect_stdout(_yakala2):
     _baski_kontrol_yap(bos)
 kontrol("ne mesh ne kati olanda durustce duruyor",
-        "kontrol edilemedi" in _yakala2.getvalue(), _yakala2.getvalue())
+        "could not be checked" in _yakala2.getvalue(), _yakala2.getvalue())
 App.closeDocument(doc3.Name)
 
 print("N) asama dokumu — 17.1 saniyenin nereye gittigini soyleyen sey")
@@ -200,8 +207,8 @@ ex4.oturumu_ayarla("asama")
 s_h = ex4.calistir('doc.addObject("Part::Box", "Olculen")\n', "asama olcumu")
 kontrol("calisti", s_h.basarili, s_h.hata_izi)
 kontrol("asamalar dolduruldu", bool(s_h.asamalar), s_h.asamalar)
-for _ad in ("islem ac", "gozlemci bagla", "hazirla", "exec", "recompute",
-            "kapanis"):
+for _ad in ("open transaction", "attach observers", "prepare", "exec", "recompute",
+            "close"):
     kontrol("asama var: %s" % _ad, _ad in s_h.asamalar, sorted(s_h.asamalar))
 kontrol("asamalarin toplami sure_sn'ye esit",
         abs(sum(s_h.asamalar.values()) - s_h.sure_sn) < 0.01,
@@ -214,13 +221,13 @@ kontrol("hizli turda dokum bos", s_h.asama_metni() == "",
 from caddy.execution.executor import CalismaSonucu               # noqa: E402
 
 _yavas = CalismaSonucu(basarili=True, sure_sn=17.1, asamalar={
-    "islem ac": 0.01, "gozlemci bagla": 0.00, "hazirla": 0.30,
-    "exec": 16.70, "recompute": 0.08, "kapanis": 0.01})
+    "open transaction": 0.01, "attach observers": 0.00, "prepare": 0.30,
+    "exec": 16.70, "recompute": 0.08, "close": 0.01})
 _d = _yavas.asama_metni()
 kontrol("yavas turda dokum yaziliyor", bool(_d), _d)
-kontrol("en pahali asama BASTA", _d.startswith("exec 16.70 sn"), _d)
-kontrol("hazirla da gorunuyor", "hazirla 0.30 sn" in _d, _d)
-kontrol("gurultu asamalari elenmis", "gozlemci bagla" not in _d, _d)
+kontrol("en pahali asama BASTA", _d.startswith("exec 16.70 s"), _d)
+kontrol("hazirla da gorunuyor", "prepare 0.30 s" in _d, _d)
+kontrol("gurultu asamalari elenmis", "attach observers" not in _d, _d)
 
 # Patlayan kod: exec asamasi hic kaydedilmez ama toplam yine tutmali.
 s_p = ex4.calistir('raise ValueError("patlat")\n', "patlayan asama")
@@ -261,28 +268,29 @@ kontrol("ciktisi modele donuyor", "GECIS SAYISI 1" in (s_ck.cikti or ""),
 # istemde iki kez gidiyordu). Bastirma SESSIZ degil: olcum satiri soyluyor.
 kontrol("bildirilen gecis BULGU olarak tekrarlanmiyor",
         s_ck.dogrulama is not None
-        and not any("icinden geciyor" in str(b)
+        and not any("intersects" in str(b)
                     for b in s_ck.dogrulama.bulgular),
         [str(b) for b in (s_ck.dogrulama.bulgular if s_ck.dogrulama else [])])
 kontrol("bastirma dururstce yaziliyor",
         s_ck.dogrulama is not None
-        and any("zaten yazili" in o for o in s_ck.dogrulama.olcumler),
+        and any("already written" in o for o in s_ck.dogrulama.olcumler),
         s_ck.dogrulama.olcumler if s_ck.dogrulama else [])
 
 # Kayit TEK BLOKLUK: sonraki blok cakisma_kontrol cagirmazsa tarama yine
 # bulguyu yazar. Yoksa bir kez bildirilen cift sonsuza dek susardi.
 ex5.oturumu_ayarla("cakisma02")
-s_ck2 = ex5.calistir('doc.getObject("CB").Placement.Base.x = 4
-'
-                     'doc.recompute()
-', "cakisma tekrar")
+s_ck2 = ex5.calistir('doc.getObject("CB").Placement.Base.x = 4\n'
+                     'doc.recompute()\n', "cakisma tekrar")
 kontrol("sonraki blokta bulgu geri geliyor",
         s_ck2.dogrulama is not None
-        and any("icinden geciyor" in str(b)
+        and any("intersects" in str(b)
                 for b in s_ck2.dogrulama.bulgular),
         [str(b) for b in (s_ck2.dogrulama.bulgular if s_ck2.dogrulama else [])])
 App.closeDocument(doc5.Name)
 
 print("\n%d gecti, %d basarisiz" % (gecti, basarisiz))
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "_son_executor.txt"), "w", encoding="utf-8") as _f:
+    _f.write("\n".join(_SATIRLAR) + "\n")
 if basarisiz:
     sys.exit(1)

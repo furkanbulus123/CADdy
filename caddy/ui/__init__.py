@@ -1,1 +1,1 @@
-"""Arayuz. QtWidgets'a dokunan TEK paket burasi."""
+"""User interface. The ONLY package that touches QtWidgets."""

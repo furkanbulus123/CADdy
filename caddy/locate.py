@@ -1,12 +1,12 @@
-"""claude.exe'yi bulur.
+"""Finds claude.exe.
 
-Neden bu kadar ugras: PATH'teki `claude` Windows'ta genelde bir `.cmd` ya da
-`.ps1` shim'idir. Onu QProcess'e vermek `shell=True`/COMSPEC/tirnak isaretleri
-gibi bir dizi sorun aciyor. Ayni klasorde ya da npm paketinin icinde duran
-GERCEK `claude.exe`'yi bulup dogrudan onu calistiriyoruz.
+Why the effort: on Windows, `claude` on PATH is usually a `.cmd` or `.ps1`
+shim. Handing that to QProcess opens a string of problems (`shell=True`,
+COMSPEC, quoting). We find the REAL `claude.exe` next to it or inside the
+npm package and run that directly.
 
-Bulunan yol surec basina bir kez dogrulanip onbellege alinir (--version 1-2 sn
-suruyor, her tur odemeye degmez).
+The path found is verified once per process and cached (--version takes
+1-2 s, not worth paying on every turn).
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from pathlib import Path
 
 from . import log
 
-# Windows'ta konsol penceresi acilmasin
+# Do not open a console window on Windows
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 _onbellek: Path | None = None
@@ -32,7 +32,7 @@ class BulunamadiHatasi(RuntimeError):
 def _adaylar() -> list[Path]:
     a: list[Path] = []
 
-    # 1) Kullanici elle verdiyse en oncelikli
+    # 1) Set by the user by hand: highest priority
     try:
         from . import config
 
@@ -42,18 +42,18 @@ def _adaylar() -> list[Path]:
     except Exception:
         pass
 
-    # 2) npm global kurulumu — bu makinede buradan geliyor
+    # 2) npm global install
     appdata = os.environ.get("APPDATA")
     if appdata:
         a.append(Path(appdata) / "npm" / "node_modules" / "@anthropic-ai"
                  / "claude-code" / "bin" / "claude.exe")
 
-    # 3) Native installer'in tipik yeri
+    # 3) Typical location of the native installer
     home = os.environ.get("USERPROFILE")
     if home:
         a.append(Path(home) / ".local" / "bin" / "claude.exe")
 
-    # 4) PATH'teki shim — .cmd/.ps1 ise kardesi .exe'yi dene
+    # 4) The shim on PATH — if it is .cmd/.ps1, try its sibling .exe
     yol = shutil.which("claude")
     if yol:
         p = Path(yol)
@@ -61,11 +61,11 @@ def _adaylar() -> list[Path]:
             a.append(p)
         else:
             a.append(p.with_suffix(".exe"))
-            # npm shim'i genelde node_modules'un yanindadir
+            # the npm shim usually sits next to node_modules
             a.append(p.parent / "node_modules" / "@anthropic-ai"
                      / "claude-code" / "bin" / "claude.exe")
 
-    # Tekrarlari sirayi bozmadan at
+    # Drop duplicates while keeping the order
     gorulen, temiz = set(), []
     for p in a:
         k = str(p).lower()
@@ -76,7 +76,7 @@ def _adaylar() -> list[Path]:
 
 
 def _dogrula(exe: Path) -> str | None:
-    """--version calistirir; surum metnini ya da None dondurur."""
+    """Runs --version; returns the version text or None."""
     try:
         s = subprocess.run(
             [str(exe), "--version"],
@@ -84,7 +84,7 @@ def _dogrula(exe: Path) -> str | None:
             timeout=30, creationflags=_NO_WINDOW,
         )
     except Exception as e:
-        log.ayik(f"dogrulama basarisiz {exe}: {e}")
+        log.ayik(f"verification failed {exe}: {e}")
         return None
     if s.returncode != 0:
         return None
@@ -92,7 +92,7 @@ def _dogrula(exe: Path) -> str | None:
 
 
 def claude_exe(yeniden: bool = False) -> Path:
-    """Dogrulanmis claude.exe yolunu dondurur. Bulunamazsa BulunamadiHatasi."""
+    """Returns the verified claude.exe path. Raises BulunamadiHatasi if not found."""
     global _onbellek, _onbellek_denendi
 
     if yeniden:
@@ -108,25 +108,25 @@ def claude_exe(yeniden: bool = False) -> Path:
             continue
         surum = _dogrula(aday)
         if surum:
-            log.bilgi(f"claude bulundu: {aday}  ({surum})")
+            log.bilgi(f"claude found: {aday}  ({surum})")
             _onbellek = aday
             return aday
-        log.ayik(f"aday calisti ama surum vermedi: {aday}")
+        log.ayik(f"candidate ran but gave no version: {aday}")
 
     raise BulunamadiHatasi(_MESAJ)
 
 
 _MESAJ = (
-    "claude.exe bulunamadi.\n"
-    "  Claude Code kurulu mu?  Terminalde:  claude --version\n"
-    "  Kuruluysa ama bulunamiyorsa, tam yolu ayarlara yaz:\n"
-    "  Edit > Preferences > CADdy > claude.exe yolu"
+    "claude.exe not found.\n"
+    "  Is Claude Code installed?  In a terminal:  claude --version\n"
+    "  If it is installed but not found, set the full path in:\n"
+    "  Edit > Preferences > CADdy > claude.exe path"
 )
 
 
 def surum() -> str:
-    """Kullaniciya gosterilecek surum metni; bulunamazsa aciklama."""
+    """Version text to show the user; an explanation if not found."""
     try:
-        return _dogrula(claude_exe()) or "bilinmiyor"
+        return _dogrula(claude_exe()) or "unknown"
     except BulunamadiHatasi:
-        return "bulunamadi"
+        return "not found"

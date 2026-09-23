@@ -1,14 +1,14 @@
-"""Gunluk klasorunu okunabilir bir KAYIT LISTESINE cevirir.
+"""Turns the log folder into a readable HISTORY LIST.
 
-Neden ayri modul: kutuphane dugmesi eskiden yalnizca klasoru aciyordu —
-kullanicinin sikayeti tam buydu: "logdan baslatma yok galiba, sadece logu
-goruyorum, o baglamda FreeCAD'de baslatamiyorum". Bir sohbeti SURDUREBILMEK
-icin once gunluk basligindaki oturum kimligini okumak gerekiyor; okuma isi
-Qt'siz durursa bassiz test edilebilir (MANTIK §12: ui disinda Qt yok).
+Why a separate module: the history button used to only open the folder —
+which was exactly the user's complaint: "there's no starting from a log, I
+can only see the log, I can't continue it in FreeCAD". To RESUME a chat we
+first have to read the session id from the log header; keeping that reading
+Qt-free makes it testable headless (layer rule: no Qt outside ui).
 
-Surdurme, `claude --resume <oturum>` uzerinden yurur. Bu, transport'un
-zaten kullandigi yol (surec olunce sonraki tur boyle devam ediyor); yeni
-olan tek sey, kimligi ESKI bir gunlukten alabilmek.
+Resuming goes through `claude --resume <session>`. That is the path
+transport already uses (when the process dies the next turn continues that
+way); the only new thing is being able to take the id from an OLD log.
 """
 
 from __future__ import annotations
@@ -18,21 +18,21 @@ import os
 import re
 from pathlib import Path
 
-_OTURUM = re.compile(r"^oturum\s*:\s*(\S+)", re.MULTILINE)
+_OTURUM = re.compile(r"^session\s*:\s*(\S+)", re.MULTILINE)
 _MODEL = re.compile(r"^model\s*:\s*(.+?)\s*$", re.MULTILINE)
-_BASLAMA = re.compile(r"^baslama\s*:\s*(\S+)", re.MULTILINE)
-_BELGE = re.compile(r"^belge\s*:\s*(.+?)\s*$", re.MULTILINE)
-_DOSYA = re.compile(r"^dosya\s*:\s*(.+?)\s*$", re.MULTILINE)
-_KULLANICI = re.compile(r"^--- KULLANICI\b.*$", re.MULTILINE)
+_BASLAMA = re.compile(r"^started\s*:\s*(\S+)", re.MULTILINE)
+_BELGE = re.compile(r"^document\s*:\s*(.+?)\s*$", re.MULTILINE)
+_DOSYA = re.compile(r"^file\s*:\s*(.+?)\s*$", re.MULTILINE)
+_KULLANICI = re.compile(r"^--- USER\b.*$", re.MULTILINE)
 
-# Basligi okumak icin dosyanin tamamini okumaya gerek yok; ilk mesaji da
-# yakalayacak kadar bir parca yetiyor. Olculdu: en buyuk gunluk 195 KB,
-# hepsini okumak listeyi gereksiz yavaslatirdi.
+# No need to read the whole file for the header; a chunk big enough to also
+# catch the first message is enough. Measured: the largest log was 195 KB,
+# reading all of it would slow the list down for nothing.
 _ONBELLEK_BAYT = 4096
 
 
 class Kayit:
-    """Tek bir gunluk dosyasinin ozeti."""
+    """Summary of a single log file."""
 
     def __init__(self, dosya: Path, oturum: str, model: str, baslama: str,
                  ilk_mesaj: str, boyut: int, tur: int,
@@ -44,32 +44,33 @@ class Kayit:
         self.ilk_mesaj = ilk_mesaj
         self.boyut = boyut
         self.tur = tur
-        # DIKKAT: `dosya` GUNLUK dosyasi, `belge_yolu` FreeCAD belgesidir.
-        # Ikisi ayri sey; adlarin karismasi S14'te en kolay yapilacak hata.
+        # CAREFUL: `dosya` is the LOG file, `belge_yolu` is the FreeCAD
+        # document. Two different things; mixing up the names is the
+        # easiest mistake to make here.
         self.belge = belge
         self.belge_yolu = belge_yolu
 
     @property
     def surdurulebilir(self) -> bool:
-        """Oturum kimligi yoksa `--resume` yapilamaz — dugme kapali olsun."""
-        return bool(self.oturum) and self.oturum != "oturumsuz"
+        """Without a session id `--resume` is impossible — the button stays disabled."""
+        return bool(self.oturum) and self.oturum != "nosession"
 
     def etiket(self) -> str:
         tarih = self.baslama.replace("T", " ")[:16] or self.dosya.stem
-        ozet = self.ilk_mesaj or "(mesaj yok)"
+        ozet = self.ilk_mesaj or "(no messages)"
         if len(ozet) > 60:
             ozet = ozet[:57] + "…"
-        return "%s · %d tur · %s" % (tarih, self.tur, ozet)
+        return "%s · %d turns · %s" % (tarih, self.tur, ozet)
 
     def __repr__(self) -> str:                                   # pragma: no cover
         return "<Kayit %s %s>" % (self.dosya.name, self.oturum[:8])
 
 
 def _ilk_deger(desen, metin: str, yer_tutucu: str = "") -> str:
-    """Basliktaki ILK eslesmeyi dondurur; yer tutucu ise bos sayar.
+    """Returns the FIRST match in the header; a placeholder counts as empty.
 
-    Ilk eslesme, cunku baslik dosyanin tepesinde: bir kullanici mesaji
-    "dosya : ..." diye baslarsa onu degil basligi almaliyiz.
+    First match, because the header is at the top of the file: if a user
+    message starts with "file : ...", we want the header, not that.
     """
     m = desen.search(metin)
     if not m:
@@ -79,7 +80,7 @@ def _ilk_deger(desen, metin: str, yer_tutucu: str = "") -> str:
 
 
 def _ilk_kullanici_mesaji(metin: str) -> str:
-    """Basliktan sonraki ilk KULLANICI blogunun ilk satiri."""
+    """First line of the first USER block after the header."""
     m = _KULLANICI.search(metin)
     if not m:
         return ""
@@ -91,7 +92,7 @@ def _ilk_kullanici_mesaji(metin: str) -> str:
 
 
 def kok(kok_dizin: Path | None = None) -> Path:
-    """Gunluk kokunu bulur — `sohbet_log` ile AYNI kural (test koku dahil)."""
+    """Finds the log root — SAME rule as `sohbet_log` (including the test root)."""
     if kok_dizin is not None:
         return Path(kok_dizin)
     cevre = os.environ.get("CADDY_LOG_DIR", "").strip()
@@ -103,10 +104,11 @@ def kok(kok_dizin: Path | None = None) -> Path:
 
 
 def listele(kok_dizin: Path | None = None, azami: int = 60) -> list:
-    """Gunlukleri YENIDEN ESKIYE dogru siralayip ozetler.
+    """Summarises the logs, NEWEST FIRST.
 
-    Okunamayan dosya listeyi dusurmez, atlanir: bir bozuk dosya yuzunden
-    kutuphaneyi hic acamamak, en kotu davranis olurdu.
+    An unreadable file does not break the list, it is skipped: not being
+    able to open the history at all because of one corrupt file would be
+    the worst behaviour.
     """
     d = kok(kok_dizin)
     if not d.is_dir():
@@ -123,8 +125,8 @@ def listele(kok_dizin: Path | None = None, azami: int = 60) -> list:
             model = (_MODEL.search(bas).group(1) if _MODEL.search(bas) else "")
             baslama = (_BASLAMA.search(bas).group(1) if _BASLAMA.search(bas)
                        else "")
-            belge = _ilk_deger(_BELGE, bas, "(bilinmiyor)")
-            belge_yolu = _ilk_deger(_DOSYA, bas, "(kaydedilmemis)")
+            belge = _ilk_deger(_BELGE, bas, "(unknown)")
+            belge_yolu = _ilk_deger(_DOSYA, bas, "(unsaved)")
             with open(p, encoding="utf-8", errors="replace") as f:
                 tam = f.read()
             kayitlar.append(Kayit(
@@ -140,29 +142,29 @@ def listele(kok_dizin: Path | None = None, azami: int = 60) -> list:
 
 
 def son_mesajlar(dosya: Path, adet: int = 6) -> list:
-    """Panelde gostermek icin son N (rol, metin) ciftini dondurur.
+    """Returns the last N (role, text) pairs to show in the panel.
 
-    Surdururken sohbet penceresi BOS kalmasin diye: kullanici eski isine
-    donduğunde ne konusuldugunu gormeli. Tam gunlugu yeniden cizmiyoruz —
-    kod bloklari, dogrulama raporlari ve yedek satirlari o dosyada duruyor;
-    burada amac hatirlatmak, arsivi kopyalamak degil.
+    So the chat window is not EMPTY when resuming: a user returning to old
+    work should see what was said. We do not redraw the whole log — code
+    blocks, verification reports and backup lines are in that file; the
+    goal here is a reminder, not a copy of the archive.
     """
     try:
         metin = open(dosya, encoding="utf-8", errors="replace").read()
     except Exception:                                            # noqa: BLE001
         return []
     bloklar = []
-    desen = re.compile(r"^--- (KULLANICI|AI)\b.*?-*\s*$", re.MULTILINE)
+    desen = re.compile(r"^--- (USER|AI)\b.*?-*\s*$", re.MULTILINE)
     isaretler = list(desen.finditer(metin))
     for i, m in enumerate(isaretler):
         son = isaretler[i + 1].start() if i + 1 < len(isaretler) else len(metin)
         govde = metin[m.end():son].strip()
-        # Kod blogu ve arac ciktisi ozetlenerek geciyor: hatirlatma metni
-        # olacak, yeniden calistirilacak bir sey degil.
+        # Code blocks and tool output are summarised away: this is reminder
+        # text, not something to run again.
         govde = re.split(r"^```", govde, maxsplit=1, flags=re.MULTILINE)[0]
         govde = govde.strip()
         if govde:
-            rol = "kullanici" if m.group(1) == "KULLANICI" else "ai"
+            rol = "kullanici" if m.group(1) == "USER" else "ai"
             bloklar.append((rol, govde))
     return bloklar[-adet:]
 
@@ -172,22 +174,23 @@ def bugun() -> str:
 
 
 # ---------------------------------------------------------------------------
-# BELGE ESLESTIRME (PLAN S14)
+# DOCUMENT MATCHING
 #
-# Sorun kullanicinin sozuyle: "kaldigi yerden yanlis basliyor... tamam dogru
-# chati duzeltiyor ama kaldigi model o degil." Sohbet `--resume` ile geliyor,
-# BELGE gelmiyor; kod o an acik olan belgede kosuyor. `doc.getObject("Sasi")`
-# None donerse zaten patlar ve zararsizdir — asil tehlike adlarin CAKISTIGI
-# durum: iki projede de `Kutu`, `Govde`, `Taban` olmasi hic uzak degil, ve o
-# zaman kod sessizce yanlis modeli degistirir.
+# The problem in the user's words: "it resumes in the wrong place... ok it
+# gets the right chat but it's not the model it left off at." The chat comes
+# back with `--resume`, the DOCUMENT does not; the code runs in whatever
+# document is open. If `doc.getObject("Chassis")` returns None it fails
+# anyway and is harmless — the real danger is when names COLLIDE: two
+# projects both having `Box`, `Body`, `Base` is not remote at all, and then
+# the code silently changes the wrong model.
 #
-# KIMLIK DOSYA YOLUDUR. Olculdu (freecadcmd 1.1.3, 2026-08-31): `ProbeAc`
-# adiyla acilan belge kaydedilip kapatilip yeniden acilinca `caddy_probe_ac`
-# oldu — ic ad DOSYA ADINDAN yeniden turetiliyor, oturumlar arasi sabit
-# degil. Ad yalnizca insana gosterilir; karsilastirma yolla yapilir.
-# Ayni olcumde: zaten acik bir dosyayi `openDocument` ile acmak IKINCI KOPYA
-# URETMIYOR, ayni nesneyi donduruyor (`d2 is d`), ve olmayan dosya OSError
-# veriyor. Yani asagidaki iki cagri da guvenli.
+# THE IDENTITY IS THE FILE PATH. Measured (freecadcmd 1.1.3): a document
+# opened as `ProbeAc`, saved, closed and reopened became `caddy_probe_ac` —
+# the internal name is RE-derived from the FILE NAME, it is not stable
+# across sessions. The name is only shown to humans; comparison is by path.
+# Same measurement: opening an already open file with `openDocument` does
+# NOT create a SECOND COPY, it returns the same object (`d2 is d`), and a
+# missing file raises OSError. So both calls below are safe.
 # ---------------------------------------------------------------------------
 
 DURUM_BILINMIYOR = "bilinmiyor"
@@ -198,7 +201,7 @@ DURUM_KAYDEDILMEMIS = "kaydedilmemis"
 
 
 def _ayni_yol(a: str, b: str) -> bool:
-    """Windows'ta buyuk/kucuk harf ve `..` farki ayni dosyayi ayirmasin."""
+    """On Windows, case and `..` differences must not separate the same file."""
     try:
         return (os.path.normcase(os.path.abspath(str(a)))
                 == os.path.normcase(os.path.abspath(str(b))))
@@ -207,7 +210,7 @@ def _ayni_yol(a: str, b: str) -> bool:
 
 
 def _acik_belgeyi_bul(yol: str):
-    """Yolu eslesen ACIK belgeyi dondurur, yoksa None."""
+    """Returns the OPEN document whose path matches, else None."""
     if not yol:
         return None
     try:
@@ -222,11 +225,11 @@ def _acik_belgeyi_bul(yol: str):
 
 
 def _ic_ad(belge: str) -> str:
-    """`belge` satirindan FreeCAD ic adini cikarir.
+    """Extracts the FreeCAD internal name from the `document` line.
 
-    Baslikta `Etiket (IcAd)` bicimi var (ikisi ayrildiginda); ayni ise tek
-    kelime yaziliyor. Ic ad gerekli cunku YEDEK dosyalari `doc.Name` ile
-    adlandiriliyor (`executor._yedek_al`).
+    The header uses `Label (InternalName)` when the two differ, a single
+    word when they are the same. The internal name is needed because BACKUP
+    files are named with `doc.Name` (`executor._yedek_al`).
     """
     d = (belge or "").strip()
     if d.endswith(")") and "(" in d:
@@ -235,12 +238,13 @@ def _ic_ad(belge: str) -> str:
 
 
 def _son_yedek(belge: str) -> str:
-    """Bu belgeye ait EN YENI yedek kopyanin yolu; yoksa bos.
+    """Path of the NEWEST backup copy of this document; empty if none.
 
-    Yedek bir ACMA hedefi DEGIL, yalnizca bilgi satiri. `_yedek_al` kopyayi
-    ilk AI degisikliginden ONCE aliyor — yani icerigi isin BASINDAKI hal.
-    Onu "modelin geldi" diye acmak, yapilan her seyi silinmis gostermek
-    olurdu; sessiz yanlis cevabin ta kendisi.
+    A backup is NOT something to OPEN, only an information line.
+    `_yedek_al` takes the copy BEFORE the first AI change — so its content
+    is the state at the START of the work. Opening it as "your model is
+    back" would show everything done as deleted; the very definition of a
+    silent wrong answer.
     """
     ad = _ic_ad(belge)
     if not ad:
@@ -257,10 +261,11 @@ def _son_yedek(belge: str) -> str:
 
 
 def belge_durumu(kayit) -> dict:
-    """Surdurulen sohbetin belgesi su an ne durumda — dort daldan biri.
+    """What state the resumed chat's document is in right now — one of four branches.
 
-    Karar VERMEZ, yalnizca durumu ve insan cumlesini uretir; acmak ui'nin
-    isi (ve kullaniciya sorulur). Boylece bu fonksiyon Qt'siz test edilir.
+    It makes NO decision, it only produces the state and a human sentence;
+    opening is the UI's job (and the user is asked). That keeps this
+    function testable without Qt.
     """
     yol = (getattr(kayit, "belge_yolu", "") or "").strip()
     ad = (getattr(kayit, "belge", "") or "").strip()
@@ -269,19 +274,19 @@ def belge_durumu(kayit) -> dict:
 
     if not yol:
         if not ad:
-            # Eski gunlukler (baslikta belge satiri yok). Uydurmuyoruz:
-            # bilmedigimiz seyi uyari diye yazmak, gercek uyarilari da
-            # degersizlestirir.
+            # Old logs (no document line in the header). We do not make
+            # things up: writing what we do not know as a warning would
+            # devalue the real warnings too.
             return sonuc
         sonuc["durum"] = DURUM_KAYDEDILMEMIS
         sonuc["yedek"] = _son_yedek(ad)
         sonuc["mesaj"] = (
-            "Bu sohbet “%s” belgesinde geçti ama o belge hiç "
-            "kaydedilmemişti — geri getirilecek dosya yok. Kod şu an açık "
-            "olan belgede çalışır." % ad)
+            "This chat worked on “%s”, but that document was never "
+            "saved — there is no file to bring back. Code will run in the "
+            "currently open document." % ad)
         if sonuc["yedek"]:
-            sonuc["mesaj"] += ("\nİşin BAŞINDAKI hâlin bir kopyası duruyor: "
-                               "%s (sohbetin sonundaki hâli değil.)"
+            sonuc["mesaj"] += ("\nA copy of the state at the START is kept: "
+                               "%s (not the state at the end of the chat.)"
                                % sonuc["yedek"])
         return sonuc
 
@@ -289,37 +294,37 @@ def belge_durumu(kayit) -> dict:
     if doc is not None:
         sonuc["durum"] = DURUM_ACIK
         sonuc["belge"] = doc
-        sonuc["mesaj"] = "Sohbetin belgesi (%s) zaten açık." % (
+        sonuc["mesaj"] = "The chat's document (%s) is already open." % (
             ad or Path(yol).name)
         return sonuc
 
     if not Path(yol).is_file():
         sonuc["durum"] = DURUM_KAYIP
         sonuc["mesaj"] = (
-            "Bu sohbet şu dosyada çalışıyordu ama dosya orada değil:\n%s\n"
-            "Taşınmış ya da silinmiş olabilir. Kod şu an açık olan belgede "
-            "çalışır." % yol)
+            "This chat worked on this file, but it is not there anymore:\n%s\n"
+            "It may have been moved or deleted. Code will run in the "
+            "currently open document." % yol)
         return sonuc
 
     sonuc["durum"] = DURUM_KAPALI
-    sonuc["mesaj"] = ("Bu sohbet “%s” belgesinde çalışıyordu:\n%s"
+    sonuc["mesaj"] = ("This chat worked on “%s”:\n%s"
                       % (ad or Path(yol).name, yol))
     return sonuc
 
 
 def belgeyi_ac(yol: str):
-    """Belgeyi acar (zaten acikse ayni nesneyi dondurur) ve etkin yapar.
+    """Opens the document (returns the same object if already open) and activates it.
 
-    Donen: (belge, hata_metni). Belge None ise hata metni doludur — panelde
-    gosterilecek; sessizce yutmak, kullanicinin "acildi mi acilmadi mi"
-    bilmemesi demek olurdu.
+    Returns: (document, error_text). If the document is None the error text
+    is filled — it is shown in the panel; swallowing it would leave the user
+    not knowing whether it opened or not.
     """
     try:
         import FreeCAD as App
 
         doc = App.openDocument(str(yol))
     except Exception as e:                                       # noqa: BLE001
-        return None, "Belge açılamadı: %s" % e
+        return None, "Could not open the document: %s" % e
     try:
         App.setActiveDocument(doc.Name)
         App.ActiveDocument = doc
@@ -328,12 +333,12 @@ def belgeyi_ac(yol: str):
     try:
         import FreeCADGui as Gui
 
-        # GUI'de her belge kendi sekmesi; acmak acik belgeni KAPATMAZ,
-        # yanina sekme gelir. Odagi da oraya tasiyoruz ki kullanici
-        # bastigi seyin sonucunu gorsun.
+        # In the GUI every document has its own tab; opening does NOT close
+        # your open document, a tab is added next to it. We move the focus
+        # there too so the user sees the result of what they clicked.
         Gui.ActiveDocument = Gui.getDocument(doc.Name)
     except Exception:                                            # noqa: BLE001
-        # Bassiz calisma (freecadcmd) ve testler buraya duser — belge yine
-        # de acildi, hata degil.
+        # Headless runs (freecadcmd) and tests land here — the document
+        # still opened, this is not an error.
         pass
     return doc, ""

@@ -1,4 +1,4 @@
-"""FreeCAD komutlari (arac cubugu / menu girdileri)."""
+"""FreeCAD commands (toolbar / menu entries)."""
 
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ class PaneliGoster:
     def GetResources(self):
         return {
             "Pixmap": _ikon("caddy.svg"),
-            "MenuText": "CADdy panelini aç",
-            "ToolTip": "AI yardımcı panelini açar",
+            "MenuText": "Open CADdy panel",
+            "ToolTip": "Opens the AI assistant panel",
             "Accel": "Ctrl+Shift+A",
         }
 
@@ -40,14 +40,14 @@ class SonAiDegisikliginiGeriAl:
     def GetResources(self):
         return {
             "Pixmap": _ikon("caddy-undo.svg"),
-            "MenuText": "Son AI değişikliğini geri al",
-            "ToolTip": "AI'ın yaptığı son işlemi tek adımda geri alır",
+            "MenuText": "Undo last AI change",
+            "ToolTip": "Undoes the AI's last operation in one step",
         }
 
     def Activated(self):
-        # Panel aciksa ONUN yolundan git: orada namespace temizligi ve
-        # sohbete bildirim de var. Bayat baglama sert cokme uretiyor
-        # (bkz. executor.namespace_temizle), o yuzden bu onemli.
+        # If the panel is open, go through IT: it also clears the namespace
+        # and notifies the chat. Stale bindings cause hard crashes
+        # (see executor.namespace_temizle), so this matters.
         try:
             from PySide import QtWidgets
 
@@ -59,24 +59,24 @@ class SonAiDegisikliginiGeriAl:
                 dock.widget().geri_al()
                 return
         except Exception as e:                                   # noqa: BLE001
-            log.uyari(f"panel uzerinden geri alinamadi: {e}")
+            log.uyari(f"could not undo through the panel: {e}")
 
-        # Panel kapali: yalin yol. Kural AYNI — tepede AI'in isi yoksa
-        # DOKUNMA. Eskiden burada "yine de geri aliniyor" yaziyordu ve
-        # kullanicinin kendi son islemini siliyordu; komutun adi "Son AI
-        # degisikligini geri al" oldugu icin bu bir yalandi.
+        # Panel closed: the plain path. Same rule — if the top of the stack
+        # is not the AI's work, DO NOT TOUCH it. This used to say "undoing
+        # anyway" and deleted the user's own last operation; with the
+        # command named "Undo last AI change" that was a lie.
         doc = App.ActiveDocument
         if doc is None or not doc.UndoNames:
-            log.uyari("geri alinacak bir sey yok")
+            log.uyari("nothing to undo")
             return
         ad = doc.UndoNames[0]
         if not ad.startswith("AI:"):
-            log.uyari(f"son islem AI'a ait degil ({ad}) — geri ALINMADI. "
-                      f"Kendi degisikligini Ctrl+Z ile geri alabilirsin.")
+            log.uyari(f"the last operation is not the AI's ({ad}) — NOT undone. "
+                      f"Use Ctrl+Z to undo your own change.")
             return
         doc.undo()
         doc.recompute()
-        log.bilgi(f"geri alindi: {ad}")
+        log.bilgi(f"undone: {ad}")
 
     def IsActive(self):
         doc = App.ActiveDocument

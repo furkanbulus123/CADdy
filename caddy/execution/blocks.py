@@ -1,9 +1,9 @@
-"""Modelin yanitindan kod bloklarini ayiklar.
+"""Extracts code blocks from the model's reply.
 
-Sozlesme: ```freecad-python ... ```
-Duz ```python de kabul edilir ama `guvenilir=False` isaretlenir; arayuz bunu
-sari rozetle gosterir. Boylece model sozlesmeye uymadiginda sessizce degil,
-gorunur bicimde tolere etmis oluruz.
+Contract: ```freecad-python ... ```
+Plain ```python is accepted too, but marked `guvenilir=False`; the UI shows
+it with a yellow badge. So when the model breaks the contract we tolerate it
+visibly, not silently.
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-# ``` ya da ~~~ ile acilan, bilgi dizesi olan bloklar.
-# Kapanis ayni karakterden en az acilis kadar olmali (CommonMark).
+# Blocks opened with ``` or ~~~ and carrying an info string.
+# The closing fence must use the same character, at least as long (CommonMark).
 _BLOK = re.compile(
     r"^(?P<cit>`{3,}|~{3,})[ \t]*(?P<bilgi>[^\n]*)\n"
     r"(?P<govde>.*?)"
@@ -28,7 +28,7 @@ _YEDEK_ETIKETLER = ("python", "py")
 class KodBloku:
     kod: str
     baslik: str = ""
-    guvenilir: bool = True     # sozlesmeye uygun etiketle mi geldi
+    guvenilir: bool = True     # did it come with the contract's tag
 
     @property
     def bos_mu(self) -> bool:
@@ -36,7 +36,7 @@ class KodBloku:
 
 
 def _baslik_cikar(bilgi: str) -> str:
-    """`title="..."` varsa onu, yoksa bos dondurur."""
+    """Returns `title="..."` if present, otherwise an empty string."""
     m = re.search(r'title\s*=\s*"([^"]*)"', bilgi)
     if m:
         return m.group(1).strip()
@@ -45,7 +45,7 @@ def _baslik_cikar(bilgi: str) -> str:
 
 
 def ayikla(metin: str) -> tuple[str, list[KodBloku]]:
-    """(kodsuz duz metin, bloklar) dondurur."""
+    """Returns (plain text without code, blocks)."""
     bloklar: list[KodBloku] = []
     parcalar: list[str] = []
     son = 0
@@ -60,7 +60,7 @@ def ayikla(metin: str) -> tuple[str, list[KodBloku]]:
         elif etiket in _YEDEK_ETIKETLER:
             bloklar.append(KodBloku(govde, _baslik_cikar(bilgi), False))
         else:
-            continue  # baska dilde blok — duz metnin parcasi olarak kalsin
+            continue  # block in another language — keep it as part of the text
 
         parcalar.append(metin[son:m.start()])
         son = m.end()

@@ -1,42 +1,45 @@
-"""Modelin kod icinden cagirabildigi OLCUM yardimcilari.
+"""MEASUREMENT helpers the model can call from its code.
 
-NEDEN VAR. Kullanicinin sozu: "olcmesi cok kritik, kullanici surekli
-olcemez" ve "caddy direkt olcse daha iyi olur". Gunluk incelemesi
-(2026-08-21) iki ayri sorunu ayirmisti:
+WHY THEY EXIST. The user's words: "measuring is very critical, the user
+cannot keep measuring" and "it would be better if caddy measured directly".
+A log review had separated two different problems:
 
-  1. GERI OKUMA — model olcuyu zaten hesapliyor, geri getiremiyordu.
-     print kanaliyla kapandi.
-  2. GERCEK OLCME — mesh'te yuz/kenar YOKTUR, yalnizca ucgen vardir.
-     "Agiz capi ne kadar" mesh'te HESAPLANMAK zorunda.
+  1. READING BACK — the model already computed a dimension but could not
+     bring it back. Closed by the print channel.
+  2. REAL MEASURING — a mesh has NO faces/edges, only triangles.
+     "What is the rim diameter" HAS TO BE COMPUTED on a mesh.
 
-HAZIR KOD KULLANILIYOR, ELLE GEOMETRI YAZILMIYOR.
-Kullanicinin ikinci uyarisi: "olcum cok zor bir sey, arastir, var olan
-kodlar varsa ekle". Arastirildi ve OLCULDU — hepsi zaten elimizde:
+EXISTING CODE IS USED, NO HAND-WRITTEN GEOMETRY.
+The user's second warning: "measuring is very hard, research it, add
+existing code if there is any". It was researched and MEASURED — all of it
+was already at hand:
 
-  * `Measure.Measurement` (FreeCAD'in KENDI olcum motoru) ARAYUZSUZ
-    calisiyor: radius/area/length/angle/delta/lineLineDistance/
-    planePlaneDistance. Olculdu: bir delik yuzunde radius() -> 1.7 tam.
-    (App.MeasureManager ise konsolda BOS — tipleri GUI kaydediyor,
-    o yol kullanilamiyor.)
-  * `Shape.distToShape` — iki kati arasi EN KISA mesafe, temas noktalariyla.
-  * `Mesh.foraminate(taban, yon)` — bir isinin mesh'i deldigi TUM noktalar.
-    Duvar kalinliginin sanayi standardi yontemi (trimesh'in 'ray' yontemi
-    de budur). Olculdu: 24 acida tarama 0.010 sn.
-  * `Mesh.crossSections` / `Shape.slice` — gercek kesit. Koselere BAGLI
-    DEGIL (bkz. _kesit_noktalari, testte yakalanan hata).
-  * `Mesh.getEigenSystem` / `Shape.optimalBoundingBox` — nesnenin KENDI
-    eksenleri. Yatik bir nesne icin "yukseklik" ancak boyle dogru olcuyor.
-  * numpy 1.26 + scipy 1.16 FreeCAD'in icinde VAR (olculdu). scipy'nin
-    cKDTree'si mesh-mesh mesafeyi 3542x3542 nokta icin 0.032 sn'de
-    veriyor; kaba kuvvet ayni is icin 3.9 sn suruyordu (120 kat).
-  * Taubin cember uydurma (numpy, 15 satir) — noktadan cap cikarmanin
-    literaturdeki standart yolu. Merkezi ortalamayla bulmak KULPLU bir
-    kesitte kayiyor: olculdu, dogru merkez (5,-3) iken ortalama (6.30,-3),
-    Taubin (5.80,-3), aykiri nokta atildiktan sonra tam.
+  * `Measure.Measurement` (FreeCAD's OWN measuring engine) works WITHOUT a
+    GUI: radius/area/length/angle/delta/lineLineDistance/
+    planePlaneDistance. Measured: radius() -> exactly 1.7 on a hole face.
+    (App.MeasureManager, however, is EMPTY in the console — the GUI
+    registers its types, so that path is unusable.)
+  * `Shape.distToShape` — the SHORTEST distance between two solids, with
+    contact points.
+  * `Mesh.foraminate(base, dir)` — ALL points where a ray pierces the mesh.
+    The industry-standard way to get wall thickness (trimesh's 'ray' method
+    is the same). Measured: a 24-angle sweep in 0.010 s.
+  * `Mesh.crossSections` / `Shape.slice` — a real section. NOT DEPENDENT on
+    vertices (see _kesit_noktalari, a bug caught in testing).
+  * `Mesh.getEigenSystem` / `Shape.optimalBoundingBox` — the object's OWN
+    axes. For a tilted object "height" is only correct this way.
+  * numpy 1.26 + scipy 1.16 SHIP with FreeCAD (measured). scipy's cKDTree
+    gives mesh-mesh distance for 3542x3542 points in 0.032 s; brute force
+    took 3.9 s for the same job (120x).
+  * Taubin circle fitting (numpy, 15 lines) — the standard way in the
+    literature to get a diameter from points. Finding the centre by
+    averaging drifts on a section WITH A HANDLE: measured, true centre
+    (5,-3), average (6.30,-3), Taubin (5.80,-3), exact after dropping an
+    outlier.
 
-Hepsi print ediyor: cikti otomatik olarak modele donuyor.
+They all print: the output goes back to the model automatically.
 
-KATMAN KURALI (MANTIK 12): burada Qt YOK.
+LAYER RULE: no Qt here.
 """
 
 from __future__ import annotations
@@ -47,7 +50,7 @@ import FreeCAD as App
 
 
 def _np():
-    """numpy — yoksa None. Olcumun tamami buna bagli olmamali."""
+    """numpy — None if missing. Measuring as a whole must not depend on it."""
     try:
         import numpy
         return numpy
@@ -56,13 +59,13 @@ def _np():
 
 
 def _sayi(x) -> str:
-    """Insanin okuyacagi sayi. BILIMSEL GOSTERIM URETMEZ.
+    """A number for humans. NEVER PRODUCES SCIENTIFIC NOTATION.
 
-    OLCULDU (LOG/2026-08-28_c503a8a4.txt): bulgu satiri "ortak hacim
-    5.791e+04 mm3" diye ciktı ve model onu "kasitli baglanti gecmesi"
-    diye gecti. Ayni sayi "57906 mm3" yazilsaydi ampulun tamaminin
-    gomulu oldugu daha gorunur olurdu. `%.4g` 10 000'den sonra ussel
-    gosterime geciyordu; CAD'de mm3 degerleri rutin olarak orada.
+    MEASURED: a finding line came out as "common volume 5.791e+04 mm3" and
+    the model waved it through as "an intentional joint overlap". Written
+    as "57906 mm3", it would have been far more visible that the entire
+    bulb was buried. `%.4g` switched to exponential notation above 10 000;
+    in CAD, mm3 values routinely live there.
     """
     try:
         v = float(x)
@@ -92,7 +95,7 @@ def _sekil_al(nesne):
 
 
 def _hedef(nesne):
-    """Verilen nesne, yoksa secili, o da yoksa belgedeki tek nesne."""
+    """The given object; otherwise the selection; otherwise the only object in the document."""
     if nesne is not None:
         return nesne
     try:
@@ -121,23 +124,23 @@ def _kutu(nesne):
 
 
 # --------------------------------------------------------------------------
-# 1. TEMEL OLCU
+# 1. BASIC DIMENSIONS
 # --------------------------------------------------------------------------
 
 def _kendi_boyu(nesne):
-    """Nesnenin KENDI eksenlerindeki boyu (uc sayi) ya da None.
+    """The object's size along its OWN axes (three numbers) or None.
 
-    NEDEN GEREKLI. Eksene hizali bbox yatik bir parcayi oldugundan buyuk
-    gosterir: 30x10x5 bir kutu 30 derece dondurulunce bbox 28.5x10x19.3
-    olur ve "kalinligi 19 mm" demek yanlistir.
+    WHY. An axis-aligned bbox makes a tilted part look bigger than it is: a
+    30x10x5 box rotated 30 degrees has a 28.5x10x19.3 bbox, and saying "it
+    is 19 mm thick" is wrong.
 
-    YONTEM. Mesh'te `getEigenSystem()` bunu HAZIR veriyor (FreeCAD'in
-    kendi kodu; olculdu, kupada 55.35x95x55.38).
-    Katida `optimalBoundingBox()` DENENDI ve ELENDI: 30 derece
-    dondurulmus kutu icin 28.48x10x19.33 dondu, yani hala EKSENE HIZALI.
-    Onun yerine `PrincipalProperties`in atalet eksenlerine (bunlar
-    prizmatik bir parcada parcanin kendi eksenleridir — olculdu, donuk
-    kutuda FirstAxisOfInertia = (0.5, 0, 0.866)) koseler izdusuruluyor.
+    METHOD. For a mesh `getEigenSystem()` gives this READY-MADE (FreeCAD's
+    own code; measured, 55.35x95x55.38 on a cup).
+    For a solid `optimalBoundingBox()` was TRIED and REJECTED: for a box
+    rotated 30 degrees it returned 28.48x10x19.33, i.e. still AXIS-ALIGNED.
+    Instead, vertices are projected onto the inertia axes from
+    `PrincipalProperties` (for a prismatic part these are the part's own
+    axes — measured, FirstAxisOfInertia = (0.5, 0, 0.866) on the rotated box).
     """
     m = _mesh_al(nesne)
     if m is not None:
@@ -170,15 +173,15 @@ def _kendi_boyu(nesne):
 
 
 def olc(nesne=None, yaz: bool = True) -> dict:
-    """Nesnenin temel olculeri: boy, merkez, hacim, alan, mesh durumu.
+    """Basic dimensions of the object: size, centre, volume, area, mesh state.
 
-    `nesne` verilmezse secili nesne, o da yoksa belgedeki tek nesne.
+    Without `nesne`: the selected object, otherwise the only object in the document.
     """
     nesne = _hedef(nesne)
     if nesne is None:
         if yaz:
-            print("olc: olculecek nesne bulunamadi "
-                  "(ad ver: olc(doc.getObject('kupa')))")
+            print("olc: no object to measure "
+                  "(pass a name: olc(doc.getObject('cup')))")
         return {}
 
     d: dict = {"ad": getattr(nesne, "Name", "?")}
@@ -189,14 +192,14 @@ def olc(nesne=None, yaz: bool = True) -> dict:
         d.update(boy=(b.XLength, b.YLength, b.ZLength),
                  merkez=(b.Center.x, b.Center.y, b.Center.z),
                  z_alt=b.ZMin, z_ust=b.ZMax)
-        satir.append(f"boy={_sayi(b.XLength)}x{_sayi(b.YLength)}"
+        satir.append(f"size={_sayi(b.XLength)}x{_sayi(b.YLength)}"
                      f"x{_sayi(b.ZLength)} mm")
-        satir.append(f"merkez=({_sayi(b.Center.x)},{_sayi(b.Center.y)},"
+        satir.append(f"center=({_sayi(b.Center.x)},{_sayi(b.Center.y)},"
                      f"{_sayi(b.Center.z)})")
         satir.append(f"z={_sayi(b.ZMin)}..{_sayi(b.ZMax)}")
 
-    # Eksene hizali bbox ile kendi ekseni FARKLIYSA soyle: nesne yatik
-    # demektir ve bu, sonraki her olcumu etkiler.
+    # If the axis-aligned bbox and the own axes DIFFER, say so: the object
+    # is tilted, and that affects every later measurement.
     kendi = _kendi_boyu(nesne)
     if kendi and b is not None:
         hizali = sorted([b.XLength, b.YLength, b.ZLength])
@@ -205,24 +208,25 @@ def olc(nesne=None, yaz: bool = True) -> dict:
         if any(abs(x - y) > max(0.02 * max(x, y, 1e-9), 0.1)
                for x, y in zip(hizali, oz)):
             d["yatik"] = True
-            satir.append(f"(YATIK — kendi ekseninde {_sayi(oz[2])}x"
+            satir.append(f"(TILTED — along its own axes {_sayi(oz[2])}x"
                          f"{_sayi(oz[1])}x{_sayi(oz[0])} mm)")
 
     m = _mesh_al(nesne)
     if m is not None:
-        for ad, cagri in (("hacim", lambda: m.Volume),
-                          ("alan", lambda: m.Area),
-                          ("facet", lambda: m.CountFacets),
-                          ("parca", lambda: m.countComponents())):
+        for ad, etiket, cagri in (("hacim", "volume", lambda: m.Volume),
+                                  ("alan", "area", lambda: m.Area),
+                                  ("facet", "facet", lambda: m.CountFacets),
+                                  ("parca", "components",
+                                   lambda: m.countComponents())):
             try:
                 v = cagri()
                 d[ad] = v
-                satir.append(f"{ad}={_sayi(v)}")
+                satir.append(f"{etiket}={_sayi(v)}")
             except Exception:
                 pass
         try:
             d["kapali"] = bool(m.isSolid())
-            satir.append("kapali" if d["kapali"] else "ACIK")
+            satir.append("closed" if d["kapali"] else "OPEN")
         except Exception:
             pass
     else:
@@ -231,10 +235,10 @@ def olc(nesne=None, yaz: bool = True) -> dict:
             try:
                 d["hacim"] = s.Volume
                 d["alan"] = s.Area
-                satir.append(f"hacim={_sayi(s.Volume)} mm3")
-                satir.append(f"alan={_sayi(s.Area)} mm2")
-                satir.append(f"kati={len(s.Solids)} yuz={len(s.Faces)} "
-                             f"kenar={len(s.Edges)}")
+                satir.append(f"volume={_sayi(s.Volume)} mm3")
+                satir.append(f"area={_sayi(s.Area)} mm2")
+                satir.append(f"solids={len(s.Solids)} faces={len(s.Faces)} "
+                             f"edges={len(s.Edges)}")
             except Exception:
                 pass
 
@@ -245,20 +249,21 @@ def olc(nesne=None, yaz: bool = True) -> dict:
 
 
 # --------------------------------------------------------------------------
-# 2. KESIT / CAP
+# 2. SECTION / DIAMETER
 # --------------------------------------------------------------------------
 
 def _kesit_noktalari(nesne, z: float) -> list:
-    """z duzlemindeki GERCEK kesit noktalari.
+    """REAL section points in the z plane.
 
-    NEDEN NOKTA BANDI DEGIL. Ilk surum "z'ye yakin mesh koselerini topla"
-    diyordu ve TEST BUNU YAKALADI: koni gibi bir govdede mesh tabandan
-    tepeye uzanan uzun ucgenlerden olusuyor, ara yuksekliklerde HIC kose
-    yok, olcum sessizce bos donuyordu. Yani yontem mesh'in nasil
-    ucgenlendigine bagliydi; olcum buna bagli olamaz.
+    WHY NOT A BAND OF POINTS. The first version said "collect the mesh
+    vertices near z" and A TEST CAUGHT IT: on a cone-like body the mesh is
+    made of long triangles from base to tip, there are NO vertices at
+    intermediate heights, and the measurement silently came back empty. So
+    the method depended on how the mesh was triangulated; a measurement
+    cannot depend on that.
 
-    Dogrusu duzlemle gercek kesisim: mesh'te `crossSections` (olculdu:
-    1558 facet'te 0.033 sn), katida `Shape.slice`.
+    The right way is a real intersection with the plane: `crossSections` on
+    a mesh (measured: 0.033 s at 1558 facets), `Shape.slice` on a solid.
     """
     from FreeCAD import Vector
 
@@ -288,15 +293,15 @@ def _kesit_noktalari(nesne, z: float) -> list:
 
 
 def _taubin(xs, ys):
-    """Taubin cember uydurma — noktalardan merkez ve yaricap.
+    """Taubin circle fit — centre and radius from points.
 
-    Literaturun standart cebirsel yontemi (Taubin 1991); Kasa'nin kucuk
-    yaricaba kayma egilimini duzeltir. numpy yoksa None doner ve cagiran
-    ortalamaya duser.
+    The literature's standard algebraic method (Taubin 1991); it fixes
+    Kasa's bias toward small radii. Returns None without numpy and the
+    caller falls back to the average.
 
-    NEDEN ORTALAMA YETMIYOR: kesitte kulp gibi bir cikinti varsa merkez
-    ona dogru kayar. OLCULDU — gercek merkez (5,-3), ortalama (6.30,-3),
-    Taubin (5.80,-3), aykiri nokta atildiktan sonra tam.
+    WHY THE AVERAGE IS NOT ENOUGH: if the section has a protrusion such as
+    a handle, the centre drifts toward it. MEASURED — true centre (5,-3),
+    average (6.30,-3), Taubin (5.80,-3), exact after dropping an outlier.
     """
     np = _np()
     if np is None:
@@ -331,7 +336,7 @@ def _taubin(xs, ys):
 
 
 def _merkez_bul(noktalar):
-    """Kesitin merkezi — Taubin + bir aykiri-atma turu, olmazsa ortalama."""
+    """Centre of the section — Taubin + one outlier-rejection pass, else the average."""
     np = _np()
     xs = [p.x for p in noktalar]
     ys = [p.y for p in noktalar]
@@ -342,14 +347,14 @@ def _merkez_bul(noktalar):
 
     cx, cy, r = uygun
 
-    # DEJENERE UYDURMA KORUMASI. Noktalar neredeyse DOGRUSALSA (yatik bir
-    # silindirin yatay kesiti iki paralel cizgidir) cembersel uydurma
-    # kocaman bir cember bulur ve merkezi cok uzaga atar. TESTTE OLDU:
-    # yaricap 7.8e8, merkez (1.2e6, 3.9e8) — ve bu, kesiti "dairesel"
-    # gosterdigi icin sessizce yanlis bir cap raporlaniyordu.
-    # Uydurulan yaricap nokta bulutunun kendi buyuklugunden cok buyukse
-    # uydurma anlamsizdir; ortalamaya donuyoruz ve yuvarlaklik kontrolu
-    # (bkz. kesit_capi) devreye girip "YUVARLAK DEGIL" diyor.
+    # DEGENERATE FIT GUARD. If the points are nearly COLLINEAR (the
+    # horizontal section of a lying cylinder is two parallel lines), a circle
+    # fit finds a huge circle and throws the centre far away. IT HAPPENED IN
+    # A TEST: radius 7.8e8, centre (1.2e6, 3.9e8) — and since that made the
+    # section look "circular", a wrong diameter was reported silently.
+    # If the fitted radius is much bigger than the point cloud itself the
+    # fit is meaningless; we go back to the average and the roundness check
+    # (see kesit_capi) kicks in and says "NOT ROUND".
     yayilim = max(max(xs) - min(xs), max(ys) - min(ys))
     if not (r == r) or r > 3 * max(yayilim, 1e-9):
         return ortalama
@@ -367,54 +372,57 @@ def _merkez_bul(noktalar):
 
 
 def kesit_capi(nesne=None, z=None, band=None, yaz: bool = True) -> dict:
-    """Verilen yukseklikte KESIT olcusu.
+    """SECTION measurement at a given height.
 
-    UC DURUMU AYIRT EDER, cunku ucune ayni sayiyi vermek yanlis olur:
+    TELLS THREE CASES APART, because giving all of them the same number
+    would be wrong:
 
-      * TEK HALKA, dairesel       -> tek cap
-      * TEK HALKA, oval           -> KISA ve UZUN cap ayri ayri. Ovalin
-                                     tek capi yoktur; ortalama ovali daire
-                                     sanar.
-      * IKI HALKA (ici bos govde) -> DIS cap, IC cap, DUVAR kalinligi.
-                                     Kupa/boru kesitinde olan budur.
-      * YUVARLAK DEGIL            -> "cap" demeyi REDDEDER, en genis/en dar
-                                     olcuyu verir. Yatik nesnede olan budur.
+      * ONE RING, circular       -> one diameter
+      * ONE RING, oval           -> MINOR and MAJOR diameter separately. An
+                                    oval has no single diameter; the average
+                                    would mistake it for a circle.
+      * TWO RINGS (hollow body)  -> OUTER diameter, INNER diameter, WALL
+                                    thickness. This is a cup/tube section.
+      * NOT ROUND                -> REFUSES to say "diameter", gives the
+                                    widest/narrowest size. This is what
+                                    happens on a tilted object.
 
-    z verilmezse nesnenin USTU olculur (agiz). `band` artik kullanilmiyor
-    (gercek kesit aliniyor); geriye donuk uyum icin kabul ediliyor.
+    Without z the TOP of the object is measured (the rim). `band` is no
+    longer used (a real section is taken); accepted for backward
+    compatibility.
     """
     nesne = _hedef(nesne)
     if nesne is None:
         if yaz:
-            print("kesit_capi: nesne bulunamadi")
+            print("kesit_capi: object not found")
         return {}
 
     kutu = _kutu(nesne)
     if kutu is None:
         if yaz:
-            print(f"kesit_capi: {getattr(nesne, 'Name', '?')} olculemiyor "
-                  f"(ne mesh ne kati)")
+            print(f"kesit_capi: {getattr(nesne, 'Name', '?')} cannot be measured "
+                  f"(neither mesh nor solid)")
         return {}
 
     if z is None:
-        # Tam tepede kesit BOS cikar (duzlem govdeye tegettir); bir tik
-        # asagisi "agiz" olcusunu verir.
+        # A section exactly at the top comes out EMPTY (the plane is tangent
+        # to the body); a touch lower gives the "rim" measurement.
         z = kutu.ZMax - max(kutu.ZLength * 0.02, 0.01)
 
     noktalar = _kesit_noktalari(nesne, z)
     ad = getattr(nesne, "Name", "?")
     if len(noktalar) < 8:
         if yaz:
-            print(f"kesit_capi: z={_sayi(z)} duzleminde kesit bulunamadi "
-                  f"({len(noktalar)} nokta). Nesne bu yukseklikte yok ya da "
-                  f"z araligi {_sayi(kutu.ZMin)}..{_sayi(kutu.ZMax)} disinda.")
+            print(f"kesit_capi: no section found in the z={_sayi(z)} plane "
+                  f"({len(noktalar)} points). The object is not at this "
+                  f"height, or z is outside {_sayi(kutu.ZMin)}..{_sayi(kutu.ZMax)}.")
         return {}
 
     cx, cy = _merkez_bul(noktalar)
 
-    # ACIYA GORE KOVALAMA: her acida kac ayri yaricap var? Bir tane ise
-    # tek halka, iki ise duvar.
-    KOVA = 72                                    # 5 derecelik dilimler
+    # BUCKETING BY ANGLE: how many distinct radii at each angle? One means a
+    # single ring, two means a wall.
+    KOVA = 72                                    # 5 degree slices
     kovalar: dict[int, list[float]] = {}
     for p in noktalar:
         dx, dy = p.x - cx, p.y - cy
@@ -437,12 +445,12 @@ def kesit_capi(nesne=None, z=None, band=None, yaz: bool = True) -> dict:
     if orta_kalinlik > max(0.02 * en_dis, 0.05):
         d["duvar"] = orta_kalinlik
         d["ic_cap"] = 2 * (en_dis - orta_kalinlik)
-        d["tur"] = "duvar"
+        d["tur"] = "wall"
         d["guvenilir"] = True
-        d["satir"] = (f"{ad} kesit z={_sayi(z)}: dis cap={_sayi(2 * en_dis)} "
-                      f"ic cap={_sayi(d['ic_cap'])} "
-                      f"duvar={_sayi(orta_kalinlik)} mm "
-                      f"merkez=({_sayi(cx)},{_sayi(cy)})")
+        d["satir"] = (f"{ad} section z={_sayi(z)}: outer dia={_sayi(2 * en_dis)} "
+                      f"inner dia={_sayi(d['ic_cap'])} "
+                      f"wall={_sayi(orta_kalinlik)} mm "
+                      f"center=({_sayi(cx)},{_sayi(cy)})")
         if yaz:
             print(d["satir"])
         return d
@@ -451,58 +459,60 @@ def kesit_capi(nesne=None, z=None, band=None, yaz: bool = True) -> dict:
     ort = sum(dis_r) / len(dis_r)
     d.update(kisa_cap=2 * kucuk, uzun_cap=2 * buyuk, ort_cap=2 * ort)
 
-    # YUVARLAK MI? "Cap" ancak kesit Z ekseni etrafinda yuvarlaksa anlamli.
-    # Nesne YATIKSA yatay dilim halka degil iki paralel cizgidir; sayilar
-    # yine cikar ama "cap" demek yalan olur. Ilk surumde tam bu oldu ve
-    # test yakaladi: "kisa cap = 0.0000000001".
+    # IS IT ROUND? "Diameter" only makes sense if the section is round about
+    # the Z axis. If the object is TILTED a horizontal slice is two parallel
+    # lines, not a ring; numbers still come out, but calling it a "diameter"
+    # would be a lie. The first version did exactly that and a test caught
+    # it: "minor diameter = 0.0000000001".
     if kucuk > 0 and buyuk / kucuk > 2.5:
         d["guvenilir"] = False
-        d["tur"] = "yuvarlak degil"
-        d["satir"] = (f"{ad} kesit z={_sayi(z)}: bu kesit YUVARLAK DEGIL "
-                      f"(en/boy orani {_sayi(buyuk / kucuk)}), 'cap' anlamli "
-                      f"bir olcu degil. En genis {_sayi(2 * buyuk)}, en dar "
-                      f"{_sayi(2 * kucuk)} mm. Nesne Z'de durmuyor olabilir; "
-                      f"olc() ile kendi eksenine bak.")
+        d["tur"] = "not round"
+        d["satir"] = (f"{ad} section z={_sayi(z)}: this section is NOT ROUND "
+                      f"(aspect ratio {_sayi(buyuk / kucuk)}), 'diameter' is not "
+                      f"a meaningful measure. Widest {_sayi(2 * buyuk)}, "
+                      f"narrowest {_sayi(2 * kucuk)} mm. The object may not "
+                      f"stand along Z; check its own axes with olc().")
         if yaz:
             print(d["satir"])
         return d
 
     d["guvenilir"] = True
     if buyuk - kucuk <= max(0.02 * buyuk, 0.05):
-        d["tur"] = "daire"
-        d["satir"] = (f"{ad} kesit z={_sayi(z)}: cap={_sayi(2 * ort)} mm "
-                      f"(dairesel) merkez=({_sayi(cx)},{_sayi(cy)})")
+        d["tur"] = "circle"
+        d["satir"] = (f"{ad} section z={_sayi(z)}: diameter={_sayi(2 * ort)} mm "
+                      f"(circular) center=({_sayi(cx)},{_sayi(cy)})")
     else:
         d["tur"] = "oval"
-        d["satir"] = (f"{ad} kesit z={_sayi(z)}: kisa cap={_sayi(2 * kucuk)} "
-                      f"uzun cap={_sayi(2 * buyuk)} ortalama={_sayi(2 * ort)} "
-                      f"mm merkez=({_sayi(cx)},{_sayi(cy)})")
+        d["satir"] = (f"{ad} section z={_sayi(z)}: minor dia={_sayi(2 * kucuk)} "
+                      f"major dia={_sayi(2 * buyuk)} mean={_sayi(2 * ort)} "
+                      f"mm center=({_sayi(cx)},{_sayi(cy)})")
     if yaz:
         print(d["satir"])
     return d
 
 
 # --------------------------------------------------------------------------
-# 3. DUVAR KALINLIGI (isin atma — sanayi standardi)
+# 3. WALL THICKNESS (ray casting — the industry standard)
 # --------------------------------------------------------------------------
 
 def duvar_kalinligi(nesne=None, z=None, yaz: bool = True) -> dict:
-    """Isin atarak duvar kalinligi. Baskiya uygunlugun asil sorusu.
+    """Wall thickness by ray casting. The real question of printability.
 
-    YONTEM: mesh'in `foraminate(taban, yon)` metodu bir isinin deldigi TUM
-    noktalari veriyor. Eksenden disari dogru bir isin, once IC yuzeyi sonra
-    DIS yuzeyi deler; ikisinin farki o noktadaki duvardir. trimesh'in
-    'ray' yontemi de aynen budur; burada FreeCAD'in kendi kodu kullaniliyor
-    (olculdu: 24 acida tarama 0.010 sn).
+    METHOD: the mesh's `foraminate(base, dir)` method gives ALL points a ray
+    pierces. A ray going outward from the axis pierces the INNER surface
+    first, then the OUTER one; their difference is the wall at that point.
+    trimesh's 'ray' method is exactly this; here FreeCAD's own code is used
+    (measured: a 24-angle sweep in 0.010 s).
 
-    En INCE yer raporlaniyor, ortalama degil: baski o noktada patlar.
+    The THINNEST spot is reported, not the average: that is where the print
+    fails.
     """
     nesne = _hedef(nesne)
     m = _mesh_al(nesne)
     if m is None:
         if yaz:
-            print("duvar_kalinligi: yalnizca mesh nesnelerde calisir "
-                  "(kati icin kesit_capi kullan)")
+            print("duvar_kalinligi: works on mesh objects only "
+                  "(use kesit_capi for solids)")
         return {}
 
     b = m.BoundBox
@@ -518,17 +528,17 @@ def duvar_kalinligi(nesne=None, z=None, yaz: bool = True) -> dict:
             vurus = m.foraminate((merkez_x, merkez_y, z), yon)
         except Exception:
             continue
-        # Isin yonundeki ISARETLI uzakliklar. hypot ile mutlak uzaklik
-        # almak, isinin ARKA tarafindaki vuruslari one karistirir ve
-        # kalinligi sifira yaklastirir — ilk denemede tam bu oldu
-        # (ortanca 0.045 mm cikmisti, dogrusu 2.1).
+        # SIGNED distances along the ray. Taking absolute distance with
+        # hypot mixes hits BEHIND the ray in with those in front and pushes
+        # the thickness toward zero — the first attempt did exactly that
+        # (median came out 0.045 mm, the right answer was 2.1).
         t = []
         for v in vurus.values():
             uz = ((v[0] - merkez_x) * yon[0] + (v[1] - merkez_y) * yon[1])
             if uz > 1e-6:
                 t.append(uz)
         t = sorted(t)
-        # Ayni noktayi paylasan facetler tekrar veriyor: yakinlari birlestir.
+        # Facets sharing a point report it again: merge the close ones.
         temiz = []
         for x in t:
             if not temiz or x - temiz[-1] > 1e-3:
@@ -538,8 +548,8 @@ def duvar_kalinligi(nesne=None, z=None, yaz: bool = True) -> dict:
 
     if not olcumler:
         if yaz:
-            print(f"duvar_kalinligi: z={_sayi(z)} yuksekliginde duvar "
-                  f"bulunamadi (govde ici dolu olabilir)")
+            print(f"duvar_kalinligi: no wall found at height z={_sayi(z)} "
+                  f"(the body may be solid inside)")
         return {}
 
     olcumler.sort()
@@ -547,36 +557,36 @@ def duvar_kalinligi(nesne=None, z=None, yaz: bool = True) -> dict:
     ortanca = olcumler[len(olcumler) // 2][0]
     d = {"z": z, "en_ince": en_ince, "en_ince_aci": aci, "ortanca": ortanca,
          "olcum": len(olcumler)}
-    d["satir"] = (f"{getattr(nesne, 'Name', '?')} duvar z={_sayi(z)}: "
-                  f"en ince {_sayi(en_ince)} mm ({aci} derecede), "
-                  f"ortanca {_sayi(ortanca)} mm, {len(olcumler)} olcum")
+    d["satir"] = (f"{getattr(nesne, 'Name', '?')} wall z={_sayi(z)}: "
+                  f"thinnest {_sayi(en_ince)} mm (at {aci} degrees), "
+                  f"median {_sayi(ortanca)} mm, {len(olcumler)} measurements")
     if yaz:
         print(d["satir"])
         if en_ince < 0.8:
-            print(f"    UYARI: {_sayi(en_ince)} mm cogu 3B yazicinin "
-                  f"nozul capinin altinda — o bolge basilamaz ya da bosluk "
-                  f"kalir.")
+            print(f"    WARNING: {_sayi(en_ince)} mm is below the nozzle "
+                  f"diameter of most 3D printers — that area cannot be "
+                  f"printed or will leave a gap.")
     return d
 
 
 # --------------------------------------------------------------------------
-# 4. IKI NESNE ARASI MESAFE
+# 4. DISTANCE BETWEEN TWO OBJECTS
 # --------------------------------------------------------------------------
 
 def mesafe(a=None, b=None, yaz: bool = True) -> dict:
-    """Iki nesne arasi EN KISA mesafe. "Degiyorlar mi" sorusunun cevabi.
+    """SHORTEST distance between two objects. The answer to "do they touch".
 
-    Kati-kati: `Shape.distToShape` — tam sonuc, temas noktalariyla birlikte
-    (FreeCAD/OCC'nin kendi kodu).
-    Mesh iceren durum: scipy `cKDTree` ile en yakin nokta ciftleri. Kaba
-    kuvvet 3542x3542 nokta icin 3.9 sn suruyordu, cKDTree 0.032 sn —
-    120 kat (olculdu). Sonuc NOKTA BAZLI, yani ucgen yuzeyinin ortasina
-    denk gelen bir temasi biraz buyuk gosterebilir; bu, cevabi
-    "degiyor mu" duzeyinde dogru tutar ve boyle raporlaniyor.
+    Solid-solid: `Shape.distToShape` — exact, with contact points
+    (FreeCAD/OCC's own code).
+    Involving a mesh: nearest point pairs with scipy `cKDTree`. Brute force
+    took 3.9 s for 3542x3542 points, cKDTree 0.032 s — 120x (measured). The
+    result is POINT-BASED, so a contact in the middle of a triangle face may
+    show slightly larger; that keeps the answer correct at the "do they
+    touch" level, and it is reported as such.
     """
     if a is None or b is None:
         if yaz:
-            print("mesafe: iki nesne ver — mesafe(doc.getObject('a'), "
+            print("mesafe: pass two objects — mesafe(doc.getObject('a'), "
                   "doc.getObject('b'))")
         return {}
 
@@ -587,13 +597,13 @@ def mesafe(a=None, b=None, yaz: bool = True) -> dict:
             d = {"mesafe": uzunluk, "yontem": "distToShape"}
             p1, p2 = noktalar[0]
             d["satir"] = (f"{a.Name} <-> {b.Name}: {_sayi(uzunluk)} mm "
-                          f"(en yakin noktalar ({_sayi(p1.x)},{_sayi(p1.y)},"
-                          f"{_sayi(p1.z)}) ve ({_sayi(p2.x)},{_sayi(p2.y)},"
+                          f"(closest points ({_sayi(p1.x)},{_sayi(p1.y)},"
+                          f"{_sayi(p1.z)}) and ({_sayi(p2.x)},{_sayi(p2.y)},"
                           f"{_sayi(p2.z)}))")
             if yaz:
                 print(d["satir"])
                 if uzunluk < 1e-7:
-                    print("    degiyorlar (mesafe sifir).")
+                    print("    they touch (distance zero).")
             return d
         except Exception:
             pass
@@ -620,7 +630,7 @@ def mesafe(a=None, b=None, yaz: bool = True) -> dict:
     pa, pb = noktalari(a), noktalari(b)
     if not pa or not pb:
         if yaz:
-            print("mesafe: nesnelerin noktalari okunamadi")
+            print("mesafe: could not read the objects' points")
         return {}
 
     if cKDTree is not None and np is not None:
@@ -632,34 +642,33 @@ def mesafe(a=None, b=None, yaz: bool = True) -> dict:
             math.dist(p, q) for p in pa[::max(1, len(pa) // 400)]
             for q in pb[::max(1, len(pb) // 400)])
 
-    d = {"mesafe": en_kisa, "yontem": "nokta bazli (mesh)"}
+    d = {"mesafe": en_kisa, "yontem": "point-based (mesh)"}
     d["satir"] = (f"{getattr(a, 'Name', 'a')} <-> {getattr(b, 'Name', 'b')}: "
-                  f"~{_sayi(en_kisa)} mm (mesh noktalari arasi; ucgen "
-                  f"yuzeyinin ortasina denk gelen temasi biraz buyuk "
-                  f"gosterebilir)")
+                  f"~{_sayi(en_kisa)} mm (between mesh points; a contact in "
+                  f"the middle of a triangle face may show slightly larger)")
     if yaz:
         print(d["satir"])
     return d
 
 
 # --------------------------------------------------------------------------
-# 5. SECILEN YUZ/KENARIN OLCUSU — FreeCAD'in kendi motoru
+# 5. SIZE OF A SELECTED FACE/EDGE — FreeCAD's own engine
 # --------------------------------------------------------------------------
 
 def olcu(nesne=None, alt: str = "", yaz: bool = True) -> dict:
-    """Bir yuz/kenarin yaricapi, alani, uzunlugu — Measure.Measurement ile.
+    """Radius, area, length of a face/edge — via Measure.Measurement.
 
-    Bu FreeCAD'in KENDI olcum motoru ve arayuzsuz calisiyor (olculdu: bir
-    delik yuzunde radius() -> 1.7 tam). Delik capini elle uydurmak yerine
-    dogrudan buradan sormak lazim.
+    This is FreeCAD's OWN measuring engine and it works without a GUI
+    (measured: radius() -> exactly 1.7 on a hole face). Ask here directly
+    instead of fitting a hole diameter by hand.
 
-    `alt` verilmezse secimdeki alt eleman kullanilir.
+    Without `alt`, the sub-element in the selection is used.
     """
     try:
         import Measure
     except Exception as e:                                       # noqa: BLE001
         if yaz:
-            print(f"olcu: Measure modulu yok ({e})")
+            print(f"olcu: no Measure module ({e})")
         return {}
 
     if nesne is None or not alt:
@@ -674,8 +683,8 @@ def olcu(nesne=None, alt: str = "", yaz: bool = True) -> dict:
             pass
     if nesne is None or not alt:
         if yaz:
-            print("olcu: nesne ve alt eleman gerek — "
-                  "olcu(doc.getObject('Kutu'), 'Face7')")
+            print("olcu: needs an object and a sub-element — "
+                  "olcu(doc.getObject('Box'), 'Face7')")
         return {}
 
     m = Measure.Measurement()
@@ -683,60 +692,61 @@ def olcu(nesne=None, alt: str = "", yaz: bool = True) -> dict:
         m.addReference3D(nesne.Name, alt)
     except Exception as e:                                       # noqa: BLE001
         if yaz:
-            print(f"olcu: {alt} eklenemedi ({e})")
+            print(f"olcu: could not add {alt} ({e})")
         return {}
 
     d = {"nesne": nesne.Name, "alt": alt}
     parcalar = []
-    for ad, cagri in (("yaricap", m.radius), ("uzunluk", m.length),
-                      ("alan", m.area)):
+    for ad, etiket, cagri in (("yaricap", "radius", m.radius),
+                              ("uzunluk", "length", m.length),
+                              ("alan", "area", m.area)):
         try:
             v = float(cagri())
         except Exception:
             continue
-        if v and v == v:                       # NaN degil
+        if v and v == v:                       # not NaN
             d[ad] = v
-            parcalar.append(f"{ad}={_sayi(v)}")
+            parcalar.append(f"{etiket}={_sayi(v)}")
             if ad == "yaricap":
-                parcalar.append(f"cap={_sayi(2 * v)}")
-    d["satir"] = f"{nesne.Name}.{alt}: " + (" ".join(parcalar) or "olculemedi")
+                parcalar.append(f"diameter={_sayi(2 * v)}")
+    d["satir"] = f"{nesne.Name}.{alt}: " + (" ".join(parcalar) or "could not measure")
     if yaz:
         print(d["satir"])
     return d
 
 
 # --------------------------------------------------------------------------
-# 6. CAKISMA — "degiyor mu, icinden geciyor mu" sorusunun DETERMINISTIK cevabi
+# 6. OVERLAP — the DETERMINISTIC answer to "do they touch, does one pass through"
 # --------------------------------------------------------------------------
 
-# Hacim esigi: OCC boolean'i teget yuzeylerde sifira cok yakin ama sifirdan
-# farkli hacimler dondurebiliyor. 1e-3 mm3, 0.1x0.1x0.1 mm'lik bir kupten
-# kucuk — gercek bir cakismanin altina dusmez.
+# Volume threshold: an OCC boolean may return volumes very close to, but
+# not exactly, zero on tangent faces. 1e-3 mm3 is smaller than a 0.1 mm cube
+# — no real overlap falls below it.
 _HACIM_ESIGI = 1e-3
-# Kesisme egrisi uzunlugu esigi: iki yuzey gercekten kesisiyorsa section()
-# uzunlugu olan kenarlar dondurur. Tek noktada tegetlik sifir uzunluk verir.
+# Intersection-curve length threshold: if two surfaces really intersect,
+# section() returns edges with length. A single tangent point gives zero.
 _KESIT_ESIGI = 1e-6
-# Mesafe sifir sayilma esigi (distToShape'in sayisal gurultusu).
+# Distance counted as zero (numeric noise of distToShape).
 _TEMAS_ESIGI = 1e-7
 
 
 def _bbox_kesisiyor_mu(a, b, pay: float = 0.0) -> bool:
-    """Iki nesnenin sinir kutulari ust uste mi. UCUZ on eleme.
+    """Do the two objects' bounding boxes overlap. A CHEAP pre-filter.
 
-    Neden sart: n nesne icin n*(n-1)/2 cift var ve her boolean cagrisi
-    OCC'de pahali. 52 nesnelik bir belgede 1326 cift demek; bbox testi
-    bunlarin ezici cogunlugunu mikrosaniyede eliyor.
+    Why it is needed: n objects give n*(n-1)/2 pairs and every boolean call
+    is expensive in OCC. A 52-object document means 1326 pairs; the bbox
+    test drops the vast majority in microseconds.
     """
     ka, kb = _kutu(a), _kutu(b)
     if ka is None or kb is None:
-        return True              # bilmiyorsak elemiyoruz, olcum karar versin
+        return True              # if we don't know we don't drop, let measuring decide
     return not (ka.XMax + pay < kb.XMin or kb.XMax + pay < ka.XMin
                 or ka.YMax + pay < kb.YMin or kb.YMax + pay < ka.YMin
                 or ka.ZMax + pay < kb.ZMin or kb.ZMax + pay < ka.ZMin)
 
 
 def _kati_mi(sekil) -> bool:
-    """Sekil hacimli mi (kati) yoksa kalinliksiz mi (yuzey/kabuk/tel)."""
+    """Does the shape have volume (solid) or is it thin (surface/shell/wire)."""
     try:
         return bool(sekil.Solids) and abs(sekil.Volume) > _HACIM_ESIGI
     except Exception:                                            # noqa: BLE001
@@ -744,11 +754,12 @@ def _kati_mi(sekil) -> bool:
 
 
 def _sinirda_mi(nokta, sekil) -> bool:
-    """Nokta seklin KENARINDA mi (yani ic degil, sinir).
+    """Is the point on the shape's EDGE (i.e. boundary, not interior).
 
-    Neden gerekli: iki yuzey uc uca DEGDIGINDE de `section()` uzunlugu olan
-    bir egri dondurur (olculdu: 10 mm). Degme ile GECME'yi ayiran sey,
-    kesisme egrisinin seklin ICINDE mi yoksa SINIRINDA mi oldugu.
+    Why it is needed: when two surfaces TOUCH end to end, `section()` also
+    returns a curve with length (measured: 10 mm). What separates touching
+    from PASSING THROUGH is whether the intersection curve is INSIDE a
+    shape or on its BOUNDARY.
     """
     try:
         import Part as _Part
@@ -763,12 +774,13 @@ def _sinirda_mi(nokta, sekil) -> bool:
 
 
 def _egri_ici_geciyor_mu(kesit, sa, sb) -> bool:
-    """Kesisme egrisi iki seklin EN AZ BIRININ ici boyunca mi gidiyor.
+    """Does the intersection curve run through the interior of AT LEAST ONE of the shapes.
 
-    Ikisinin de sinirindaysa bu bir DEGME'dir (uc uca, kenar kenara) ve bu
-    projede kusur degil. Birinin icindeyse gecistir — logdaki vaka tam
-    buydu: "her flogun direge giden KENARI bu seritlerden birini kesiyor",
-    yani A'nin siniri B'nin icinden geciyor.
+    If it lies on the boundary of both, it is TOUCHING (end to end, edge to
+    edge), which is not a defect here. If it is inside one of them it is
+    passing through — exactly the case in the log: "the EDGE of each jib
+    running to the mast cuts one of these strips", i.e. A's boundary passes
+    through B's interior.
     """
     for e in kesit.Edges:
         try:
@@ -781,25 +793,26 @@ def _egri_ici_geciyor_mu(kesit, sa, sb) -> bool:
 
 
 def _cift_olc(a, b) -> dict:
-    """Tek cift icin olcum — sekil TURUNE gore dogru test secilir.
+    """Measurement for one pair — the right test is chosen by shape KIND.
 
-    OLCULDU (LOG/2026-08-26_34ac9988.txt, MANTIK 39) ve burada gercek OCC
-    geometrisiyle ayrica olculdu:
+    MEASURED in a real session and measured again here with real OCC
+    geometry:
 
-      kati x kati    -> `common().Volume`. Yan yana DEGEN iki kutuda hacim 0
-                        ama `section()` 40 mm veriyor; yani section bu
-                        durumda YANILTIR, hacim yanilmaz.
-      kati x yuzey   -> `common()` ALAN dondurur; ama yuzey tam da katinin
-                        bir yuzune yatiyorsa da alan dondurur (olculdu: iki
-                        halde de 100 mm2). Ayrimi `isInside` yapiyor: ortak
-                        parcanin agirlik merkezi katinin GERCEKTEN icinde mi.
-      yuzey x yuzey  -> `section()` egrisi; degme ile gecmeyi ayirmak icin
-                        egrinin ikisinin de SINIRINDA olup olmadigina
-                        bakiliyor (bkz. _egri_ici_geciyor_mu).
+      solid x solid     -> `common().Volume`. For two boxes TOUCHING side by
+                           side the volume is 0 but `section()` gives 40 mm;
+                           so section MISLEADS in this case, volume does not.
+      solid x surface   -> `common()` returns an AREA; but it also returns
+                           area when the surface lies exactly on one of the
+                           solid's faces (measured: 100 mm2 in both cases).
+                           `isInside` makes the distinction: is the centroid
+                           of the common part REALLY inside the solid.
+      surface x surface -> the `section()` curve; to tell touching from
+                           passing through, we check whether the curve lies
+                           on the BOUNDARY of both (see _egri_ici_geciyor_mu).
 
-    Her halde `distToShape` de olculuyor: "degiyor mu" sorusunun cevabi o.
+    `distToShape` is measured in every case: it answers "do they touch".
 
-    Doner: {"hukum", "mesafe", "hacim", "kesit_uzunluk", "satir", "gecis"}
+    Returns: {"hukum", "mesafe", "hacim", "kesit_uzunluk", "satir", "gecis"}
     """
     sa, sb = _sekil_al(a), _sekil_al(b)
     ad_a = getattr(a, "Name", "a")
@@ -808,18 +821,18 @@ def _cift_olc(a, b) -> dict:
                "gecis": False}
 
     if sa is None or sb is None:
-        # Mesh tarafi: common/section YOK. Yalnizca mesafe olculebiliyor ve
-        # bu SOYLENIYOR — "olcemedigini uydurma" kurali.
+        # Mesh side: NO common/section. Only distance can be measured and
+        # that is SAID — the "do not make up what you could not measure" rule.
         m = mesafe(a, b, yaz=False)
         if not m:
-            d["hukum"] = "olculemedi"
+            d["hukum"] = "not measured"
             d["mesafe"] = float("nan")
-            d["satir"] = f"{ad_a} <-> {ad_b}: olculemedi (sekil de mesh de yok)"
+            d["satir"] = f"{ad_a} <-> {ad_b}: not measured (neither shape nor mesh)"
             return d
         d["mesafe"] = m.get("mesafe", 0.0)
-        d["hukum"] = "degiyor" if d["mesafe"] < _TEMAS_ESIGI else "ayri"
+        d["hukum"] = "touching" if d["mesafe"] < _TEMAS_ESIGI else "apart"
         d["satir"] = (f"{ad_a} <-> {ad_b}: {_sayi(d['mesafe'])} mm "
-                      f"(mesh — gecis testi KOSMADI, yalnizca mesafe)")
+                      f"(mesh — pass-through test NOT RUN, distance only)")
         return d
 
     try:
@@ -846,19 +859,19 @@ def _cift_olc(a, b) -> dict:
 
     nasil: list[str] = []
     if kati_a and kati_b:
-        # Hacim yanilmaz; section bu durumda temas egrisini de dondurur.
+        # Volume does not mislead; section also returns the contact curve here.
         if d["hacim"] > _HACIM_ESIGI:
             d["gecis"] = True
-            nasil.append(f"ortak hacim {_sayi(d['hacim'])} mm3")
-            # KUSURUN BUYUKLUGU — ham hacim bunu SOYLEMIYOR.
-            # OLCULDU (LOG/2026-08-28_c503a8a4.txt): "ortak hacim 5.791e+04
-            # mm3" satirini model "kasitli baglanti gecmesi" diye gecti.
-            # Oysa o hacim ampulun TAMAMIYDI: ampul abajurun icine gomulu,
-            # yani abajur ici bos olmasi gerekirken dolu koniydi. Ayni
-            # oturumda 2872 mm3'luk bir mafsal gecmesi gercekten kasitliydi.
-            # Iki durumu ayiran sey hacmin BUYUKLUGU degil, kucuk parcanin
-            # ne kadarinin yutuldugu. O oran olmadan model dogru karari
-            # ancak sansla veriyor.
+            nasil.append(f"common volume {_sayi(d['hacim'])} mm3")
+            # SIZE OF THE DEFECT — the raw volume does NOT TELL it.
+            # MEASURED: the model waved the line "common volume 5.791e+04
+            # mm3" through as "an intentional joint overlap". But that
+            # volume was the ENTIRE bulb: the bulb was buried inside the
+            # lampshade, i.e. the shade was a solid cone when it should
+            # have been hollow. In the same session a 2872 mm3 joint overlap
+            # really was intentional. What separates the two is not the SIZE
+            # of the volume but how much of the smaller part is swallowed.
+            # Without that ratio the model only decides right by luck.
             try:
                 ha, hb = float(sa.Volume), float(sb.Volume)
                 kucuk = min(ha, hb)
@@ -869,24 +882,24 @@ def _cift_olc(a, b) -> dict:
                     d["oran_nesne"] = ad_kucuk
                     yuzde = oran * 100
                     if oran >= 0.98:
-                        nasil.append(f"{ad_kucuk} TAMAMEN GOMULU "
-                                     f"(hacminin %100'u iceride)")
+                        nasil.append(f"{ad_kucuk} FULLY BURIED "
+                                     f"(100% of its volume inside)")
                     elif yuzde < 1.0:
-                        # "%0'i" YAZMAYACAGIZ. Olculdu
-                        # (LOG/2026-08-28_88ba806a.txt): 237.8 mm3'luk
-                        # gercek bir gecis "AltKol hacminin %0'i" diye
-                        # ciktı — yuvarlama sifira dusurdu ve satir
-                        # "cakisma yok" gibi okunuyor. Kusuru raporlarken
-                        # onu YOK gosteren bir sayi yazmak, raporun
-                        # kendisini bozar.
-                        nasil.append(f"{ad_kucuk} hacminin %1'inden azi")
+                        # We will NOT write "0%". Measured: a real 237.8 mm3
+                        # overlap came out as "0% of AltKol's volume" —
+                        # rounding dropped it to zero and the line read like
+                        # "no overlap". Writing a number that makes the
+                        # defect look ABSENT while reporting it breaks the
+                        # report itself.
+                        nasil.append(f"less than 1% of {ad_kucuk}'s volume")
                     else:
-                        nasil.append(f"{ad_kucuk} hacminin %{yuzde:.0f}'i")
+                        nasil.append(f"{yuzde:.0f}% of {ad_kucuk}'s volume")
             except Exception:                                    # noqa: BLE001
                 pass
     elif kati_a or kati_b:
-        # Yuzeyin ne kadari katinin ICINDE. Yuze yatan yuzey de alan verir,
-        # o yuzden ortak parcanin merkezi gercekten iceride mi diye bakiyoruz.
+        # How much of the surface is INSIDE the solid. A surface lying on a
+        # face also gives an area, so we check whether the centre of the
+        # common part is really inside.
         kati_sekil = sa if kati_a else sb
         if ortak is not None and d.get("ortak_alan", 0.0) > _KESIT_ESIGI:
             iceride = False
@@ -896,62 +909,66 @@ def _cift_olc(a, b) -> dict:
                         iceride = True
                         break
             except Exception:                                    # noqa: BLE001
-                iceride = True          # karar veremiyorsak sessiz kalmayiz
+                iceride = True          # if we cannot decide, we do not stay silent
             if iceride:
                 d["gecis"] = True
-                nasil.append(f"yuzeyin {_sayi(d['ortak_alan'])} mm2 kadari "
-                             f"katinin icinde")
+                nasil.append(f"{_sayi(d['ortak_alan'])} mm2 of the surface "
+                             f"is inside the solid")
     else:
-        # Iki yuzey: egri ikisinin de sinirindaysa DEGME, degilse gecis.
+        # Two surfaces: if the curve is on both boundaries it is TOUCHING,
+        # otherwise passing through.
         if (kesit is not None and d["kesit_uzunluk"] > _KESIT_ESIGI
                 and _egri_ici_geciyor_mu(kesit, sa, sb)):
             d["gecis"] = True
-            nasil.append(f"kesisme egrisi {_sayi(d['kesit_uzunluk'])} mm")
+            nasil.append(f"intersection curve {_sayi(d['kesit_uzunluk'])} mm")
 
     if d["gecis"]:
-        d["hukum"] = "ICINDEN GECIYOR"
-        d["satir"] = f"{ad_a} x {ad_b}: ICINDEN GECIYOR — " + ", ".join(nasil)
+        d["hukum"] = "INTERSECTS"
+        d["satir"] = f"{ad_a} x {ad_b}: INTERSECTS — " + ", ".join(nasil)
     elif d["mesafe"] < _TEMAS_ESIGI:
-        d["hukum"] = "degiyor"
-        d["satir"] = (f"{ad_a} <-> {ad_b}: degiyor (0 mm) — icinden GECMIYOR "
-                      f"(ortak hacim yok, kesisme egrisi yok)")
+        d["hukum"] = "touching"
+        d["satir"] = (f"{ad_a} <-> {ad_b}: touching (0 mm) — does NOT pass "
+                      f"through (no common volume, no intersection curve)")
     else:
-        d["hukum"] = "ayri"
-        d["satir"] = f"{ad_a} <-> {ad_b}: {_sayi(d['mesafe'])} mm ayri"
+        d["hukum"] = "apart"
+        d["satir"] = f"{ad_a} <-> {ad_b}: {_sayi(d['mesafe'])} mm apart"
     return d
 
 
-# BU BLOKTA MODELE ZATEN YAZILMIS GECISLER.
+# INTERSECTIONS ALREADY WRITTEN TO THE MODEL IN THIS BLOCK.
 #
-# OLCULDU (LOG/2026-08-31_f5a6a5ac.txt): model her yeni parcadan sonra
-# `cakisma_kontrol(odak=...)` cagiriyor, ARDINDAN host'un dogrulama taramasi
-# ayni ciftleri bir daha bulup BULGU olarak yaziyor. Ayni sayi, iki farkli
-# cumleyle, tek istemin icinde:
+# MEASURED: after every new part the model calls `cakisma_kontrol(odak=...)`,
+# and THEN the host's verification scan finds the same pairs again and
+# writes them as FINDINGS. The same number, in two different sentences,
+# inside one prompt:
 #
-#   BULGU RollbarKiris: icinden geciyor - ortak hacim 10.42 mm3,
-#         RollbarDikme1 hacminin %16'i (RollbarDikme1 ile)
-#   RollbarKiris x RollbarDikme1: ICINDEN GECIYOR - ortak hacim 10.42 mm3,
-#         RollbarDikme1 hacminin %16'i
+#   FINDING RollbarKiris: intersects - common volume 10.42 mm3,
+#         16% of RollbarDikme1's volume (with RollbarDikme1)
+#   RollbarKiris x RollbarDikme1: INTERSECTS - common volume 10.42 mm3,
+#         16% of RollbarDikme1's volume
 #
-# O tek blokta ~950 karakter, oturum boyunca 52 blogun cogunda. Baglam
-# 788k'ya cikan bir oturumda bu odenmesi gereksiz bir bedel; daha kotusu,
-# ayni bulguyu iki kez okuyan model onu iki AYRI sorun sanabiliyor.
+# ~950 characters in that one block, and in most of the session's 52
+# blocks. In a session whose context reached 788k that is a cost not worth
+# paying; worse, a model reading the same finding twice can take it for two
+# SEPARATE problems.
 #
-# KAZANAN TARAF `cakisma_kontrol` CIKTISI, tarama degil. Cunku (a) modelin
-# KENDI sordugu sey odur, (b) ciktisi daha zengin - kac nesne, kac cift,
-# kaci bbox ile elendi, ne kadar surdu, (c) taramanin isi zaten modelin
-# SORMADIGINI yakalamak. Sorulani bir daha soylemesi gerekmiyor.
+# THE `cakisma_kontrol` OUTPUT WINS, not the scan. Because (a) it is what
+# the model ITSELF asked, (b) its output is richer - how many objects, how
+# many pairs, how many dropped by bbox, how long it took, (c) the scan's
+# job is to catch what the model DID NOT ask. It need not repeat what was
+# asked.
 #
-# YALNIZCA `yaz=True` cagrilari kaydediliyor: `yaz=False` (gorsel yolu)
-# hicbir sey yazdirmaz, onun bulgusu bastirilirsa gercekten kaybolur.
+# ONLY `yaz=True` calls are recorded: `yaz=False` (the visual path) prints
+# nothing, so suppressing its finding would really lose it.
 _bildirilen_gecisler: set = set()
 
 
 def bildirilen_gecisleri_sifirla() -> None:
-    """Her kod blogunun BASINDA cagrilir (bkz. executor.calistir).
+    """Called at the START of every code block (see executor.calistir).
 
-    Kayit tek bir blok icin gecerli: bir onceki turda yazilmis bir gecis,
-    bu turdaki taramada bastirilmamali - model onu tekrar gormeli.
+    The record is valid for a single block: an intersection written in a
+    previous turn must not be suppressed in this turn's scan - the model
+    must see it again.
     """
     _bildirilen_gecisler.clear()
 
@@ -962,41 +979,44 @@ def gecis_bildirildi_mi(ad_a: str, ad_b: str) -> bool:
 
 def cakisma_kontrol(*nesneler, odak=None, sure_butcesi: float = 2.0,
                     yaz: bool = True) -> dict:
-    """Verilen nesnelerin BIRBIRINE gecip gecmedigini olcer.
+    """Measures whether the given objects pass THROUGH EACH OTHER.
 
-    NEDEN VAR (olculdu, MANTIK 39): model uc acidan goruntuye bakip
-    "birbirinin icine girmiyor" dedi, kullanici cakismayi gordu; sonradan
-    ayni model ayni cakismayi ELLE yazdigi ucluyle (common + distToShape +
-    slice) 20 saniyede buldu — 2.7 mm3. Goruntu bunu gosteremezdi: 900x640
-    karede ~4 piksel/mm, cakisan sirit ~4 piksel ve yelkenin ARKASINDA.
+    WHY IT EXISTS (measured): the model looked at images from three angles
+    and said "they do not go into each other", the user saw the overlap;
+    later the same model found the same overlap in 20 seconds with a trio it
+    wrote BY HAND (common + distToShape + slice) — 2.7 mm3. The image could
+    not have shown it: ~4 pixels/mm in a 900x640 frame, the overlapping
+    strip ~4 pixels and BEHIND the sail.
 
-    Yani bu, modelin akil yurutmesine birakilmayacak bir olcum — hazir:
+    So this is a measurement not to be left to the model's reasoning — ready:
 
-        cakisma_kontrol()                       # belgedeki her ilgili cift
-        cakisma_kontrol(a, b)                   # yalnizca bu ikisi
-        cakisma_kontrol(a, b, c)                # ucunun tum ciftleri
-        cakisma_kontrol(odak=a)                 # YALNIZCA a'yi ilgilendiren
+        cakisma_kontrol()                       # every relevant pair in the document
+        cakisma_kontrol(a, b)                   # only these two
+        cakisma_kontrol(a, b, c)                # all pairs of the three
+        cakisma_kontrol(odak=a)                 # ONLY pairs involving a
 
-    ODAK NEDEN VAR (olculdu, LOG/2026-08-27_9564dc71.txt): panel yakin
-    cekimde tek bir nesne icin cakisma soruyordu ama kod onu belgedeki TUM
-    nesnelerle carpiyordu — 44 nesne, 946 cift, 2 sn butce doldu ve **431
-    cift hic olculmedi**. Yani sorulan cift bile bakilmadan kalabiliyordu.
-    `odak` verildiginde ciftler yalnizca `odak x digerleri`: n(n-1)/2
-    yerine n-1.
+    WHY ODAK EXISTS (measured): the panel asked about overlap for a single
+    object in a close-up, but the code crossed it with ALL objects in the
+    document — 44 objects, 946 pairs, the 2 s budget ran out and **431
+    pairs were never measured**. So even the pair that was asked about
+    could go unchecked. With `odak`, pairs are only `odak x others`: n-1
+    instead of n(n-1)/2.
 
-    TUKETILMIS NESNELER ELENIR (argumansiz ya da `odak` ile cagrilinca):
-    bir kesme tabani ya da ayna kaynagi, sonucuyla elbette cakisir ve bu
-    kusur degildir — bkz. kesif.tuketilmis_mi. Nesneleri ACIKCA verirsen
-    eleme YAPILMAZ: sorulan seyi olceriz, sansure ugratmayiz.
+    CONSUMED OBJECTS ARE DROPPED (when called with no arguments or with
+    `odak`): a cut base or a mirror source of course overlaps its result,
+    and that is not a defect — see kesif.tuketilmis_mi. If you pass objects
+    EXPLICITLY, no filtering happens: we measure what is asked, we do not
+    censor it.
 
-    Ciftler once BBOX ile eleniyor (bkz. _bbox_kesisiyor_mu), sonra ucu
-    birden olculuyor (bkz. _cift_olc). Sure butcesi dolarsa DURUR ve kac
-    cifte bakilmadigini yazar — dogrulama katmanindaki durustluk kuralinin
-    aynisi.
+    Pairs are first filtered by BBOX (see _bbox_kesisiyor_mu), then all
+    three measurements run (see _cift_olc). If the time budget runs out it
+    STOPS and writes how many pairs were not checked — the same honesty
+    rule as the verification layer.
 
-    "Degme" KUSUR DEGILDIR ve oyle raporlanmaz: bu projede yelken direge,
-    kupeste govdeye bilerek deger (MANTIK 32'deki 31 kez tekrarlanan yanlis
-    alarma donmemek icin). Kusur olan sey ICINDEN GECMEK.
+    "Touching" IS NOT A DEFECT and is not reported as one: in real models a
+    sail touches the mast and a rail touches the hull on purpose (so as not
+    to go back to the false alarm repeated 31 times). What is a defect is
+    PASSING THROUGH.
     """
     import time
 
@@ -1007,13 +1027,14 @@ def cakisma_kontrol(*nesneler, odak=None, sure_butcesi: float = 2.0,
     if not adaylar:
         doc = App.ActiveDocument
         bulunan = _kesif.ilgili_nesneler(doc) if doc is not None else []
-        # Kalinliksiz eskiz/2B iskele bu soruda gurultu: kesisme egrileri
-        # her yerde cikar ve hicbiri kusur degil.
+        # Thin sketches/2D scaffolding are noise for this question:
+        # intersection curves show up everywhere and none is a defect.
         bulunan = [o for o in bulunan
                    if _mesh_al(o) is not None
                    or (_sekil_al(o) is not None and _sekil_al(o).Faces)]
-        # Baskasinin hammaddesi olanlar cikiyor. Odak nesnesinin KENDISI
-        # asla elenmez: kullanici onu sordu, cevabini alir.
+        # Objects that are someone else's raw material go out. The focus
+        # object ITSELF is never dropped: the user asked about it, they get
+        # an answer.
         adaylar = [o for o in bulunan
                    if (odak is not None and o is odak)
                    or not _kesif.tuketilmis_mi(o)]
@@ -1022,8 +1043,8 @@ def cakisma_kontrol(*nesneler, odak=None, sure_butcesi: float = 2.0,
         adaylar = [odak] + adaylar
 
     if len(adaylar) < 2:
-        satir = ("cakisma_kontrol: en az iki nesne gerek "
-                 "(belgede olculebilir iki parca bulunamadi)")
+        satir = ("cakisma_kontrol: needs at least two objects "
+                 "(could not find two measurable parts in the document)")
         if yaz:
             print(satir)
         return {"ciftler": [], "gecisler": [], "bakilan_cift": 0,
@@ -1038,8 +1059,8 @@ def cakisma_kontrol(*nesneler, odak=None, sure_butcesi: float = 2.0,
     bakilmayan = 0
     toplam = 0
 
-    # ODAK varsa cift sayisi n(n-1)/2 degil n-1: sorulan nesneyi
-    # ilgilendirmeyen cift butceden yemez.
+    # With ODAK the pair count is n-1, not n(n-1)/2: pairs that do not
+    # involve the asked object do not eat the budget.
     if odak is not None:
         ham = [(odak, o) for o in adaylar if o is not odak]
     else:
@@ -1059,92 +1080,91 @@ def cakisma_kontrol(*nesneler, odak=None, sure_butcesi: float = 2.0,
         ciftler.append(d)
         if d.get("gecis"):
             gecisler.append(d)
-        elif d.get("hukum") == "degiyor":
+        elif d.get("hukum") == "touching":
             degenler += 1
 
     sonuc = {"ciftler": ciftler, "gecisler": gecisler,
              "bakilan_cift": len(ciftler), "toplam_cift": toplam,
              "bakilmayan": bakilmayan, "sure_sn": time.time() - t0}
 
-    bas = f"cakisma_kontrol — "
+    bas = f"check_overlap — "
     if odak is not None:
-        bas += f"odak {getattr(odak, 'Name', '?')}, "
-    bas += (f"{len(adaylar)} nesne, {toplam} cift "
-            f"({elenen} cift bbox ile elendi)")
+        bas += f"focus {getattr(odak, 'Name', '?')}, "
+    bas += (f"{len(adaylar)} objects, {toplam} pairs "
+            f"({elenen} pairs dropped by bbox)")
     if elenen_tuketilmis:
-        # DURUSTLUK: neyi olcmedigimizi soylemek zorundayiz, yoksa
-        # "temiz" raporu yanlis guven verir.
-        bas += (f"; {elenen_tuketilmis} nesne listeye alinmadi "
-                f"(baskasinin kesme tabani/ayna kaynagi)")
-    satirlar = [bas + f", {sonuc['sure_sn']:.2f} sn"]
+        # HONESTY: we have to say what we did not measure, otherwise a
+        # "clean" report gives false confidence.
+        bas += (f"; {elenen_tuketilmis} objects left out "
+                f"(someone else's cut base/mirror source)")
+    satirlar = [bas + f", {sonuc['sure_sn']:.2f} s"]
     for d in gecisler:
         satirlar.append("  " + d["satir"])
     if not gecisler:
-        satirlar.append("  ICINDEN GECEN CIFT YOK.")
+        satirlar.append("  NO INTERSECTING PAIRS.")
     if degenler:
-        satirlar.append(f"  degen (0 mm) cift: {degenler} — kusur degil, "
-                        f"bilerek temas olabilir")
+        satirlar.append(f"  touching (0 mm) pairs: {degenler} — not a defect, "
+                        f"may be intentional contact")
     if bakilmayan:
-        satirlar.append(f"  KOSMAYAN: {bakilmayan} cift (sure siniri "
-                        f"{sure_butcesi:g} sn asildi)")
+        satirlar.append(f"  NOT RUN: {bakilmayan} pairs (time limit "
+                        f"{sure_butcesi:g} s exceeded)")
     sonuc["satir"] = "\n".join(satirlar)
     if yaz:
         print(sonuc["satir"])
-        # Bu ciftler artik modelin ISTEMINDE duruyor; dogrulama
-        # taramasi onlari tekrar yazmasin.
+        # These pairs are now in the model's PROMPT; the verification scan
+        # must not write them again.
         for d in gecisler:
             _bildirilen_gecisler.add(tuple(sorted((d["a"], d["b"]))))
     return sonuc
 
 
 # --------------------------------------------------------------------------
-# 7. SAGLIK — "bu sekil gercekten saglam mi"
+# 7. HEALTH — "is this shape really sound"
 # --------------------------------------------------------------------------
 #
-# NEDEN VAR (gunluklerden SAYILDI, PLAN S8 kabul olcutu):
-#   isValid              156 kez / 9 dosya
-#   isSolid              125 kez / 4 dosya
-#   hasSelfIntersections  96 kez / 4 dosya
-#   len(Shape.Solids)     86 kez / 7 dosya
-#   hasNonManifolds       48 kez / 3 dosya
-# Model bunu her oturumda ELLE yaziyor ve iki AYRI deyimle yaziyor:
-#   kati  -> sh.isValid() and len(sh.Solids) == 1 and sh.isClosed()
+# WHY IT EXISTS (COUNTED in the logs):
+#   isValid              156 times / 9 files
+#   isSolid              125 times / 4 files
+#   hasSelfIntersections  96 times / 4 files
+#   len(Shape.Solids)     86 times / 7 files
+#   hasNonManifolds       48 times / 3 files
+# The model writes this BY HAND in every session, and in two DIFFERENT idioms:
+#   solid -> sh.isValid() and len(sh.Solids) == 1 and sh.isClosed()
 #   mesh  -> m.isSolid() and not m.hasNonManifolds() and
 #            not m.hasSelfIntersections()
-# Yani nesnenin turune gore hangi testin gectigini de kendisi secmek
-# zorunda kaliyor. Burasi o secimi ustlenir.
+# So it also has to choose which test applies to which kind of object. This
+# function takes over that choice.
 #
-# ELENEN ADAYLAR (gunlukte KANITI YOK, o yuzden yazilmadi):
-#   MatrixOfInertia / atalet tensoru ...  0 kez
-#   sapma haritasi (Inspection) .........  0 kez
-#   removeSplitter / Part::Refine .......  0 kez (modelin sozunde gecti,
-#                                          kodunda hic cagrilmadi)
+# REJECTED CANDIDATES (NO EVIDENCE in the logs, so not written):
+#   MatrixOfInertia / inertia tensor ...  0 times
+#   deviation map (Inspection) .........  0 times
+#   removeSplitter / Part::Refine ......  0 times (mentioned in the model's
+#                                         words, never called in its code)
 
 def _saglik_kati(s) -> tuple:
-    """Bir Part sekli icin (kusurlar, bilgiler)."""
+    """(defects, info) for a Part shape."""
     kusur: list[str] = []
     bilgi: list[str] = []
 
     try:
         if not s.isValid():
-            kusur.append("isValid=False — OCC dogrulamasindan gecmiyor")
+            kusur.append("isValid=False — does not pass OCC validation")
     except Exception:
         pass
 
-    # YUZU OLMAYAN SEKIL KATI OLMAYA ADAY DEGIL. Olculdu
-    # (LOG/2026-08-31_ed2bc86b.txt): `saglik()` belge taramasinda
-    # `KUSUR Origin001: KATI YOK` yazdi; o nesne bir datum NOKTASIYDI
-    # (App::Point, Shape=Vertex). Nokta/kenar/tel'e kati testi uygulamak
-    # kategori hatasi — ve kusur raporunu gurultuyle doldurmak, gercek
-    # kusurlari degersizlestirmenin en kestirme yolu (§32'nin dersi).
-    # Kesif tarafinda bu tip artik eleniyor; burasi ikinci kat: nesne
-    # ELLE verilse de yanlis kusur yazilmasin.
+    # A SHAPE WITHOUT FACES IS NOT A CANDIDATE FOR BEING A SOLID. Measured:
+    # the `saglik()` document scan wrote `DEFECT Origin001: NO SOLID`; that
+    # object was a datum POINT (App::Point, Shape=Vertex). Applying solid
+    # tests to a point/edge/wire is a category error — and filling the
+    # defect report with noise is the shortest way to devalue real defects.
+    # The survey side now drops this type; this is the second layer: the
+    # wrong defect must not be written even if the object is passed by hand.
     try:
         yuz_sayisi = len(s.Faces)
     except Exception:                                            # noqa: BLE001
         yuz_sayisi = None
     if yuz_sayisi == 0:
-        bilgi.append("yuzu yok (nokta/kenar/tel) — kati testleri uygulanmadi")
+        bilgi.append("no faces (point/edge/wire) — solid tests not applied")
         return kusur, bilgi
 
     kati = None
@@ -1153,49 +1173,49 @@ def _saglik_kati(s) -> tuple:
     except Exception:
         pass
     if kati == 0:
-        kusur.append("KATI YOK (yalnizca yuzey/kabuk) — hacim ve baski anlamsiz")
+        kusur.append("NO SOLID (surface/shell only) — volume and printing meaningless")
     elif kati and kati > 1:
-        # Kusur DEGIL: bilesik bir sekil kasitli olabilir. Ama modelin
-        # gunlukte tam da bunu aradigi gorulduğu icin soyleniyor.
-        bilgi.append(f"{kati} ayri kati — birlestirilmemis olabilir")
+        # NOT a defect: a compound shape can be intentional. But the logs
+        # show the model looking for exactly this, so it is mentioned.
+        bilgi.append(f"{kati} separate solids — may not be fused")
 
     if kati:
         try:
             if not s.isClosed():
-                kusur.append("kapali degil — acik kabuk")
+                kusur.append("not closed — open shell")
         except Exception:
             pass
 
     try:
         h = float(s.Volume)
         if kati and h <= 0:
-            kusur.append(f"hacim {_sayi(h)} mm3 — ters yonlu kati")
+            kusur.append(f"volume {_sayi(h)} mm3 — inside-out solid")
         else:
-            bilgi.append(f"hacim {_sayi(h)} mm3")
+            bilgi.append(f"volume {_sayi(h)} mm3")
     except Exception:
         pass
 
     try:
-        bilgi.append(f"{len(s.Faces)} yuz")
+        bilgi.append(f"{len(s.Faces)} faces")
     except Exception:
         pass
     return kusur, bilgi
 
 
-# (ad, kusur sayilan deger, mesaj) — hepsi tek tek korumali cagriliyor
-# cunku FreeCAD surumleri arasinda bu metotlarin hepsi bulunmayabilir.
+# (name, value counted as a defect, message) — each is called guarded,
+# because not every FreeCAD version has all of these methods.
 _MESH_TESTLERI = (
-    ("isSolid", False, "KAPALI KATI DEGIL — delik/acik kenar var; "
-                       "hacim ve baski guvenilmez"),
-    ("hasNonManifolds", True, "manifold olmayan kenar var"),
-    ("hasSelfIntersections", True, "kendini kesen yuzey var"),
-    ("hasInvalidPoints", True, "gecersiz nokta var"),
-    ("hasDegeneratedFacets", True, "sifir alanli (bozuk) ucgen var"),
+    ("isSolid", False, "NOT A CLOSED SOLID — has holes/open edges; "
+                       "volume and printing unreliable"),
+    ("hasNonManifolds", True, "has non-manifold edges"),
+    ("hasSelfIntersections", True, "has self-intersecting surfaces"),
+    ("hasInvalidPoints", True, "has invalid points"),
+    ("hasDegeneratedFacets", True, "has zero-area (degenerate) triangles"),
 )
 
 
 def _saglik_mesh(m) -> tuple:
-    """Bir Mesh icin (kusurlar, bilgiler)."""
+    """(defects, info) for a Mesh."""
     kusur: list[str] = []
     bilgi: list[str] = []
     for ad, kotu, mesaj in _MESH_TESTLERI:
@@ -1206,28 +1226,29 @@ def _saglik_mesh(m) -> tuple:
         if deger is kotu:
             kusur.append(mesaj)
     try:
-        bilgi.append(f"{m.CountFacets} ucgen")
+        bilgi.append(f"{m.CountFacets} triangles")
     except Exception:
         pass
     try:
-        bilgi.append(f"hacim {_sayi(m.Volume)} mm3")
+        bilgi.append(f"volume {_sayi(m.Volume)} mm3")
     except Exception:
         pass
     return kusur, bilgi
 
 
 def saglik(*nesneler, yaz: bool = True) -> dict:
-    """Sekil/mesh SAGLAM MI — bozuk boolean ve basilamaz mesh yakalar.
+    """Is the shape/mesh SOUND — catches broken booleans and unprintable meshes.
 
-        saglik()          # belgedeki her ilgili nesne
-        saglik(a, b)      # yalnizca bunlar
+        saglik()          # every relevant object in the document
+        saglik(a, b)      # only these
 
-    Kati ve mesh AYRI testlerden gecer (bkz. _saglik_kati / _saglik_mesh);
-    hangisinin uygulanacagini bu fonksiyon secer.
+    Solids and meshes go through DIFFERENT tests (see _saglik_kati /
+    _saglik_mesh); this function chooses which applies.
 
-    KUSUR ile BILGI ayrilir — projenin kurali. "3 ayri kati" bir kusur
-    degildir, bilgidir; "kati yok" kusurdur. Bozuk cikan hicbir sey
-    yuvarlanmaz: olculemeyen test sessizce ATLANIR, uydurulmaz.
+    DEFECTS and INFO are separated — the project's rule. "3 separate solids"
+    is not a defect, it is information; "no solid" is a defect. Nothing that
+    comes out broken is rounded off: a test that cannot be measured is
+    SKIPPED silently, never made up.
     """
     import time
 
@@ -1239,7 +1260,7 @@ def saglik(*nesneler, yaz: bool = True) -> dict:
         adaylar = _kesif.ilgili_nesneler(doc) if doc is not None else []
 
     if not adaylar:
-        satir = "saglik: bakilacak nesne bulunamadi"
+        satir = "saglik: no objects to check"
         if yaz:
             print(satir)
         return {"nesneler": [], "kusurlu": [], "satir": satir}
@@ -1257,9 +1278,9 @@ def saglik(*nesneler, yaz: bool = True) -> dict:
             if s is None:
                 continue
             kusur, bilgi = _saglik_kati(s)
-            tur = "kati"
-        # Hammadde oldugunu SOYLUYORUZ ama elemiyoruz: bozuk bir kesme
-        # tabani, bozuk sonucun ta kendisidir.
+            tur = "solid"
+        # We SAY it is raw material but we do not drop it: a broken cut base
+        # is the broken result itself.
         try:
             hammadde = _kesif.tuketilmis_mi(o)
         except Exception:
@@ -1271,27 +1292,28 @@ def saglik(*nesneler, yaz: bool = True) -> dict:
     temiz = [k for k in kayitlar if not k["kusurlar"]]
     sure = time.time() - t0
 
-    satirlar = [f"saglik — {len(kayitlar)} nesne, {len(kusurlu)} kusurlu, "
-                f"{sure:.2f} sn"]
+    satirlar = [f"health — {len(kayitlar)} objects, {len(kusurlu)} with defects, "
+                f"{sure:.2f} s"]
     for k in kusurlu:
-        etiket = k["ad"] + (" (hammadde)" if k["hammadde"] else "")
+        etiket = k["ad"] + (" (raw material)" if k["hammadde"] else "")
         for mesaj in k["kusurlar"]:
-            satirlar.append(f"  KUSUR {etiket}: {mesaj}")
+            satirlar.append(f"  DEFECT {etiket}: {mesaj}")
     if not kusurlu:
-        satirlar.append("  KUSUR YOK.")
-    # Bilgi satirlari kusurdan SONRA ve kisaltilmis: gurultu yapmasin.
-    # "uygulanmadi" da geciyor: bir nesneye BAKILMADIYSA bunu soylemek
-    # zorundayiz, yoksa "0 kusurlu" temiz sanilir — projenin "olcemedigini
-    # uydurma" kuralinin bu fonksiyondaki karsiligi.
-    notlar = [f"  not {k['ad']}: {b}"
+        satirlar.append("  NO DEFECTS.")
+    # Info lines AFTER the defects and trimmed: so they are not noise.
+    # "not applied" is included too: if an object was NOT CHECKED we must
+    # say so, otherwise "0 with defects" reads as clean — this function's
+    # version of the project's "do not make up what you could not measure"
+    # rule.
+    notlar = [f"  note {k['ad']}: {b}"
               for k in kayitlar for b in k["bilgiler"]
-              if "birlestirilmemis" in b or "uygulanmadi" in b]
+              if "may not be fused" in b or "not applied" in b]
     satirlar.extend(notlar)
     if temiz:
         adlar = ", ".join(k["ad"] for k in temiz[:8])
         if len(temiz) > 8:
             adlar += f", +{len(temiz) - 8}"
-        satirlar.append(f"  temiz: {adlar}")
+        satirlar.append(f"  clean: {adlar}")
 
     sonuc = {"nesneler": kayitlar, "kusurlu": kusurlu, "sure_sn": sure,
              "satir": "\n".join(satirlar)}
@@ -1301,19 +1323,20 @@ def saglik(*nesneler, yaz: bool = True) -> dict:
 
 
 # --------------------------------------------------------------------------
-# 8. SIMETRI — "sol yari sag yariyla ayni mi"
+# 8. SYMMETRY — "is the left half the same as the right half"
 # --------------------------------------------------------------------------
 #
-# NEDEN VAR (gunluklerden SAYILDI): "simetri" 5 ayri gunlukte 38 kez
-# geciyor ve model bunu her seferinde ELLE kuruyor — bbox'tan orta ekseni
-# cikarip bantlara bolerek nokta sayiyor. Bir kez de GERCEK bir kusuru
-# boyle buldu: "Y=111-143 bandinda yalnizca pozitif X var, negatif tarafta
-# hicbir nokta yok — eksik olan kuyruk yatay kanadinin sol yarisi."
-# Bu, 4 piksel/mm'lik bir karede gozden kacabilecek bir kusurdu.
+# WHY IT EXISTS (COUNTED in the logs): "symmetry" appears 38 times in 5
+# separate logs and the model sets it up BY HAND every time — taking the
+# middle axis from the bbox and counting points in bands. Once it found a
+# REAL defect that way: "in the Y=111-143 band there is only positive X,
+# no point on the negative side — the missing piece is the left half of
+# the horizontal tail wing." A defect that could slip past in a frame at
+# 4 pixels/mm.
 #
-# ELLE YAZILANIN ZAYIFLIGI: bant sayimi yalnizca "hic nokta var mi"
-# sorusunu sorar; kaymis ama VAR OLAN bir yariyi TEMIZ gosterir.
-# Burada aynalanip GERCEK sapma olculuyor.
+# THE WEAKNESS OF THE HAND-WRITTEN VERSION: band counting only asks "are
+# there any points"; it shows a half that is shifted but PRESENT as CLEAN.
+# Here it is mirrored and the REAL deviation is measured.
 
 _EKSEN_NO = {"x": 0, "y": 1, "z": 2}
 
@@ -1321,7 +1344,7 @@ _EKSEN_NO = {"x": 0, "y": 1, "z": 2}
 def _eksen_adi(eksen) -> str:
     ad = str(eksen).lower().strip()
     if ad not in _EKSEN_NO:
-        raise ValueError("eksen 'x', 'y' ya da 'z' olmali (verilen: %r)" % (eksen,))
+        raise ValueError("axis must be 'x', 'y' or 'z' (given: %r)" % (eksen,))
     return ad
 
 
@@ -1333,10 +1356,10 @@ def _ayna_taban_normal(eksen: str, merkez: float):
 
 
 def _simetri_kati(s, eksen: str, merkez: float):
-    """Katida simetri: aynala, IKI YONLU farki al, hacmini olc.
+    """Symmetry on a solid: mirror it, take the TWO-WAY difference, measure its volume.
 
-    Tek yonlu fark (A - A') yetmez — yalnizca fazlaligi gorur, EKSIGI
-    gormez. Simetrik fark iki taraflidir.
+    A one-way difference (A - A') is not enough — it only sees excess, not
+    what is MISSING. The symmetric difference is two-sided.
     """
     taban, normal = _ayna_taban_normal(eksen, merkez)
     try:
@@ -1366,7 +1389,7 @@ def _simetri_kati(s, eksen: str, merkez: float):
         toplam = 0.0
     if toplam <= 0:
         return None
-    return {"yontem": "hacim", "fark": fark_h, "toplam": toplam,
+    return {"yontem": "volume", "fark": fark_h, "toplam": toplam,
             "oran": fark_h / toplam, "kutular": kutular}
 
 
@@ -1374,11 +1397,11 @@ _SIMETRI_AZAMI_NOKTA = 20000
 
 
 def _simetri_nokta(noktalar, eksen: str, merkez: float):
-    """Nokta bulutunda simetri: aynala, her aynalanan noktanin ORIJINALE
-    en yakin uzakligini olc.
+    """Symmetry on a point cloud: mirror it and measure each mirrored
+    point's nearest distance to the ORIGINAL.
 
-    scipy'nin cKDTree'si (modul basligindaki olcume gore kaba kuvvetten
-    120 kat hizli) yoksa OLCMEYIZ, uydurmayiz -> None.
+    Without scipy's cKDTree (120x faster than brute force per the module
+    header's measurement) we DO NOT MEASURE and do not make it up -> None.
     """
     np = _np()
     if np is None or not noktalar:
@@ -1397,57 +1420,58 @@ def _simetri_nokta(noktalar, eksen: str, merkez: float):
     Q[:, i] = 2.0 * merkez - Q[:, i]
     d, _bul = cKDTree(P).query(Q)
     en_kotu = int(np.argmax(d))
-    return {"yontem": "nokta", "nokta_sayisi": int(len(P)),
+    return {"yontem": "points", "nokta_sayisi": int(len(P)),
             "azami": float(d.max()), "ortalama": float(d.mean()),
             "en_kotu_yer": tuple(float(v) for v in Q[en_kotu])}
 
 
 def _simetri_hukum(olculen: dict, boy: float) -> tuple:
-    """(hukum, aciklama). Esikler GORELI — 200 mm'lik bir parcada 0.1 mm
-    simetriktir, 2 mm'lik parcada degildir."""
-    if olculen["yontem"] == "hacim":
+    """(verdict, explanation). Thresholds are RELATIVE — 0.1 mm is symmetric
+    on a 200 mm part, not on a 2 mm part."""
+    if olculen["yontem"] == "volume":
         oran = olculen["oran"]
         if oran < 0.001:
-            return "simetrik", "fark hacmi %%%.3f" % (oran * 100)
+            return "symmetric", "difference volume %.3f%%" % (oran * 100)
         if oran < 0.01:
-            return "neredeyse", "fark hacmi %%%.2f" % (oran * 100)
-        return "ASIMETRIK", "fark hacmi %%%.1f" % (oran * 100)
+            return "nearly", "difference volume %.2f%%" % (oran * 100)
+        return "ASYMMETRIC", "difference volume %.1f%%" % (oran * 100)
     azami = olculen["azami"]
     goreli = azami / boy if boy else 0.0
     if goreli < 0.001:
-        return "simetrik", "azami sapma %s mm" % _sayi(azami)
+        return "symmetric", "max deviation %s mm" % _sayi(azami)
     if goreli < 0.01:
-        return "neredeyse", "azami sapma %s mm" % _sayi(azami)
-    return "ASIMETRIK", ("azami sapma %s mm (boyun %%%.1f'i)"
-                         % (_sayi(azami), goreli * 100))
+        return "nearly", "max deviation %s mm" % _sayi(azami)
+    return "ASYMMETRIC", ("max deviation %s mm (%.1f%% of the size)"
+                          % (_sayi(azami), goreli * 100))
 
 
 def simetri(nesne=None, eksen=None, merkez=None, yaz: bool = True) -> dict:
-    """Parca bir eksene gore SIMETRIK MI — ve degilse NEREDE bozuk.
+    """Is the part SYMMETRIC about an axis — and if not, WHERE is it off.
 
-        simetri()                       # tek nesne, uc eksenin ucu de
-        simetri(obj, "x")               # yalnizca x
-        simetri(obj, "y", merkez=8.0)   # ayna duzlemi elle
+        simetri()                       # single object, all three axes
+        simetri(obj, "x")               # only x
+        simetri(obj, "y", merkez=8.0)   # mirror plane by hand
 
-    `eksen` verilmezse UCU DE olculur ve simetrik olanlar soylenir — "bu
-    parca hangi eksene gore simetrik" sorusunun cevabi budur.
-    `merkez` verilmezse ayna duzlemi bbox ortasidir (modelin gunlukte elle
-    yaptigi secimin ayni: X_C = (XMin + XMax) / 2).
+    Without `eksen` ALL THREE are measured and the symmetric ones are named
+    — that answers "which axis is this part symmetric about".
+    Without `merkez` the mirror plane is the bbox middle (the same choice the
+    model made by hand in the logs: X_C = (XMin + XMax) / 2).
 
-    Katida hacim farkiyla, mesh'te nokta bulutuyla olculur. Boolean
-    patlarsa (bozuk sekilde olagan) nokta bulutuna DUSER ve bunu satirda
-    SOYLER. Ikisi de olcemezse sonuc vermez — "simetrik" DEMEZ.
+    Measured by volume difference on solids and by point cloud on meshes.
+    If the boolean fails (common on broken shapes) it FALLS BACK to the
+    point cloud and SAYS so in the line. If neither can measure it gives no
+    result — it does NOT say "symmetric".
     """
     nesne = _hedef(nesne)
     if nesne is None:
-        satir = "simetri: nesne bulunamadi (nesneyi ver ya da tek nesne birak)"
+        satir = "simetri: object not found (pass the object or leave only one)"
         if yaz:
             print(satir)
         return {"satir": satir, "eksenler": {}}
 
     kutu = _kutu(nesne)
     if kutu is None:
-        satir = "simetri: %s olculemedi (sekil yok)" % getattr(nesne, "Name", "?")
+        satir = "simetri: %s could not be measured (no shape)" % getattr(nesne, "Name", "?")
         if yaz:
             print(satir)
         return {"satir": satir, "eksenler": {}}
@@ -1484,44 +1508,44 @@ def simetri(nesne=None, eksen=None, merkez=None, yaz: bool = True) -> dict:
         elif noktalar:
             olculen = _simetri_nokta(noktalar, e, orta)
         if olculen is None:
-            sonuclar[e] = {"hukum": "olculemedi", "merkez": orta}
+            sonuclar[e] = {"hukum": "not measured", "merkez": orta}
             continue
         hukum, aciklama = _simetri_hukum(olculen, boylar[e])
         olculen.update({"hukum": hukum, "aciklama": aciklama, "merkez": orta})
         sonuclar[e] = olculen
 
     ad = getattr(nesne, "Name", "?")
-    satirlar = ["simetri — %s" % ad]
+    satirlar = ["symmetry — %s" % ad]
     for e in eksenler:
         r = sonuclar[e]
-        if r["hukum"] == "olculemedi":
-            satirlar.append("  %s: OLCULEMEDI (duzlem %s) — boolean ve nokta "
-                            "bulutu ikisi de basarisiz"
+        if r["hukum"] == "not measured":
+            satirlar.append("  %s: NOT MEASURED (plane %s) — boolean and point "
+                            "cloud both failed"
                             % (e, _sayi(r["merkez"])))
             continue
-        ek = " [yedek: nokta bulutu]" if r.get("yedek") else ""
-        satirlar.append("  %s (duzlem %s=%s): %s — %s%s"
+        ek = " [fallback: point cloud]" if r.get("yedek") else ""
+        satirlar.append("  %s (plane %s=%s): %s — %s%s"
                         % (e, e, _sayi(r["merkez"]), r["hukum"],
                            r["aciklama"], ek))
-        if r["hukum"] == "ASIMETRIK":
-            # NEREDE bozuk oldugu asil isi goren bilgi.
+        if r["hukum"] == "ASYMMETRIC":
+            # WHERE it is off is the information that actually helps.
             for b in r.get("kutular", [])[:2]:
                 satirlar.append(
-                    "      fark bolgesi: x %s..%s, y %s..%s, z %s..%s"
+                    "      difference region: x %s..%s, y %s..%s, z %s..%s"
                     % (_sayi(b.XMin), _sayi(b.XMax), _sayi(b.YMin),
                        _sayi(b.YMax), _sayi(b.ZMin), _sayi(b.ZMax)))
             if "en_kotu_yer" in r:
                 x, y, z = r["en_kotu_yer"]
-                satirlar.append("      en kotu nokta: (%s, %s, %s)"
+                satirlar.append("      worst point: (%s, %s, %s)"
                                 % (_sayi(x), _sayi(y), _sayi(z)))
 
-    olculenler = [e for e in eksenler if sonuclar[e]["hukum"] != "olculemedi"]
+    olculenler = [e for e in eksenler if sonuclar[e]["hukum"] != "not measured"]
     if len(olculenler) > 1:
-        temiz = [e for e in olculenler if sonuclar[e]["hukum"] != "ASIMETRIK"]
+        temiz = [e for e in olculenler if sonuclar[e]["hukum"] != "ASYMMETRIC"]
         if temiz:
-            satirlar.append("  -> simetrik eksen: %s" % ", ".join(temiz))
+            satirlar.append("  -> symmetric axis: %s" % ", ".join(temiz))
         else:
-            satirlar.append("  -> hicbir eksene gore simetrik degil")
+            satirlar.append("  -> not symmetric about any axis")
 
     sonuc = {"eksenler": sonuclar, "satir": "\n".join(satirlar)}
     if yaz:

@@ -1,47 +1,49 @@
-# CADdy - FreeCAD workbench kaydi.
+# CADdy - FreeCAD workbench registration.
 #
-# ================== BURAYA DOKUNMADAN ONCE OKU ==================
+# ================== READ THIS BEFORE TOUCHING THIS FILE ==================
 #
-# Bu dosya normal bir modul gibi import EDILMEZ. FreeCAD onu
-# FreeCADGuiInit.py icindeki bir FONKSIYONUN icinden
+# This file is NOT imported like a normal module. FreeCAD runs it from
+# inside a FUNCTION in FreeCADGuiInit.py with
 #
-#     exec(compile(open(dosya).read(), dosya, "exec"))
+#     exec(compile(open(file).read(), file, "exec"))
 #
-# ile calistirir. Argumansiz exec() bir fonksiyonun icinde cagrilinca
-# globals() ve locals() AYRI sozluklerdir. Sonucu:
+# When exec() is called without arguments inside a function, globals() and
+# locals() are SEPARATE dicts. As a result:
 #
-#   * Buradaki "modul seviyesi" atamalar locals'a duser.
-#   * Modul seviyesindeki KOD onlari gorur (once locals'a bakar).
-#   * Ama bir SINIF GOVDESI ya da FONKSIYON GOVDESI ad aramasini
-#     dogrudan globals'a yapar -> buradaki adlari GOREMEZ.
+#   * "Module level" assignments here land in locals.
+#   * Module-level CODE sees them (it looks in locals first).
+#   * But a CLASS BODY or FUNCTION BODY looks names up directly in
+#     globals -> it CANNOT see the names defined here.
 #
-# Fiilen carpildi: sinif govdesinde "Icon = IKON" yazinca FreeCAD
-# acilista sessizce
+# This actually bit us: writing "Icon = IKON" in the class body made
+# FreeCAD silently report
 #     name 'IKON' is not defined
-# verip workbench'i HIC kaydetmedi. Liste bos, hata yalnizca stderr'de.
+# at startup and NOT register the workbench at all. Empty list, the error
+# only on stderr.
 #
-# KURAL: sinif ve metot govdelerinde bu dosyanin kendi adlarini KULLANMA.
-#   - Sabitleri sinif tanimindan SONRA ata (asagida Icon boyle atanmis).
-#   - Metot icinde ihtiyacin olani ORADA import et.
+# RULE: do not use this file's own names inside class or method bodies.
+#   - Assign constants AFTER the class definition (Icon is set that way below).
+#   - Import whatever a method needs INSIDE that method.
 #
-# FreeCAD'in kendi OpenSCAD/InitGui.py'si de bu yuzden ikonu __init__
-# icinde self.__class__.Icon = ... diye atiyor.
+# FreeCAD's own OpenSCAD/InitGui.py sets its icon in __init__ as
+# self.__class__.Icon = ... for the same reason.
 #
-# Burada mantik YOK - sadece yol ayari, workbench sinifi ve komut kaydi.
-# Gercek is caddy/ paketinde.
-# ================================================================
+# No logic here - only path setup, the workbench class and command
+# registration. The real work is in the caddy/ package.
+# =========================================================================
 
 import os
 import sys
 
 
 def _eklenti_dizini():
-    # __file__ KULLANILMAZ, cunku burada TANIMSIZ degil YANLIS olur:
-    # argumansiz exec cagiran fonksiyonun globals'i miras alinir ve oradaki
-    # __file__ FreeCADGuiInit.py'yi gosterir -> ikon yolu FreeCAD'in kendi
-    # dizinine cikar. (Testte tam bunu yakaladik: yol tests/ altina cikti.)
+    # __file__ is NOT used, because here it is not UNDEFINED but WRONG:
+    # exec without arguments inherits the calling function's globals, and
+    # __file__ there points to FreeCADGuiInit.py -> the icon path ends up in
+    # FreeCAD's own directory. (A test caught exactly this: the path pointed
+    # under tests/.)
     #
-    # compile()'a gecilen ad her zaman BU dosyadir; co_filename onu verir.
+    # The name passed to compile() is always THIS file; co_filename gives it.
     yol = sys._getframe().f_code.co_filename
     if not os.path.isabs(yol) or not os.path.exists(yol):
         yol = globals().get("__file__", yol)
@@ -55,11 +57,11 @@ if EKLENTI_DIZINI not in sys.path:
 IKON = os.path.join(EKLENTI_DIZINI, "resources", "icons", "caddy.svg")
 
 
-class CADdyWorkbench(Workbench):  # noqa: F821  (FreeCAD enjekte ediyor)
-    # DIKKAT: burada yalnizca SABIT deger olabilir. Disaridan gelen bir ada
-    # (IKON gibi) basvurma - sinif govdesi onu goremez. Icon asagida atandi.
+class CADdyWorkbench(Workbench):  # noqa: F821  (injected by FreeCAD)
+    # CAREFUL: only CONSTANT values here. Do not refer to an outside name
+    # (like IKON) - the class body cannot see it. Icon is assigned below.
     MenuText = "CADdy"
-    ToolTip = "FreeCAD icinde AI yardimcisi"
+    ToolTip = "AI assistant inside FreeCAD"
 
     def Initialize(self):
         try:
@@ -69,7 +71,7 @@ class CADdyWorkbench(Workbench):  # noqa: F821  (FreeCAD enjekte ediyor)
 
             import FreeCAD
             FreeCAD.Console.PrintError(
-                "[CADdy] yuklenemedi:\n" + traceback.format_exc() + "\n")
+                "[CADdy] failed to load:\n" + traceback.format_exc() + "\n")
             return
 
         adlar = list(commands.kaydet())
@@ -77,7 +79,7 @@ class CADdyWorkbench(Workbench):  # noqa: F821  (FreeCAD enjekte ediyor)
         self.appendMenu("CADdy", adlar)
 
     def Activated(self):
-        # Workbench'e ilk gecildiginde paneli kendiliginden ac.
+        # Open the panel automatically the first time the workbench is selected.
         try:
             from caddy.ui.dock import paneli_goster
             paneli_goster()
@@ -86,45 +88,44 @@ class CADdyWorkbench(Workbench):  # noqa: F821  (FreeCAD enjekte ediyor)
 
             import FreeCAD
             FreeCAD.Console.PrintError(
-                "[CADdy] panel acilamadi:\n" + traceback.format_exc() + "\n")
+                "[CADdy] could not open the panel:\n" + traceback.format_exc() + "\n")
 
     def GetClassName(self):
-        # Saf Python workbench'ler icin ZORUNLU sabit
+        # REQUIRED constant for pure-Python workbenches
         return "Gui::PythonWorkbench"
 
 
-# Sinif govdesinin disinda: burasi modul seviyesi, IKON gorunur.
+# Outside the class body: this is module level, IKON is visible.
 CADdyWorkbench.Icon = IKON
 
 Gui.addWorkbench(CADdyWorkbench())  # noqa: F821
 
 
-# --- Ust seride kalici yer -------------------------------------------------
-# Workbench'in kendi appendToolbar/appendMenu'su YALNIZCA o workbench
-# aktifken gorunur. Kullanici CADdy'nin hep ustte durmasini istedi, o yuzden
-# menu cubuguna ve kalici bir arac cubuguna ayrica giriyoruz.
+# --- Permanent place in the top bar ----------------------------------------
+# The workbench's own appendToolbar/appendMenu are visible ONLY while that
+# workbench is active. The user wanted CADdy always at the top, so we also
+# add it to the menu bar and a permanent toolbar.
 #
-# Komutlar burada kaydediliyor: Initialize() yalnizca workbench'e ilk
-# gecildiginde calisiyor, ama ust menunun acilistan itibaren dolu olmasi
-# lazim.
+# Commands are registered here: Initialize() only runs the first time the
+# workbench is selected, but the top menu has to be populated from startup.
 try:
     from caddy import commands as _komutlar
     _komutlar.kaydet()
     from caddy.ui import ust_menu as _ust
     _ust.yerlestir()
 except Exception:
-    # DIKKAT: bu blok KENDISI patlamamali. Ilk yazimda burada
-    # `import FreeCAD` vardi ve FreeCAD'in olmadigi ortamda (kapsam testi)
-    # istisna disari kacip butun InitGui'yi dusurdu - yani "hata
-    # yakalayici"nin kendisi hataya sebep oldu. Test bunu yakaladi.
+    # CAREFUL: this block must not fail ITSELF. The first version had
+    # `import FreeCAD` here, and in an environment without FreeCAD (the
+    # coverage test) the exception escaped and took down all of InitGui -
+    # the "error handler" itself caused the error. The test caught it.
     import traceback as _tb
 
     _iz = _tb.format_exc()
     try:
         import FreeCAD as _App
         _App.Console.PrintWarning(
-            "[CADdy] ust serit eklenemedi (workbench yine calisir):\n"
+            "[CADdy] could not add the top bar (the workbench still works):\n"
             + _iz + "\n")
     except Exception:
         import sys as _sys
-        _sys.stderr.write("[CADdy] ust serit eklenemedi:\n" + _iz + "\n")
+        _sys.stderr.write("[CADdy] could not add the top bar:\n" + _iz + "\n")

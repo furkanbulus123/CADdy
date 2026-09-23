@@ -1,8 +1,9 @@
-"""Bir kod onerisi karti: kod + Calistir/Kopyala + sonuc.
+"""A code suggestion card: code + Run/Copy + result.
 
-Neden on-izleme (diff) yok: CAD'de calistirmadan once "ne olacagini" gosteren
-anlamli bir diff YOKTUR — sonuc geometridir, metin degil. Durust ilkel sudur:
-calistir, 3D'de bak, begenmezsen tek Ctrl+Z. Kart bunu soyluyor.
+Why there is no preview (diff): in CAD there is NO meaningful diff that shows
+"what will happen" before running — the result is geometry, not text. The
+honest primitive is: run it, look in 3D, and if you do not like it, one
+Ctrl+Z. The card says exactly that.
 """
 
 from __future__ import annotations
@@ -11,22 +12,22 @@ from PySide import QtCore, QtGui, QtWidgets
 
 
 class SaranSatir(QtWidgets.QLayout):
-    """Yatay satir — SIGMAYAN ogeyi ALT SATIRA atar, kirpmaz.
+    """A horizontal row — moves an item that DOES NOT FIT to THE NEXT LINE, never clips it.
 
-    Neden gerekli (olculdu, offscreen, gercek kart): duz bir QHBoxLayout'ta
-    kartin asgari genisligi 766 px'di — panelin asgari genisliginin (368 px)
-    iki katindan fazla. Panelde yatay kaydirma KAPALI oldugu icin fazlasi
-    kaydirilamiyor, dogrudan KIRPILIYORDU: dar panelde "Uyarıları AI'a
-    gönder" dugmesi ve sagindaki durum yazisi gorunmuyordu.
+    Why (measured, offscreen, real card): in a plain QHBoxLayout the card's
+    minimum width was 766 px — more than twice the panel's minimum width
+    (368 px). Horizontal scrolling is OFF in the panel, so the excess could
+    not be scrolled and was simply CLIPPED: in a narrow panel the "Send
+    warnings to AI" button and the status text to its right were invisible.
 
-    Iki kotu secenek vardi: (1) etiketleri kisaltmak — dar panelde yine
-    yetmez, (2) yatay kaydirmayi acmak — dar bir yan sutunda saga kaydirilan
-    metin okunmuyor (ayni gerekce dock._konusma_alani'nda). Sarma ucuncu yol:
-    genislik ne olursa olsun her dugmenin TAM etiketi gorunur, yalnizca satir
-    sayisi artar.
+    There were two bad options: (1) shorten the labels — still not enough
+    in a narrow panel, (2) turn on horizontal scrolling — text scrolled
+    sideways in a narrow side column is unreadable (same reasoning as in
+    dock._konusma_alani). Wrapping is the third way: whatever the width,
+    every button's FULL label is visible, only the number of lines grows.
 
-    Qt'nin FlowLayout ornegiyle ayni desen; yukseklik genislige bagli
-    oldugu icin hasHeightForWidth/heightForWidth sart.
+    Same pattern as Qt's FlowLayout example; height depends on width, so
+    hasHeightForWidth/heightForWidth are required.
     """
 
     def __init__(self, parent=None, aralik: int = 6) -> None:
@@ -36,7 +37,7 @@ class SaranSatir(QtWidgets.QLayout):
         if parent is not None:
             self.setContentsMargins(0, 0, 0, 0)
 
-    # -- QLayout sozlesmesi
+    # -- QLayout contract
     def addItem(self, oge) -> None:
         self._ogeler.append(oge)
 
@@ -66,23 +67,23 @@ class SaranSatir(QtWidgets.QLayout):
         return self.minimumSize()
 
     def minimumSize(self) -> QtCore.QSize:
-        # EN GENIS TEK OGE — satirin tamami degil. Kartin genislik dayatmasi
-        # tam olarak burada kiriliyor.
+        # THE WIDEST SINGLE ITEM — not the whole row. This is exactly where
+        # the card's width demand is broken.
         b = QtCore.QSize(0, 0)
         for o in self._ogeler:
-            if o.isEmpty():        # gizli dugme (btn_hata/btn_sonuc) yer tutmaz
+            if o.isEmpty():        # a hidden button (btn_hata/btn_sonuc) takes no room
                 continue
             b = b.expandedTo(o.minimumSize())
         k = self.contentsMargins()
         return b + QtCore.QSize(k.left() + k.right(), k.top() + k.bottom())
 
-    # -- ic
+    # -- internal
     def _yerlestir(self, dikdortgen, yalniz_olc: bool) -> int:
         k = self.contentsMargins()
         alan = dikdortgen.adjusted(k.left(), k.top(), -k.right(), -k.bottom())
         x, y, satir_h = alan.x(), alan.y(), 0
         for o in self._ogeler:
-            if o.isEmpty():        # gizli dugme yer tutmaz, satir kaydirmaz
+            if o.isEmpty():        # a hidden button takes no room, does not wrap
                 continue
             b = o.sizeHint()
             if x > alan.x() and x + b.width() > alan.right() + 1:
@@ -99,7 +100,7 @@ class SaranSatir(QtWidgets.QLayout):
 class CodeCard(QtWidgets.QFrame):
     calistir_istendi = QtCore.Signal(object)     # blocks.KodBloku
     hata_gonder_istendi = QtCore.Signal(object)  # CalismaSonucu
-    sonuc_gonder_istendi = QtCore.Signal(object)  # CalismaSonucu (uyarilarla)
+    sonuc_gonder_istendi = QtCore.Signal(object)  # CalismaSonucu (with warnings)
 
     def __init__(self, blok, parent=None) -> None:
         super().__init__(parent)
@@ -107,11 +108,11 @@ class CodeCard(QtWidgets.QFrame):
         self._sonuc = None
 
         self.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        # Kartin YUKSEKLIGI GENISLIGE BAGLI (saran dugme satiri). Qt'nin
-        # varsayilan boyut politikasi bunu KAPALI tutar ve ust yerlesim
-        # kartin dar haldeki fazladan satirlarini hesaba katmaz — dugmeler
-        # alttan kirpilirdi. Yatay tasmayi cozup yerine dikey tasma koymak
-        # olurdu bu; acikca aciyoruz.
+        # The card's HEIGHT DEPENDS ON ITS WIDTH (wrapping button row). Qt's
+        # default size policy keeps this OFF and the parent layout ignores
+        # the extra lines of the narrow card — the buttons would be clipped
+        # at the bottom. That would trade horizontal overflow for vertical
+        # overflow; we turn it on explicitly.
         p = self.sizePolicy()
         p.setHeightForWidth(True)
         self.setSizePolicy(p)
@@ -119,91 +120,92 @@ class CodeCard(QtWidgets.QFrame):
         d.setContentsMargins(8, 6, 8, 6)
         d.setSpacing(5)
 
-        # -- baslik satiri
-        # Baslik satiri da SARAN: baslik metni modelden geliyor, uzunlugu
-        # bizim elimizde degil. Rozet sigmazsa alt satira duser.
+        # -- title row
+        # The title row WRAPS too: the title text comes from the model, its
+        # length is not up to us. If the badge does not fit it drops below.
         ust = SaranSatir(aralik=6)
         baslik = QtWidgets.QLabel(blok.baslik or "FreeCAD Python")
-        # Baslik tek basina bile satiri asabilir; sarsin, kirpilmasin.
+        # The title alone can overflow the row; let it wrap, not clip.
         baslik.setWordWrap(True)
         f = baslik.font()
         f.setBold(True)
         baslik.setFont(f)
         ust.addWidget(baslik)
-        # addStretch YOK — SaranSatir esnemez, soldan dizer.
+        # NO addStretch — SaranSatir does not stretch, it lays out from the left.
         if not blok.guvenilir:
-            rozet = QtWidgets.QLabel("bicim dogrulanmadi")
+            rozet = QtWidgets.QLabel("format not verified")
             rozet.setStyleSheet("color:#a06000;")
             rozet.setToolTip(
-                "Model sozlesmedeki `freecad-python` etiketini kullanmadi.\n"
-                "Kod yine de calistirilabilir ama once okumakta fayda var.")
+                "The model did not use the `freecad-python` tag.\n"
+                "The code can still run, but read it first.")
             ust.addWidget(rozet)
         d.addLayout(ust)
 
-        # -- kod
+        # -- code
         self.kod = QtWidgets.QPlainTextEdit(blok.kod.rstrip())
-        self.kod.setReadOnly(False)   # duzenlenebilir: kullanici elle duzeltebilsin
+        self.kod.setReadOnly(False)   # editable: the user can fix it by hand
         self.kod.setFont(QtGui.QFontDatabase.systemFont(
             QtGui.QFontDatabase.FixedFont))
-        # SARMA ACIK. Eskiden NoWrap idi ve uzun bir satir karti saga dogru
-        # kaydiriyordu; panel dar bir yan sutun oldugu icin kullanici kodu
-        # okumak yerine kaydiriyordu. Sarma, girintiyi bozar ama kaybolmaz —
-        # kaydirma ise satirin varligini bile gizliyordu.
+        # WRAPPING ON. It used to be NoWrap and a long line scrolled the card
+        # sideways; the panel is a narrow side column, so the user scrolled
+        # instead of reading the code. Wrapping spoils the indentation but
+        # hides nothing — scrolling hid that the line even existed.
         self.kod.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)
-        # Kelime siniri bulunamazsa KARAKTERDEN bol. Kodda uzun bolunemez
-        # parcalar sik: dosya yollari, uzun nesne adlari. Yalnizca kelime
-        # sinirindan bolmek onlari sagdan tasirirdi.
+        # If no word boundary is found, break ANYWHERE. Code has many long
+        # unbreakable pieces: file paths, long object names. Breaking only
+        # at word boundaries would let them overflow on the right.
         self.kod.setWordWrapMode(QtGui.QTextOption.WrapAtWordBoundaryOrAnywhere)
         self.kod.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self._yuksekligi_ayarla()
         d.addWidget(self.kod)
 
-        # -- dugmeler. SARAN satir: dar panelde alt satira dokulurler,
-        # kirpilmazlar (gerekce ve olcum SaranSatir'in docstring'inde).
+        # -- buttons. A WRAPPING row: in a narrow panel they flow to the next
+        # line instead of being clipped (reason and measurement in SaranSatir).
         alt = SaranSatir(aralik=6)
-        self.btn_calistir = QtWidgets.QPushButton("Çalıştır")
+        self.btn_calistir = QtWidgets.QPushButton("Run")
         self.btn_calistir.setDefault(True)
         self.btn_calistir.clicked.connect(self._calistir)
         alt.addWidget(self.btn_calistir)
 
-        self.btn_kopyala = QtWidgets.QPushButton("Kopyala")
+        self.btn_kopyala = QtWidgets.QPushButton("Copy")
         self.btn_kopyala.clicked.connect(self._kopyala)
         alt.addWidget(self.btn_kopyala)
 
-        self.btn_hata = QtWidgets.QPushButton("Hatayı AI'a gönder")
+        self.btn_hata = QtWidgets.QPushButton("Send error to AI")
         self.btn_hata.setVisible(False)
         self.btn_hata.clicked.connect(
             lambda: self.hata_gonder_istendi.emit(self._sonuc))
         alt.addWidget(self.btn_hata)
 
-        # Kod calisti ama FreeCAD konsolunda turuncu/kirmizi satir var:
-        # istisna firlamadigi icin "basarili" gorunuyor, ama bir sey ters.
-        # Bunlari modele gostermek icin ayri dugme.
-        self.btn_sonuc = QtWidgets.QPushButton("Uyarıları AI'a gönder")
+        # The code ran but the FreeCAD console has orange/red lines: no
+        # exception was raised so it looks "successful", but something is
+        # off. A separate button shows these to the model.
+        self.btn_sonuc = QtWidgets.QPushButton("Send warnings to AI")
         self.btn_sonuc.setVisible(False)
         self.btn_sonuc.clicked.connect(
             lambda: self.sonuc_gonder_istendi.emit(self._sonuc))
         alt.addWidget(self.btn_sonuc)
 
-        # addStretch YOK: saran satirda esneme yeri yok, ogeler soldan
-        # dizilir. Durum yazisi son dugmenin yanina, sigmazsa altina duser.
+        # NO addStretch: a wrapping row has no place to stretch, items are
+        # laid out from the left. The status text goes next to the last
+        # button, or below it if it does not fit.
         self.durum = QtWidgets.QLabel("")
         self.durum.setWordWrap(True)
         alt.addWidget(self.durum)
         d.addLayout(alt)
 
-    # -- ic ---------------------------------------------------------------
+    # -- internal ----------------------------------------------------------
 
     _EN_AZ_SATIR = 3
     _EN_COK_SATIR = 22
 
     def _gorunen_satir(self) -> int:
-        """Sarma SONRASI kac satir gorunuyor.
+        """How many lines are visible AFTER wrapping.
 
-        blockCount() yetmiyor: sarma acikken bir mantiksal satir ekranda
-        birkac satir kaplayabilir. Yalnizca blocklari saymak karti kisa
-        birakir ve kodun alti kirpilir — yani yatay kaydirmayi kapatirken
-        yerine dikey kirpma koymus olurduk.
+        blockCount() is not enough: with wrapping on, one logical line can
+        take several lines on screen. Counting only blocks would leave the
+        card short and clip the bottom of the code — we would have traded
+        horizontal scrolling for vertical clipping.
         """
         try:
             toplam = 0
@@ -223,81 +225,83 @@ class CodeCard(QtWidgets.QFrame):
         self.kod.setFixedHeight(yukseklik)
 
     def resizeEvent(self, olay):
-        # Panel genisligi degisince sarma da degisir, yani gorunen satir
-        # sayisi da. Yukseklik yeniden hesaplanmazsa kod alttan kirpilir.
+        # When the panel width changes the wrapping changes, and with it the
+        # visible line count. Without recomputing the height the code gets
+        # clipped at the bottom.
         super().resizeEvent(olay)
         self._yuksekligi_ayarla()
 
     def _kopyala(self) -> None:
         QtWidgets.QApplication.clipboard().setText(self.kod.toPlainText())
-        self.durum.setText("kopyalandı")
+        self.durum.setText("copied")
 
     def _calistir(self) -> None:
-        # IKINCI BASISTA ONAY SOR. Sebep gunlukte duruyor: 2026-08-19
-        # oturumunda ayni kart 13:30:58 ve 13:31:03'te iki kez calisti ve
-        # 22 KOPYA NESNE uretti (KulakBodySol + KulakBodySol001...); baska
-        # bir kart dort kez kostu. Kod calistirmak birikimli bir islem —
-        # ikinci calistirma "tekrarlamaz", USTUNE EKLER.
+        # ASK FOR CONFIRMATION ON THE SECOND PRESS. The reason is in the
+        # logs: in one session the same card ran twice, 5 seconds apart, and
+        # produced 22 DUPLICATE OBJECTS (KulakBodySol + KulakBodySol001...);
+        # another card ran four times. Running code is cumulative — a second
+        # run does not "repeat", it ADDS ON TOP.
         #
-        # Ilk basista sormuyoruz: her calistirmada onay istemek asil akisi
-        # yavaslatir. Tehlikeli olan tekrar, ilk sefer degil.
+        # We do not ask on the first press: asking on every run would slow
+        # the main flow. The repeat is what is dangerous, not the first run.
         if self._sonuc is not None:
             c = QtWidgets.QMessageBox.question(
-                self, "Tekrar çalıştır?",
-                "Bu kod zaten bir kez çalıştı.\n\n"
-                "Tekrar çalıştırmak nesneleri SİLMEZ, üstüne yenilerini "
-                "ekler — aynı geometriden ikinci bir kopya oluşur.\n\n"
-                "Devam edilsin mi?",
+                self, "Run again?",
+                "This code has already run once.\n\n"
+                "Running it again does NOT delete anything, it adds on top "
+                "— you get a second copy of the same geometry.\n\n"
+                "Continue?",
                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
                 QtWidgets.QMessageBox.No)
             if c != QtWidgets.QMessageBox.Yes:
                 return
 
-        # Kullanici kodu elle duzenlemis olabilir — ekranda ne varsa o calisir.
+        # The user may have edited the code by hand — what is on screen runs.
         self.blok.kod = self.kod.toPlainText()
         self.btn_calistir.setEnabled(False)
-        self.durum.setText("çalışıyor…")
+        self.durum.setText("running…")
         QtWidgets.QApplication.processEvents()
         self.calistir_istendi.emit(self.blok)
 
-    # -- disaridan ---------------------------------------------------------
+    # -- from outside ------------------------------------------------------
 
     def sonucu_goster(self, sonuc) -> None:
         self.btn_calistir.setEnabled(True)
 
-        # ENGELLENDI: kod hic kosmadi, tekrar korumasi durdurdu. Kartin
-        # durumunu DEGISTIRMIYORUZ — ne "basarili" ne "hata"; olan sey bir
-        # soru. Kullanici tekrar basarsa executor bu sefer gecirir.
+        # BLOCKED: the code never ran, the repeat guard stopped it. We do NOT
+        # change the card's state — neither "success" nor "error"; what
+        # happened is a question. If the user presses again, the executor
+        # lets it through this time.
         if getattr(sonuc, "engellendi", False):
-            self.durum.setText("engellendi — aynı kod az önce çalıştı")
+            self.durum.setText("blocked — the same code just ran")
             self.durum.setStyleSheet("color:#a06000;")
             self.setToolTip(sonuc.hata_izi)
             return
 
         self._sonuc = sonuc
-        self.btn_calistir.setText("Tekrar çalıştır")
+        self.btn_calistir.setText("Run again")
         self.durum.setText(sonuc.ozet)
         self.durum.setStyleSheet(
             "color:#0a7a26;" if sonuc.basarili else "color:#b00020;")
         self.btn_hata.setVisible(not sonuc.basarili)
 
-        # Konsolda turuncu/kirmizi varsa ya da kod bir sey yazdirdiysa,
-        # "basarili" olsa bile modele iletilecek bir sey var. Cikti artik
-        # KENDILIGINDEN gidiyor; dugme yalnizca o yol mesgulken (baska bir
-        # tur suruyorken) atlanan durumlar icin duruyor.
+        # If the console has orange/red lines or the code printed something,
+        # there is something to pass to the model even on "success". Output
+        # now goes AUTOMATICALLY; the button only remains for cases skipped
+        # while that path was busy (another turn in progress).
         konsol = list(sonuc.konsol_hata) + list(sonuc.konsol_uyari)
         self.btn_sonuc.setVisible(
             bool(sonuc.basarili and (konsol or sonuc.uyarilar or sonuc.cikti)))
         if konsol:
             self.btn_sonuc.setText(
-                f"Uyarıları AI'a gönder ({len(konsol) + len(sonuc.uyarilar)})")
-            self.durum.setStyleSheet("color:#a06000;")   # turuncu: dikkat
+                f"Send warnings to AI ({len(konsol) + len(sonuc.uyarilar)})")
+            self.durum.setStyleSheet("color:#a06000;")   # orange: attention
 
         if not sonuc.basarili:
             self.setToolTip(sonuc.hata_izi)
         else:
             ipucu = list(sonuc.uyarilar)
-            ipucu += ["FreeCAD HATA: " + u for u in sonuc.konsol_hata]
-            ipucu += ["FreeCAD uyarı: " + u for u in sonuc.konsol_uyari]
+            ipucu += ["FreeCAD ERROR: " + u for u in sonuc.konsol_hata]
+            ipucu += ["FreeCAD warning: " + u for u in sonuc.konsol_uyari]
             if ipucu:
                 self.setToolTip("\n".join(ipucu))

@@ -2,8 +2,9 @@
 
 **An AI assistant that lives inside FreeCAD — and measures its work instead of guessing.**
 
-<!-- DEMO VIDEO: drag the .mp4 into this line on GitHub's editor -->
-![CADdy demo](docs/demo.gif)
+[![Watch the demo: building a toy pickup truck with CADdy](docs/truck.png)](docs/demo.mp4)
+
+▶ **[Watch the 1-minute demo](docs/demo.mp4)**
 
 You draw. You ask. CADdy continues on the same live document. You keep going.
 Nothing is exported, nothing is lost, and every AI step is one `Ctrl+Z` away.
@@ -19,10 +20,15 @@ Nothing is exported, nothing is lost, and every AI step is one `Ctrl+Z` away.
   tree and stay parametric. Edit either one, any time.
 - **One step, one undo.** However many objects an AI turn creates, a single
   `Ctrl+Z` rolls it back.
-- **No API key.** Runs on your existing Claude subscription through the Claude
-  Code CLI.
+- **Runs on your Claude subscription.** It drives the official Claude Code
+  CLI, so there is no separate API key to manage. Usage is drawn from your
+  plan's monthly Agent SDK credit (e.g. $20 on Pro); beyond that, standard
+  API rates apply.
 
-![Screenshot](docs/screenshot.png)
+| | |
+|---|---|
+| ![Sailing ship: CADdy measures the hull and checks every part](docs/ship.png) | ![Alien figurine split into printable parts, overlap-checked](docs/alien.png) |
+| *A sailing ship: measured part by part, not eyeballed.* | *A 3-part printable figurine, checked for overlaps and fit.* |
 
 ## Requirements
 
@@ -30,8 +36,8 @@ Nothing is exported, nothing is lost, and every AI step is one `Ctrl+Z` away.
 - [FreeCAD 1.1](https://www.freecad.org/downloads.php) (1.0 and older will not work)
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), signed in with a Claude Pro or Max plan
 
-> Do **not** set `ANTHROPIC_API_KEY`. If it is set, the CLI bills API credits
-> instead of using your subscription.
+> If `ANTHROPIC_API_KEY` is set, the CLI bills that API key instead of your
+> subscription. Unset it unless that is what you want.
 
 ## Install
 
@@ -51,16 +57,19 @@ Open the CADdy panel and describe what you want:
 
 > *"Add four M3 mounting holes, 5 mm from each corner."*
 
-![Example](docs/example.png)
+![Asking CADdy about an existing scene](docs/space.png)
 
 | Button | What it does |
 |---|---|
-| **Yeni** (New) | Start a fresh conversation |
-| **Geri al / İleri al** (Undo / Redo) | Step through AI changes |
+| **New** | Start a fresh conversation |
+| **Undo / Redo** | Step through AI changes |
 | **Model** | Opus or Sonnet |
-| **Hızlı / Derin** (Effort) | Fast or deep thinking |
+| **History** | Resume a past chat |
+| **Fast / Deep** | How much the model thinks |
 
-## Tests
+## Tests & architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ```powershell
 & "C:\Program Files\FreeCAD 1.1\bin\freecadcmd.exe" tests\test_yukleme_fc.py

@@ -56,14 +56,14 @@ GECICI = Path(tempfile.mkdtemp(prefix="caddy_kayit_"))
 
 ORNEK = """\
 ========================================================================
-CADdy sohbet gunlugu
-oturum : 9564dc71-071d-4ca3-9c21-483cf5766739
-model  : claude-opus-5
-efor   : Hızlı (az düşünür)
-baslama: 2026-08-27T13:39:39
+CADdy chat log
+session : 9564dc71-071d-4ca3-9c21-483cf5766739
+model   : claude-opus-5
+effort  : Fast (thinks less)
+started : 2026-08-27T13:39:39
 ========================================================================
 
---- KULLANICI  [13:39:55] -----------------------------------------
+--- USER  [13:39:55] -----------------------------------------
 bana bir kucuk model araba tasarla
 
 --- AI  (claude-opus-5 · 7.4 sn)  [13:40:03] -----------------------
@@ -73,7 +73,7 @@ Kamyonet yapacagiz — once tek soru: ne icin?
 kutu = doc.addObject("Part::Box", "Sasi")
 ```
 
---- KULLANICI  [13:41:00] -----------------------------------------
+--- USER  [13:41:00] -----------------------------------------
 f secenegi
 """
 
@@ -136,9 +136,9 @@ metin = hedef.read_text(encoding="utf-8")
 kontrol("yeni dosya ACILMADI", len(list(GECICI.glob("*.txt"))) == 2,
         [p.name for p in GECICI.glob("*.txt")])
 kontrol("dosya buyudu", hedef.stat().st_size > onceki_boyut)
-kontrol("DEVAM ayraci yazildi", "DEVAM" in metin)
-kontrol("baslik TEKRARLANMADI", metin.count("CADdy sohbet gunlugu") == 1,
-        metin.count("CADdy sohbet gunlugu"))
+kontrol("DEVAM ayraci yazildi", "RESUMED" in metin)
+kontrol("baslik TEKRARLANMADI", metin.count("CADdy chat log") == 1,
+        metin.count("CADdy chat log"))
 kontrol("devam mesaji dosyada", "devam eden mesaj" in metin)
 
 # Ayni oturum icin oturum_ac cagrilirsa (her tur cagriliyor) dosyayi
@@ -186,9 +186,9 @@ kontrol("ON KABUL: yeniden acilan belgede nesne adlari duruyor",
 
 def _gunluk_yaz(ad, belge, dosya):
     """Baslikta belge/dosya satiri olan bir gunluk uretir."""
-    metin = ORNEK.replace("efor   : Hızlı (az düşünür)",
-                          "efor   : Hızlı (az düşünür)\n"
-                          "belge  : %s\ndosya  : %s" % (belge, dosya))
+    metin = ORNEK.replace("effort  : Fast (thinks less)",
+                          "effort  : Fast (thinks less)\n"
+                          "document: %s\nfile    : %s" % (belge, dosya))
     (GECICI / ad).write_text(metin, encoding="utf-8")
     return metin
 
@@ -234,13 +234,13 @@ d = kayitlar.belge_durumu(_kayit("2026-08-30_kayip.txt"))
 kontrol("dosya yoksa durum KAYIP", d["durum"] == kayitlar.DURUM_KAYIP,
         d["durum"])
 kontrol("kayip mesaji yolu ve sonucu SOYLUYOR",
-        _yok in d["mesaj"] and "açık olan belgede" in d["mesaj"])
+        _yok in d["mesaj"] and "currently open document" in d["mesaj"])
 doc, hata = kayitlar.belgeyi_ac(_yok)
 kontrol("olmayan dosyada belgeyi_ac patlamiyor, hata METNI donuyor",
         doc is None and bool(hata), hata[:60])
 
 # --- 4) KAYDEDILMEMIS ---------------------------------------------------
-_gunluk_yaz("2026-08-30_kayitsiz.txt", "Adsız (Unnamed)", "(kaydedilmemis)")
+_gunluk_yaz("2026-08-30_kayitsiz.txt", "Adsız (Unnamed)", "(unsaved)")
 k = _kayit("2026-08-30_kayitsiz.txt")
 kontrol("yer tutucu YOL sayilmiyor", k.belge_yolu == "", k.belge_yolu)
 d = kayitlar.belge_durumu(k)
@@ -275,9 +275,9 @@ _g.oturum_ac("aaaabbbb-0000-0000-0000-000000000000")
 _g.kullanici("merhaba")
 _bas = _g.dosya.read_text(encoding="utf-8")
 kontrol("baslikta belge satiri var ve dolu",
-        "belge  : S14Yazim" in _bas, _bas[:400])
+        "document: S14Yazim" in _bas, _bas[:400])
 kontrol("baslikta dosya yolu var ve dolu",
-        "dosya  : " in _bas and "S14Yazim.FCStd" in _bas)
+        "file    : " in _bas and "S14Yazim.FCStd" in _bas)
 kontrol("yol bulununca bir daha aranmiyor", _g._belge_yazildi is True)
 
 # Surdurme ESKI basligi bozmamali — S14'un butun anlami o satirda.
@@ -286,7 +286,7 @@ _g2.dosyaya_devam("aaaabbbb-0000-0000-0000-000000000000", _g.dosya)
 App.closeDocument(_d2.Name)
 _g2.kullanici("devam")
 kontrol("surdurulen gunlugun ESKI belge satiri korunuyor",
-        "belge  : S14Yazim" in _g.dosya.read_text(encoding="utf-8"))
+        "document: S14Yazim" in _g.dosya.read_text(encoding="utf-8"))
 App.closeDocument(App.getDocument("S14Model").Name) \
     if "S14Model" in App.listDocuments() else None
 

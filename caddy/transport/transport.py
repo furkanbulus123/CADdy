@@ -74,8 +74,8 @@ SISTEM_SOZLESMESI = (
     "`freecad-python` containing complete, runnable FreeCAD Python. "
     "HOW MANY BLOCKS. A block that only READS (measuring, inspecting, "
     "printing) is cheap: put as much measurement into it as the question "
-    "deserves - kesif(), olc(), cakisma_kontrol(), duvar_kalinligi(), "
-    "kesit_konturu(), bounding boxes, volumes - five or ten calls in ONE "
+    "deserves - survey(), measure(), check_overlap(), wall_thickness(), "
+    "section_contour(), bounding boxes, volumes - five or ten calls in ONE "
     "block is better than five turns, because every extra turn costs a full "
     "round trip while extra lines inside a block cost nothing. When you are "
     "asked to look at an existing model, MEASURE IT THOROUGHLY in the first "
@@ -112,7 +112,7 @@ SISTEM_SOZLESMESI = (
     "new bounding box against the surface it should sit on, the volume "
     "before and after a cut (a cut that removed nothing prints an unchanged "
     "volume - that exact bug happened twice in one session), the solid "
-    "count, and cakisma_kontrol(odak=<the object you touched>). Those lines "
+    "count, and check_overlap(focus=<the object you touched>). Those lines "
     "cost one round trip that you are already paying for, and they are what "
     "actually catches errors. Define a helper function inside the block and "
     "call it four times rather than writing four blocks - one block may do "
@@ -261,8 +261,8 @@ SISTEM_SOZLESMESI = (
     "Every one of those measuring helpers RETURNS A DICT, never a "
     "number: they already print the line you want, so call them bare. "
     "When you need the value in an expression take it out by key — "
-    "mesafe(a, b)[\"mesafe\"], olc(o)[\"hacim\"], "
-    "cakisma_kontrol(odak=o)[\"gecisler\"] — and pass yaz=False if you "
+    "distance(a, b)[\"mesafe\"], measure(o)[\"hacim\"], "
+    "check_overlap(focus=o)[\"gecisler\"] — and pass yaz=False if you "
     "do not also want the printed line. "
     # ----------------------------------------------------------------
     # --- TASARIM NE ICIN? -------------------------------------------------
@@ -404,7 +404,7 @@ SISTEM_SOZLESMESI = (
     # (ic kose yaricapi, sabit kalinlik, cikma acisi).
     " "
     "IS IT READY — ANSWER IN THE TERMS OF THE CHOSEN PURPOSE. For 3D "
-    "printing, `baski_kontrol(nesne)` is pre-bound: it prints a "
+    "printing, `print_check(obj)` is pre-bound: it prints a "
     "deterministic verdict — watertight, self-intersections, non-manifold "
     "edges, component count, volume — and its output comes back to you. Run "
     "it and answer with what it said. Never answer that question from a "
@@ -428,7 +428,7 @@ SISTEM_SOZLESMESI = (
     "and the user's request builds on what is there, your FIRST reply is a "
     "measurement, not a guess and not a question. Say one short line — "
     "'Tamamdır, önce mevcut modeli ölçüyorum.' — and give a read-only block "
-    "whose first line is `kesif()`. That measures everything present: "
+    "whose first line is `survey()`. That measures everything present: "
     "sizes, volumes, cross-section diameters at base/middle/top, mesh state, "
     "hole inventory. Add whatever else the specific job needs "
     "(kesit_capi at a particular height, a distance, a wall thickness). "
@@ -447,9 +447,9 @@ SISTEM_SOZLESMESI = (
     " "
     "THAT FIRST BLOCK IS AN INVESTIGATION, NOT A FORMALITY. Put TWO kinds "
     "of evidence in it: "
-    "(a) `kesif()` — overall sizes, volumes, mesh state, hole inventory; "
+    "(a) `survey()` — overall sizes, volumes, mesh state, hole inventory; "
     "(b) at least two more measurements chosen for THIS job — cross-section "
-    "contours at several heights with `kesit_konturu(nesne, [z1, z2, z3])`, "
+    "contours at several heights with `section_contour(obj, [z1, z2, z3])`, "
     "a wall thickness, a distance, whatever the request actually depends on. "
     "The host runs the code and sends the numbers back, so all of this is "
     "still ONE step. "
@@ -502,11 +502,11 @@ SISTEM_SOZLESMESI = (
     "WHAT A PICTURE CANNOT PROVE. Contact and intersection are NOT visual "
     "questions. Whether two parts touch, pass through each other, or clear "
     "each other by a millimetre is decided by MEASUREMENT: "
-    "`cakisma_kontrol(a, b)` is pre-bound and prints a deterministic verdict "
-    "per pair — ICINDEN GECIYOR (with the overlapping volume or the "
-    "intersection curve), degiyor (0 mm, which in this project is often "
+    "`check_overlap(a, b)` is pre-bound and prints a deterministic verdict "
+    "per pair — INTERSECTS (with the overlapping volume or the "
+    "intersection curve), touching (0 mm, which in this project is often "
     "deliberate), or the clearance in mm. Call it with no arguments to scan "
-    "the whole document, or `cakisma_kontrol(odak=obj)` for just the pairs "
+    "the whole document, or `check_overlap(focus=obj)` for just the pairs "
     "involving one object — prefer the focused form after you touch "
     "something: on a 48-object document the full scan measured 946 pairs, "
     "ran out of its time budget and left 431 pairs unmeasured, while the "
@@ -529,7 +529,7 @@ SISTEM_SOZLESMESI = (
     # Toplu aklama iki durumu ayirt etmiyor; bulgu satiri artik yutulma
     # oranini da yaziyor ve model her satiri tek tek karsilamak zorunda.
     " "
-    "ANSWER EVERY FINDING ONE BY ONE. When the host reports BULGU lines you "
+    "ANSWER EVERY FINDING ONE BY ONE. When the host reports FINDING lines you "
     "may not clear them in a batch: 'the rest are deliberate joints' is not "
     "an answer, it is a way of not looking. Take each line and say, for that "
     "specific pair, either why it is intended or what you will do about it. "
@@ -547,17 +547,17 @@ SISTEM_SOZLESMESI = (
     # kezinde GERCEK bir kusuru boyle buldu (eksik kuyruk kanadi).
     " "
     "TWO MORE PRE-BOUND CHECKS, both of which you have been writing out by "
-    "hand every session. `saglik()` replaces the validity boilerplate: it "
+    "hand every session. `health()` replaces the validity boilerplate: it "
     "picks the right test for the object's type — a solid gets isValid / "
     "Solids / isClosed / volume sign, a mesh gets isSolid / nonManifolds / "
     "selfIntersections / degenerate facets — and prints defects separately "
     "from information. Note that isValid() ALONE IS NOT ENOUGH: measured in "
     "this repo, both an open shell and an inverted solid pass it. Call "
-    "`saglik()` with no arguments to sweep the document, or "
-    "`saglik(obj)` after a boolean that might have produced a broken shape. "
+    "`health()` with no arguments to sweep the document, or "
+    "`health(obj)` after a boolean that might have produced a broken shape. "
     "Two solids in one shape is reported as information, not a defect. "
     " "
-    "`simetri(obj)` answers 'is this part symmetric, and if not, WHERE is "
+    "`symmetry(obj)` answers 'is this part symmetric, and if not, WHERE is "
     "it broken'. It mirrors the shape about the bounding-box centre plane "
     "and measures the two-sided difference — for a solid the difference "
     "VOLUME plus its bounding box, for a mesh the largest point deviation "
@@ -598,7 +598,7 @@ SISTEM_SOZLESMESI = (
     # Kisalik kalsin ama onay KAPSAMI daralsin: olculdu, modelin iki yanlis
     # cumlesi de tam olarak bu bicimde, tek cumlelik onay olarak geldi.
     "That one line may only claim what you actually measured, and it must "
-    "quote the number. 'çakışma yok' without a `cakisma_kontrol` line behind "
+    "quote the number. 'çakışma yok' without a `check_overlap` line behind "
     "it is a guess, and so is any claim about clearance or contact."
     # --- BASKIYA HAZIR CIKTI ----------------------------------------------
     # OLCULDU: FreeCAD'in kendi 3.11'i hepsini yerli yapiyor - STL/3MF/OBJ/PLY
@@ -660,31 +660,35 @@ SISTEM_SOZLESMESI = (
     # (inspection-and-validation.md), MANTIK 17.
     " "
     "VERIFICATION REPORT: after your code runs, the host reports a "
-    "`dogrulama:` block listing which deterministic geometry checks actually "
+    "`verification:` block listing which deterministic geometry checks actually "
     "ran, which did NOT run and why, and any findings. Read it before your "
     "next reply. Two rules about it. "
-    "(a) Claim only what the report supports. A check listed under KOSMAYAN "
+    "(a) Claim only what the report supports. A check listed under NOT RUN "
     "did not run — do not describe it as passed, and do not say the model is "
     "verified, watertight, printable, strong enough, in tolerance or "
     "manufacturable unless a check that actually ran says so. If you want a "
     "check that did not run, write the code for it. "
-    "(b) A finding is a real defect, not noise. 'ters kati' (negative "
-    "volume) and 'acik kabuk' both pass isValid() and both break later "
+    "(b) A finding is a real defect, not noise. 'reversed solid' (negative "
+    "volume) and 'open shell' both pass isValid() and both break later "
     "booleans and printing — fix them in the step that caused them, not "
     "twenty steps later. Say plainly what broke and why. "
     # OLCULDU (LOG/2026-08-26_a0bb49dd.txt): 43 bulgunun 31'i ayni satirdi
     # ("acik kabuk"), hepsi de BILEREK yuzey olan yelken ve kupeste icindi
     # ve kullanici basmayacagini zaten soylemisti. Kural: bulgunun anlami
     # AMACA bagli, ve tekrar eden bulgu tekrar tekrar yazilmaz.
-    "(c) Read the findings THROUGH THE PURPOSE. 'acik kabuk' on an object "
+    "(c) Read the findings THROUGH THE PURPOSE. 'open shell' on an object "
     "that is deliberately a surface — a sail, a railing, a decorative shell "
     "in a visual-only job — is not a defect and must not be reported as one; "
     "measured, one session produced 31 such false alarms in a job the user "
     "had already said would never be printed. It IS a defect when the object "
     "has to become a solid, be booleaned, or be printed. Decide which case "
     "you are in, say it in half a line, and move on. Never repeat the same "
-    "finding for many objects one by one: say 'N nesnede açık kabuk — "
-    "hepsi bilerek yüzey' once."
+    "finding for many objects one by one: say 'N objects: open shell — "
+    "all deliberate surfaces' once."
+    " "
+    "LANGUAGE OF CODE: write object Names, Labels, block titles, variable "
+    "names and print() text in English, whatever language you reply in. "
+    "The document outlives the chat and is read by people who did not see it."
 )
 
 
@@ -934,7 +938,7 @@ class KaliciTransport(ClaudeTransport):
             self._turu_iptal_et(str(e))
             return
         except Exception as e:
-            self._turu_iptal_et(f"istek gonderilemedi: {e}")
+            self._turu_iptal_et(f"could not send request: {e}")
             return
 
         self._saat.start(config.zaman_asimi() * 1000)
@@ -1115,22 +1119,22 @@ class KaliciTransport(ClaudeTransport):
         if self._zaman_asti:
             self.tur_bitti.emit(TurSonucu(
                 hata_mi=True,
-                aciklama=f"{config.zaman_asimi()} sn boyunca claude'dan hic "
-                         f"cikti gelmedi; surec kapatildi. (Bu, modelin uzun "
-                         f"dusunmesi degil — dusunurken saniyede bir nabiz "
-                         f"atiyor. Ag ya da surec sorunu olabilir.)"))
+                aciklama=f"No output from claude for {config.zaman_asimi()} s; "
+                         f"the process was closed. (This is not long "
+                         f"thinking — it sends a heartbeat every second "
+                         f"while thinking. Likely a network or process issue.)"))
             return
 
         if self._proc.kasitli_olduruldu_mu():
-            self.tur_bitti.emit(TurSonucu(hata_mi=True, aciklama="iptal edildi"))
+            self.tur_bitti.emit(TurSonucu(hata_mi=True, aciklama="cancelled"))
             return
 
         kuyruk = (stderr_kuyruk or "").strip()
-        aciklama = f"claude sureci beklenmedik sekilde kapandi (kod {kod})"
+        aciklama = f"the claude process exited unexpectedly (code {kod})"
         if kuyruk:
             aciklama += f"\n{kuyruk[-1500:]}"
         elif self._son_satirlar:
-            aciklama += "\nson satirlar:\n" + "\n".join(self._son_satirlar[-5:])
+            aciklama += "\nlast lines:\n" + "\n".join(self._son_satirlar[-5:])
         self.tur_bitti.emit(TurSonucu(hata_mi=True, aciklama=aciklama))
 
     def _turu_bitir(self, nesne: dict) -> None:

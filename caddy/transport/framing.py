@@ -1,19 +1,20 @@
-"""Bayt parcalarindan tam satirlar cikarir.
+"""Extracts complete lines from byte chunks.
 
-Iki gercek hatayi onluyor:
+It prevents two real bugs:
 
-1. **Coklu bayt karakterin parca sinirinda bolunmesi.** QProcess'in verdigi
-   chunk'lar rastgele yerlerde biter. `bytes.decode("utf-8")` tam ortasindan
-   bolunmus bir "ş" gorunce patlar. Turkce yazan bir kullanicida bu bir
-   ihtimal degil, kesinlik. Cozum: `codecs` artimli cozucu — yarim karakteri
-   kendi icinde tutar, tamamlaninca verir.
+1. **A multi-byte character split across a chunk boundary.** QProcess
+   chunks end at arbitrary places. `bytes.decode("utf-8")` fails when it
+   sees a character like "ş" cut in half. For a user typing in a language
+   with non-ASCII letters this is not a possibility, it is a certainty.
+   Fix: a `codecs` incremental decoder — it holds the half character and
+   emits it once complete.
 
-2. **Sinirsiz tampon buyumesi.** Satir sonu hic gelmezse bellek dolar.
-   Tavan konuldu.
+2. **Unbounded buffer growth.** If a newline never arrives, memory fills up.
+   There is a cap.
 
-Kodlama her zaman UTF-8'dir; `locale.getpreferredencoding()` KULLANILMAZ.
-CLI bir boruya (pipe) yazdigi icin konsol kod sayfasi (bu makinede cp1254)
-devreye girmez.
+The encoding is always UTF-8; `locale.getpreferredencoding()` is NOT used.
+The CLI writes to a pipe, so the console code page (e.g. cp1254) never
+comes into play.
 """
 
 from __future__ import annotations
@@ -34,23 +35,23 @@ class ArtimliSatirOkuyucu:
         self._tavan = tavan
 
     def besle(self, veri: bytes) -> list[str]:
-        """Bayt ekler, tamamlanmis satirlari dondurur (bos satirlar atilir)."""
+        """Adds bytes, returns the completed lines (empty lines dropped)."""
         if veri:
             self._tampon += self._cozucu.decode(veri)
         if len(self._tampon) > self._tavan:
             self._tampon = ""
             raise SatirTasmasi(
-                f"satir {self._tavan} baytu asti — bozuk akis olabilir")
+                f"line exceeded {self._tavan} bytes — the stream may be corrupt")
         if "\n" not in self._tampon:
             return []
         *satirlar, self._tampon = self._tampon.split("\n")
         return [s for s in (x.strip() for x in satirlar) if s]
 
     def bosalt(self) -> list[str]:
-        """Akis bitti: tamponda kalani (satir sonu gelmemis olsa da) ver.
+        """Stream ended: return what is left in the buffer (even without a newline).
 
-        `--output-format json` cikisi tek bir JSON nesnesidir ve sonunda satir
-        sonu OLMAYABILIR; bu yuzden bitiste mutlaka cagrilmali.
+        `--output-format json` output is a single JSON object and may have
+        NO trailing newline; so this must always be called at the end.
         """
         kalan = self._cozucu.decode(b"", final=True)
         metin = (self._tampon + kalan).strip()

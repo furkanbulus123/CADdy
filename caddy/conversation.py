@@ -50,9 +50,9 @@ _YAKIN_AZAMI = 3
 # kalinmaz: bir sonraki otomatik isteme tek cumle iliştirilir. Ek tur
 # harcamaz, mevcut isteme biner.
 _GORSEL_ANAHTAR = re.compile(r"G[OÖ]RSEL-KONTROL", re.IGNORECASE)
-_GORSEL_UYARI = ("Not: Yanitinda GORSEL-KONTROL gecti ama yanitin SONUNDA "
-                 "degildi, o yuzden gorsel gonderilmedi. Gercekten bakmak "
-                 "istiyorsan yanitini yalnizca o isaretle bitir.")
+_GORSEL_UYARI = ("Note: your reply contained GORSEL-KONTROL but not at "
+                 "the END, so no image was sent. If you really want to "
+                 "look, end your reply with that marker alone.")
 
 # Arka arkaya en fazla kac gorsel kontrol turu. Model resme bakip yine resim
 # isteyebilir; ucuncude durup topu kullaniciya birakiyoruz.
@@ -169,8 +169,8 @@ class ConversationController(QtCore.QObject):
         if not metin:
             return
         if self.mesgul_mu():
-            self.mesaj.emit("sistem", "Onceki istek hala calisiyor. "
-                                      "Bitmesini bekle ya da Iptal'e bas.")
+            self.mesaj.emit("sistem", "The previous request is still running. "
+                                      "Wait for it or press Cancel.")
             return
 
         # ASIL kullanici mesaji gorsel-kontrol sayacini sifirlar; otomatik
@@ -217,7 +217,7 @@ class ConversationController(QtCore.QObject):
         self._tur_sayisi = 0
         # Yeni oturum = YENI DOSYA. "1 session = 1 log" kurali.
         self.gunluk.oturum_ac(self.transport.oturum)
-        self.mesaj.emit("sistem", "Yeni sohbet baslatildi - onceki baglam unutuldu.")
+        self.mesaj.emit("sistem", "New chat started — previous context forgotten.")
         self.bilgi_satiri.emit("", "")
 
     def sohbeti_surdur(self, oturum: str, dosya) -> None:
@@ -260,9 +260,9 @@ class ConversationController(QtCore.QObject):
         # donebilecegini saniyor ve dugmeye bastiginda bos bir yigin buluyor.
         if ileri_vardi and self._ileri_sayisi() == 0:
             self.mesaj.emit("sistem",
-                            f"İleri alma geçmişi silindi ({ileri_vardi} adım) "
-                            "— üzerine yeni bir işlem yapıldı.")
-            self.gunluk.sistem(f"ILERI YIGINI SILINDI ({ileri_vardi} adim)")
+                            f"Redo history cleared ({ileri_vardi} steps) "
+                            "— a new change was made on top.")
+            self.gunluk.sistem(f"REDO STACK CLEARED ({ileri_vardi} steps)")
         self.calisma_sonucu.emit(sonuc)
 
         try:
@@ -320,8 +320,8 @@ class ConversationController(QtCore.QObject):
         """
         if self.mesgul_mu():
             return
-        self.gunluk.sistem("CIKTI otomatik gonderildi "
-                           f"({len(sonuc.cikti)} karakter)")
+        self.gunluk.sistem("OUTPUT sent automatically "
+                           f"({len(sonuc.cikti)} chars)")
         self.sonucu_gonder(sonuc, kullanici_mi=False)
 
     # -- otomatik onarim ---------------------------------------------------
@@ -360,18 +360,18 @@ class ConversationController(QtCore.QObject):
         if imza and imza == self._son_hata:
             self._son_hata = ""
             self.mesaj.emit("sistem",
-                            "Aynı hata tekrarladı; otomatik onarım "
-                            "durduruldu. Farklı bir yol tarif etmen "
-                            "gerekiyor.")
-            self.gunluk.sistem("OTOMATIK ONARIM durduruldu: ayni hata tekrar")
+                            "The same error repeated; auto-repair "
+                            "stopped. Please describe a different "
+                            "approach.")
+            self.gunluk.sistem("AUTO-REPAIR stopped: same error repeated")
             return
 
         if self._onarim_tur >= _ONARIM_SINIRI:
             self.mesaj.emit("sistem",
-                            f"{_ONARIM_SINIRI} otomatik onarım denemesi "
-                            "yetmedi; durduruldu. İstersen “Hatayı AI'a "
-                            "gönder” ile devam edebilirsin.")
-            self.gunluk.sistem("OTOMATIK ONARIM butcesi doldu")
+                            f"{_ONARIM_SINIRI} auto-repair attempts "
+                            "were not enough; stopped. You can continue "
+                            "with “Send error to AI”.")
+            self.gunluk.sistem("AUTO-REPAIR budget exhausted")
             return
 
         if self.mesgul_mu():
@@ -380,7 +380,7 @@ class ConversationController(QtCore.QObject):
         self._onarim_tur += 1
         self._son_hata = imza
         self.mesaj.emit("sistem",
-                        f"Hata otomatik olarak AI'a gönderildi "
+                        f"Error sent to AI automatically "
                         f"({self._onarim_tur}/{_ONARIM_SINIRI}).")
         self._hatayi_yolla(sonuc, kullanici_mi=False)
 
@@ -401,17 +401,17 @@ class ConversationController(QtCore.QObject):
 
         doc = App.ActiveDocument
         if doc is None:
-            return False, "Açık belge yok."
+            return False, "No document is open."
         adlar = list(getattr(doc, "UndoNames", ()) or ())
         if not adlar:
-            return False, "Geri alınacak bir şey yok."
+            return False, "Nothing to undo."
 
         tepe = adlar[0]
         if not tepe.startswith(_AI_ONEK):
             return False, (
-                f"Geri alma yığınının tepesinde AI değişikliği yok — orada "
-                f"“{tepe}” var, yani senin kendi düzenlemen. Onu silmemek "
-                f"için durdum. Kendin geri almak istersen Ctrl+Z.")
+                f"The top of the undo stack is not an AI change — it is "
+                f"“{tepe}”, your own edit. Stopped so it is not lost. "
+                f"Use Ctrl+Z if you want to undo it yourself.")
 
         doc.undo()
         try:
@@ -420,8 +420,8 @@ class ConversationController(QtCore.QObject):
             log.uyari(f"geri alma sonrasi recompute: {e}")
         # Bayat baglama = SERT COKME riski (bkz. executor.namespace_temizle).
         self.executor.namespace_temizle()
-        kim = "AI" if ai_mi else "Kullanıcı"
-        self.gunluk.sistem(f"GERI-AL ({kim}): {tepe}")
+        kim = "AI" if ai_mi else "User"
+        self.gunluk.sistem(f"UNDO ({kim}): {tepe}")
         return True, tepe
 
     @staticmethod
@@ -467,11 +467,11 @@ class ConversationController(QtCore.QObject):
 
         doc = App.ActiveDocument
         if doc is None:
-            return False, "Açık belge yok."
+            return False, "No document is open."
         adlar = list(getattr(doc, "RedoNames", ()) or ())
         if not adlar:
-            return False, ("İleri alınacak bir şey yok. Geri aldıktan sonra "
-                           "yeni bir işlem yaptıysan ileri geçmişi silinmiştir.")
+            return False, ("Nothing to redo. If you made a new change after "
+                           "undoing, the redo history was cleared.")
 
         tepe = adlar[0]
         doc.redo()
@@ -481,7 +481,7 @@ class ConversationController(QtCore.QObject):
             log.uyari(f"ileri alma sonrasi recompute: {e}")
         # Bayat baglama = SERT COKME riski — geri almadaki gerekcenin aynisi.
         self.executor.namespace_temizle()
-        self.gunluk.sistem(f"ILERI-AL: {tepe}")
+        self.gunluk.sistem(f"REDO: {tepe}")
         return True, tepe
 
     def _ai_geri_al(self) -> None:
@@ -504,15 +504,15 @@ class ConversationController(QtCore.QObject):
         """
         if self._geri_al_tur >= _GERI_AL_SINIR:
             self.mesaj.emit("sistem",
-                            f"AI arka arkaya {_GERI_AL_SINIR} kez geri alma "
-                            "istedi; durduruldu. Nereye dönmek gerektiğini "
-                            "sen söyleyebilirsin.")
+                            f"The AI asked to undo {_GERI_AL_SINIR} times in a "
+                            "row; stopped. You can tell it where to go "
+                            "back to.")
             return
 
         oldu, aciklama = self.geri_al(ai_mi=True)
         if oldu:
             self._geri_al_tur += 1
-            self.mesaj.emit("sistem", f"AI geri aldı: {aciklama}")
+            self.mesaj.emit("sistem", f"AI undid: {aciklama}")
             return
 
         # BASARISIZ. Model kendi istegini yerine getirilmis SANIYOR ve bir
@@ -520,14 +520,14 @@ class ConversationController(QtCore.QObject):
         # Bu yuzden sessiz kalmiyoruz: tek otomatik tur harcanip modele
         # neyin olmadigi soyleniyor. Basarili halde tur HARCANMIYOR, cunku
         # orada modelin varsayimi zaten dogru.
-        self.mesaj.emit("sistem", "AI geri almak istedi ama yapılmadı: "
+        self.mesaj.emit("sistem", "The AI asked to undo but it was not done: "
                                   + aciklama)
-        self.gunluk.sistem("GERI-AL reddedildi: " + aciklama)
+        self.gunluk.sistem("UNDO refused: " + aciklama)
         self.gonder(
-            "Geri alma isteğin YERINE GETIRILMEDI. Sebep: " + aciklama +
-            "\nBelge hala eski halinde. Geri alındığını VARSAYMA. "
-            "Ya kullanıcıdan ne yapmasını istediğini tek cümleyle söyle, "
-            "ya da mevcut durumdan devam eden bir adım ver.",
+            "Your undo request was NOT carried out. Reason: " + aciklama +
+            "\nThe document is unchanged. Do NOT assume it was undone. "
+            "Either ask the user in one sentence what they want, or give "
+            "a step that continues from the current state.",
             kullanici_mi=False)
 
     def sonucu_gonder(self, sonuc, kullanici_mi: bool = True) -> None:
@@ -541,11 +541,11 @@ class ConversationController(QtCore.QObject):
         yalnizca kullanici ekstra bir sey gondermek istediginde gerekiyor.
         """
         self.gonder(
-            "Az once verdigin kod calistirildi. Kodun print() ciktisi ve "
-            "FreeCAD'in kendi konsolundan gelen uyarilar dahil sonuc asagida. "
-            "Sorun varsa neyin yanlis gittigini soyle ve duzeltmenin YALNIZCA "
-            "ilk adimini ver; sorun yoksa tek cumleyle onayla — bir sayi "
-            "sorulduysa dogrudan sayiyi yaz.\n\n"
+            "The code you just gave was run. The result is below, "
+            "including its print() output and warnings from FreeCAD's own "
+            "console. If something is wrong, say what went wrong and give "
+            "ONLY the first step of the fix; if not, confirm in one sentence "
+            "— if a number was asked for, state the number directly.\n\n"
             f"<execution_result>\n{sonuc.modele_metin()}\n</execution_result>",
             kullanici_mi=kullanici_mi)
 
@@ -560,11 +560,11 @@ class ConversationController(QtCore.QObject):
 
     def _hatayi_yolla(self, sonuc, kullanici_mi: bool) -> None:
         self.gonder(
-            "Az once verdigin kod canli belgede calistirilinca hata verdi. "
-            "Islem geri alindi, belge degismedi. "
-            "Duzeltilmis TAM bir blok ver; ozur dileme, aciklamayi uzatma. "
-            "Ayni yaklasimla ikinci kez denemek yerine, hata bunu "
-            "gerektiriyorsa BASKA bir yol sec.\n\n"
+            "The code you just gave failed when run on the live document. "
+            "The transaction was rolled back, the document is unchanged. "
+            "Give a corrected COMPLETE block; do not apologise or pad the "
+            "explanation. If the error calls for it, choose a DIFFERENT "
+            "approach instead of retrying the same one.\n\n"
             f"<execution_error>\n{sonuc.hata_izi.strip()}\n</execution_error>",
             kullanici_mi=kullanici_mi)
 
@@ -584,8 +584,8 @@ class ConversationController(QtCore.QObject):
             self._akan_var = False
 
         if sonuc.hata_mi:
-            self.mesaj.emit("sistem", sonuc.aciklama or "Bilinmeyen hata.")
-            self.gunluk.sistem("HATA: " + (sonuc.aciklama or "bilinmeyen"))
+            self.mesaj.emit("sistem", sonuc.aciklama or "Unknown error.")
+            self.gunluk.sistem("ERROR: " + (sonuc.aciklama or "unknown"))
             self.bilgi_satiri.emit("hata", sonuc.aciklama or "")
             return
 
@@ -612,9 +612,9 @@ class ConversationController(QtCore.QObject):
             # gunluge yaziliyor ve bir sonraki otomatik isteme not olarak
             # biniyor (bkz. gonder).
             self._gorsel_uyari = True
-            self.gunluk.sistem("GORSEL-KONTROL isareti yanitin sonunda "
-                               "degildi — gorsel gonderilmedi, modele "
-                               "bildirilecek")
+            self.gunluk.sistem("GORSEL-KONTROL marker was not at the end "
+                               "of the reply — no image sent, the model "
+                               "will be told")
 
         geri_al_istendi = _GERI_AL_ISARET.search(duz or "") is not None
         if geri_al_istendi:
@@ -623,7 +623,7 @@ class ConversationController(QtCore.QObject):
         if duz:
             self.mesaj.emit("ai", duz)
         elif not bulunan:
-            self.mesaj.emit("ai", "(bos yanit)")
+            self.mesaj.emit("ai", "(empty reply)")
 
         # Geri alma, kod kartlarindan ONCE. Ayni yanitta hem "bunu geri al"
         # hem duzeltilmis kod olabiliyor; kullanici Calistir'a bastiginda
@@ -638,7 +638,7 @@ class ConversationController(QtCore.QObject):
         # Gunluge HARCAMA ve BAGLAM ayri yaziliyor; ikisini tek sayiya
         # katlamak baglami 2 kat gosteren sicramayi uretmisti. `api=` de
         # burada: sicrama yine olursa sebebi gunlukte gorunsun.
-        olcu = f"{sonuc.tk_toplam} token · baglam {sonuc.tk_baglam}"
+        olcu = f"{sonuc.tk_toplam} token · context {sonuc.tk_baglam}"
         if sonuc.api_cagrisi > 1:
             olcu += f" · api={sonuc.api_cagrisi}"
         self.gunluk.ai(sonuc.metin, sonuc.model, sonuc.sure_ms / 1000.0, olcu)
@@ -711,19 +711,19 @@ class ConversationController(QtCore.QObject):
 
         Ayrica bastirma artik GUNLUGE de yaziliyor. Eskiden yalnizca panele
         `mesaj.emit` ediliyordu; oteki butun bastirma yollari (ornegin
-        "OTOMATIK ONARIM butcesi doldu") gunluge yaziyor. Bu yuzden logu
+        "AUTO-REPAIR budget exhausted") gunluge yaziyor. Bu yuzden logu
         sonradan inceleyen biri o bosluga bir sebep bulamiyordu.
         """
-        self.gunluk.sistem("GORSEL GONDERILMEDI: " + sebep)
+        self.gunluk.sistem("IMAGE NOT SENT: " + sebep)
         if not cikti:
             return
-        self.gunluk.sistem(f"CIKTI yine de gonderildi ({len(cikti)} karakter)")
+        self.gunluk.sistem(f"OUTPUT sent anyway ({len(cikti)} chars)")
         self.gonder(
-            "Az once verdigin kod calistirildi; ciktisi asagida. Istedigin 3B "
-            "goruntu GONDERILEMEDI (" + sebep + "), yani goruntuye bakmis "
-            "gibi konusma. Elindeki sayilarla ilerleyebiliyorsan ilerle; "
-            "gercekten bakman gerekiyorsa kullanicidan ne gormen gerektigini "
-            "tarif etmesini iste.\n\n"
+            "The code you just gave was run; its output is below. The 3D "
+            "image you asked for could NOT be sent (" + sebep + "), so do not "
+            "talk as if you had looked at it. Continue with the numbers you "
+            "have if you can; if you really need to look, ask the user to "
+            "describe what you need to see.\n\n"
             f"<execution_result>\n{cikti}\n</execution_result>",
             kullanici_mi=False)
 
@@ -761,13 +761,15 @@ class ConversationController(QtCore.QObject):
             return True, ""
         if istedi:
             return False, (
-                "\n\nNOT: uc kare istedin, tek kare gonderildi — bu turda "
-                "yeni nesne eklenmedi (var olani degistirdin) ve bu ilk "
-                "bakis. Uc kare baglam penceresinin buyuk bir parcasini "
-                "yiyor ve olculdu ki bulgulari zaten SAYI veriyor. Tek "
-                "kare yetmiyorsa bir sonraki blokta olc: bbox, hacim, "
-                "cakisma_kontrol(odak=...). Gercekten aci lazimsa yanitini "
-                "yine GORSEL-KONTROL 3 ile bitir, ikinci bakista verilir.")
+                "\n\nNOTE: you asked for three frames, one was sent — no "
+                "new object was added this turn (you changed an existing "
+                "one) and this is the first look. Three frames eat a large "
+                "part of the context window, and it was measured that "
+                "NUMBERS give the findings anyway. If one frame is not "
+                "enough, measure in the next block: bbox, volume, "
+                "check_overlap(focus=...). If you really need the angles, "
+                "end your reply with GORSEL-KONTROL 3 again; the second look "
+                "gets them.")
         return False, ""
 
     def _gorseli_gonder(self, cikti: str = "") -> None:
@@ -805,17 +807,17 @@ class ConversationController(QtCore.QObject):
         # butce doldugu icin cezalandirildi.
         if self._gorsel_tur >= _GORSEL_SINIR:
             self.mesaj.emit("sistem",
-                            f"AI arka arkaya {_GORSEL_SINIR} kez görsel "
-                            "kontrol istedi; durduruldu. Ne görmesi "
-                            "gerektiğini sen tarif edebilirsin.")
+                            f"The AI asked for a visual check {_GORSEL_SINIR} "
+                            "times in a row; stopped. You can describe "
+                            "what it should look at.")
             self._gorsel_yerine_cikti(
                 cikti, f"arka arkaya {_GORSEL_SINIR} kez istendi, durduruldu")
             return
 
         if not gorunum.yakalanabilir_mi():
             self.mesaj.emit("sistem",
-                            "AI 3B görünümü görmek istedi ama aktif bir 3B "
-                            "pencere yok. Bir belge açıp tekrar dene.")
+                            "The AI wanted to see the 3D view but there "
+                            "is no active 3D window. Open a document and retry.")
             self._gorsel_yerine_cikti(cikti, "acik 3B pencere yok")
             return
 
@@ -850,38 +852,39 @@ class ConversationController(QtCore.QObject):
 
         if not kareler:
             self.mesaj.emit("sistem",
-                            "AI 3B görünümü istedi ama görüntü alınamadı "
-                            "(ayrıntı Report view'da).")
+                            "The AI asked for the 3D view but the capture "
+                            "failed (details in the Report view).")
             self._gorsel_yerine_cikti(cikti, "goruntu alinamadi")
             return
 
         veri = kareler if len(kareler) > 1 else kareler[0]
         bayt = sum(len(k) for k in kareler)
-        etiket = (f"{len(kareler)} açıdan görünüm" if len(kareler) > 1
-                  else "3B görünüm")
+        etiket = (f"{len(kareler)}-angle view" if len(kareler) > 1
+                  else "3D view")
 
         self._gorsel_tur += 1
-        yakin_eki = f", YAKIN: {', '.join(yakin)}" if yakin else ""
+        yakin_eki = f", CLOSE-UP: {', '.join(yakin)}" if yakin else ""
         self.mesaj.emit("sistem",
-                        f"{etiket} AI'a gönderildi ({bayt // 1024} KB"
+                        f"{etiket} sent to AI ({bayt // 1024} KB"
                         f"{yakin_eki}).")
-        self.gunluk.sistem(f"GORSEL-KONTROL: {len(kareler)} kare gonderildi "
-                           f"({bayt} bayt){yakin_eki}")
+        self.gunluk.sistem(f"GORSEL-KONTROL: {len(kareler)} frame(s) sent "
+                           f"({bayt} bytes){yakin_eki}")
         if len(kareler) > 1:
-            istem = (f"Istedigin 3B goruntuleri ekte, {len(kareler)} acidan: "
-                     f"1) kullanicinin ekranda gordugu aci, 2) ON gorunus "
-                     f"(-Y'den), 3) UST gorunus (+Z'den). Ucune de bak — tek "
-                     f"acidan gorunmeyen sey (bir seyin havada durup "
-                     f"durmadigi, hizanin bozuk olup olmadigi) diger "
-                     f"acilarda gorunur. Baktiktan sonra: dogru gorunuyorsa "
-                     f"tek cumleyle onayla; bir sorun varsa neyin yanlis "
-                     f"oldugunu soyle ve duzeltmenin YALNIZCA ilk adimini ver.")
+            istem = (f"The 3D images you asked for are attached, from "
+                     f"{len(kareler)} angles: 1) the angle the user sees on "
+                     f"screen, 2) FRONT view (from -Y), 3) TOP view (from "
+                     f"+Z). Look at all three — what one angle hides (whether "
+                     f"something floats, whether an alignment is off) shows "
+                     f"in the others. Then: if it looks right, confirm in one "
+                     f"sentence; if something is wrong, say what and give "
+                     f"ONLY the first step of the fix.")
         else:
-            istem = ("Istedigin 3B goruntusu ekte. Baktiktan sonra: dogru "
-                     "gorunuyorsa tek cumleyle onayla; bir sorun varsa neyin "
-                     "yanlis oldugunu soyle ve duzeltmenin YALNIZCA ilk "
-                     "adimini ver. Tek acidan emin olamadiysan tahmin etme: "
-                     "yanitini GORSEL-KONTROL 3 ile bitir, uc acidan bakarsin.")
+            istem = ("The 3D image you asked for is attached. Then: if it "
+                     "looks right, confirm in one sentence; if something is "
+                     "wrong, say what and give ONLY the first step of the "
+                     "fix. If one angle is not enough to be sure, do not "
+                     "guess: end your reply with GORSEL-KONTROL 3 to look "
+                     "from three angles.")
         # Host uc kareyi tek kareye indirdiyse SEBEBINI soyluyoruz. Sessizce
         # indirmek modeli ayni istegi tekrarlamaya iter.
         istem += kare_notu
@@ -891,19 +894,19 @@ class ConversationController(QtCore.QObject):
         # sorusu zaten goruntuyle kapanmiyor (MANTIK 39), o yuzden ayni
         # mesajda deterministik cevabi da veriyoruz — ek tur harcamadan.
         if yakin:
-            istem = (f"YAKIN CEKIM: kamera su nesnelere yaklastirildi — "
+            istem = (f"CLOSE-UP: the camera zoomed in on — "
                      f"{', '.join(yakin)}. " + istem)
             if yakin_dustu:
-                istem += ("\n\nNOT: kamera yaklastirilamadi, bu kare GENEL "
-                          "gorunumden alindi (ayrinti Report view'da).")
+                istem += ("\n\nNOTE: the camera could not zoom in, this frame "
+                          "is the GENERAL view (details in the Report view).")
             olcum_metni = self._cakisma_metni(yakin)
             if olcum_metni:
-                istem += ("\n\nAyni nesnelerin DETERMINISTIK cakisma olcumu "
-                          "(goruntu bu soruyu kapatmaz, bu kapatir):\n"
+                istem += ("\n\nDETERMINISTIC overlap measurement of the same "
+                          "objects (the image cannot settle this, this does):\n"
                           f"<execution_result>\n{olcum_metni}\n"
                           "</execution_result>")
         if cikti:
-            istem += (f"\n\nAyni kodun print() ciktisi:\n"
+            istem += (f"\n\nprint() output of the same code:\n"
                       f"<execution_result>\n{cikti[:2000]}\n"
                       f"</execution_result>")
         self.gonder(istem, gorsel=veri, kullanici_mi=False)
@@ -916,42 +919,42 @@ class ConversationController(QtCore.QObject):
         "para harciyorum" diye yanlis anlasildi. Token ise gercekten
         kullanilan kaynak.
         """
-        satir = [f"{s.sure_ms / 1000:.1f} sn"]
+        satir = [f"{s.sure_ms / 1000:.1f} s"]
         if s.model:
             satir.append(s.model)
         satir.append(f"{_kisa_sayi(s.tk_toplam)} token")
         # BAGLAM DOLULUGU. Limiti CLI bildirmiyor (init ve result alanlarinin
         # tamami tarandi), o yuzden modelin katalog degeri sabit yaziliyor -
         # bkz. config.BAGLAM_SINIRI. Kullanilan taraf ise gercek olcum.
-        satir.append(f"{_kisa_sayi(s.tk_baglam)}/{config.baglam_siniri_kisa()} bağlam")
+        satir.append(f"{_kisa_sayi(s.tk_baglam)}/{config.baglam_siniri_kisa()} context")
         # "0 kod blogu" yazmiyoruz: bilgi tasimayan gurultu, kullanici hakli
         # olarak "o ne, gereksizse sil" dedi. Sifirdan buyukse anlamli.
         if blok_sayisi:
-            satir.append(f"{blok_sayisi} kod bloğu")
+            satir.append(f"{blok_sayisi} code block" + ("s" if blok_sayisi > 1 else ""))
 
         ipucu = [
-            "Claude Code aboneligi uzerinden calisiyor "
-            "(API anahtari yok, ek ucret yok).",
+            "Runs through your Claude Code subscription "
+            "(drawn from its monthly Agent SDK credit).",
             "",
-            f"Baglam: {s.tk_baglam:,} / {config.BAGLAM_SINIRI:,} token",
-            "  (girdi + onbellek; cikti baglama girmez)",
-            "  Sinir modelin katalog degeri - CLI limiti bildirmiyor.",
+            f"Context: {s.tk_baglam:,} / {config.BAGLAM_SINIRI:,} tokens",
+            "  (input + cache; output does not count)",
+            "  Limit is the model's catalog value - the CLI does not report it.",
             "",
-            "Bu tur:",
-            f"  girdi            {s.tk_girdi:>9,}",
-            f"  onbellekten okuma{s.tk_onbellek_okuma:>9,}   (ucuz)",
-            f"  onbellege yazma  {s.tk_onbellek_yazma:>9,}",
-            f"  cikti            {s.tk_cikti:>9,}",
-            f"  TOPLAM           {s.tk_toplam:>9,}",
+            "This turn:",
+            f"  input            {s.tk_girdi:>9,}",
+            f"  cache read       {s.tk_onbellek_okuma:>9,}   (cheap)",
+            f"  cache write      {s.tk_onbellek_yazma:>9,}",
+            f"  output           {s.tk_cikti:>9,}",
+            f"  TOTAL            {s.tk_toplam:>9,}",
             "",
-            f"Bu sohbette toplam: {self._tk_toplam:,} token / {self._tur_sayisi} tur",
+            f"This chat so far: {self._tk_toplam:,} tokens / {self._tur_sayisi} turns",
         ]
         if s.maliyet_usd:
             ipucu += ["",
-                      f"API fiyatiyla yapilsaydi ~${s.maliyet_usd:.3f} tutardi -",
-                      "abonelikte faturalanmaz."]
+                      f"At API prices this would cost ~${s.maliyet_usd:.3f} -",
+                      "covered by your plan's credit until it runs out."]
         if self.gunluk.dosya:
-            ipucu += ["", f"Sohbet kaydi: {self.gunluk.dosya}"]
+            ipucu += ["", f"Chat log: {self.gunluk.dosya}"]
 
         log.ayik(" · ".join(satir))
         return " · ".join(satir), "\n".join(ipucu)

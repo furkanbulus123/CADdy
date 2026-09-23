@@ -1,44 +1,44 @@
-"""CADdy'yi FreeCAD'in ust seridine KALICI olarak yerlestirir.
+"""Places CADdy PERMANENTLY in FreeCAD's top bar.
 
-Sorun: CADdy bir *workbench*, yani ustteki acilir listeden secilmedigi
-surece ortada yok. Kullanici "direkt ust tarafta bir sekme olarak ekleme
-sansimiz var mi" diye sordu.
+Problem: CADdy is a *workbench*, so it does not exist unless picked from the
+drop-down at the top. The user asked "can we add it directly as a tab at
+the top".
 
-Workbench'in kendi appendToolbar/appendMenu'su bunu COZMEZ: onlar yalnizca
-o workbench aktifken gorunur.
+The workbench's own appendToolbar/appendMenu do NOT solve this: they are
+only visible while that workbench is active.
 
-NE GORUNUYOR — kullanici istegiyle daraltildi
----------------------------------------------
-Ilk surumde ust seritte bir "CADdy" MENUSU (metin) ve iki komutlu bir arac
-cubugu vardi. Kullanici: *"freecad'de CADdy kotu gozukuyor, sadece logosu
-gozuksun"* ve *"AI ile geri al falan gozukmesin."*
+WHAT IS SHOWN — narrowed on the user's request
+----------------------------------------------
+The first version had a "CADdy" MENU (text) and a two-command toolbar in
+the top bar. The user: *"CADdy looks bad in FreeCAD, only show the logo"*
+and *"don't show the AI undo and such."*
 
-Bu yuzden ust seritte artik TEK BIR SEY var: paneli acan logo dugmesi.
-  - Menu cubugu girdisi KALDIRILDI (metin oradan geliyordu)
-  - "Son AI degisikligini geri al" ust seritten CIKARILDI
+So the top bar now holds ONE THING: the logo button that opens the panel.
+  - The menu bar entry was REMOVED (the text came from there)
+  - "Undo last AI change" was TAKEN OUT of the top bar
 
-Ikisi de KAYBOLMADI: workbench'in kendi menusu ve arac cubugu (InitGui'deki
-Initialize) ikisini de gosteriyor. Ust serit yalnizca "her yerden erisilen
-kisayol"; oraya her komutu koymak kullanicinin sikayet ettigi kalabaligi
-yapiyordu.
+Neither is LOST: the workbench's own menu and toolbar (Initialize in
+InitGui) show both. The top bar is just the "reachable from anywhere"
+shortcut; putting every command there made the clutter the user
+complained about.
 
-ASIL TUZAK — ilk denemede menu HIC GORUNMEDI, sebebi bu:
-FreeCAD'in menu cubugu workbench sistemi tarafindan YONETILIYOR. Her
-workbench degisiminde MenuManager menu cubugunu yeniden kuruyor ve
-disaridan eklenmis menuleri SILIYOR. Yani bir kez eklemek yetmez; her
-workbench degisiminde YENIDEN eklemek gerekiyor. Arac cubugu MenuManager'a
-tabi degil, yani daha dayanikli — ama tazeleme yine de duruyor, cunku
-cubugun kendisi de kullanici tarafindan gizlenebiliyor.
+THE REAL TRAP — on the first try the menu NEVER APPEARED, and this is why:
+FreeCAD's menu bar is MANAGED by the workbench system. On every workbench
+switch MenuManager rebuilds the menu bar and DELETES menus added from
+outside. So adding once is not enough; it has to be added AGAIN on every
+workbench switch. The toolbar is not subject to MenuManager, so it is more
+robust — but the refresh stays, because the user can also hide the toolbar
+itself.
 
-Uc katmanli savunma:
-  1. workbenchActivated sinyaline baglan (varsa) -> her gecişte tazele
-  2. Periyodik tazeleme (ilk dakika, 3 sn arayla) -> acilis yarisini ve
-     sinyalin olmadigi surumleri karsilar
-  3. objectName ile varlik kontrolu -> tekrar tekrar eklemeyi onler
+Three layers of defence:
+  1. connect to the workbenchActivated signal (if present) -> refresh on every switch
+  2. periodic refresh (first minute, every 3 s) -> covers the startup race
+     and versions without the signal
+  3. existence check by objectName -> prevents adding it again and again
 
-QAction'IN YERI: PySide6'da QAction QtWidgets'tan QtGui'ye tasindi.
-FreeCAD'in PySide shim'i surumden surume ikisinden birini veriyor, o
-yuzden ikisi de deneniyor.
+WHERE QAction LIVES: in PySide6 QAction moved from QtWidgets to QtGui.
+FreeCAD's PySide shim gives one or the other depending on the version, so
+both are tried.
 """
 
 from __future__ import annotations
@@ -52,27 +52,27 @@ from .. import log
 ARAC_CUBUGU_ADI = "CADdy"
 _ARAC_NESNE = "CADdyUstAracCubugu"
 
-# Ust seritte YALNIZCA paneli acan komut. Bkz. modul basligi.
+# ONLY the command that opens the panel goes in the top bar. See the module header.
 _KOMUT_ADLARI = ("CADdy_ShowPanel",)
 
 _ILK_DENEME_MS = 1200
 _EN_FAZLA_DENEME = 10
 _TAZELEME_MS = 3000
-_TAZELEME_SAYISI = 20        # ~1 dakika
+_TAZELEME_SAYISI = 20        # ~1 minute
 
-# QAction hangi modulde? PySide6 = QtGui, PySide2 = QtWidgets.
+# Which module has QAction? PySide6 = QtGui, PySide2 = QtWidgets.
 QAction = getattr(QtGui, "QAction", None) or getattr(QtWidgets, "QAction")
 
 _durum = {"kuruldu": False, "tazeleme": 0, "zamanlayici": None}
 
 
 def yerlestir() -> None:
-    """Logo dugmesini ust serite ekler ve kalici kalmasini saglar."""
+    """Adds the logo button to the top bar and keeps it there."""
     _dene(0)
 
 
 # --------------------------------------------------------------------------
-# kurulum
+# setup
 # --------------------------------------------------------------------------
 
 def _ana_pencere():
@@ -84,10 +84,10 @@ def _ana_pencere():
 
 
 def _logo():
-    """CADdy logosu QIcon olarak; yuklenemezse None.
+    """The CADdy logo as a QIcon; None if it cannot be loaded.
 
-    None donerse cagiran taraf METNE geri doner — ikonsuz ve metinsiz bir
-    dugme tiklanamaz bir bosluk olurdu.
+    If None comes back the caller falls back to TEXT — a button with neither
+    icon nor text would be an unclickable gap.
     """
     kok = os.path.dirname(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))))
@@ -105,7 +105,7 @@ def _dene(sayac: int) -> None:
             QtCore.QTimer.singleShot(_ILK_DENEME_MS,
                                      lambda: _dene(sayac + 1))
         else:
-            log.uyari("ana pencere bulunamadi, ust serit eklenmedi")
+            log.uyari("main window not found, top bar not added")
         return
 
     _tazele()
@@ -114,13 +114,13 @@ def _dene(sayac: int) -> None:
         _durum["kuruldu"] = True
         _sinyale_bagla(mw)
         _tazelemeyi_baslat()
-        log.bilgi("ust serit kuruldu (logo dugmesi)")
+        log.bilgi("top bar installed (logo button)")
 
 
 def _sinyale_bagla(mw) -> None:
-    """Workbench degisiminde tazele.
+    """Refresh on workbench switch.
 
-    Sinyalin adi surumden surume degisebildigi icin birkac aday deneniyor.
+    The signal name can change between versions, so a few candidates are tried.
     """
     for ad in ("workbenchActivated", "workbenchActivated_"):
         sinyal = getattr(mw, ad, None)
@@ -128,19 +128,19 @@ def _sinyale_bagla(mw) -> None:
             continue
         try:
             sinyal.connect(lambda *a: _tazele())
-            log.ayik(f"ust serit: {ad} sinyaline baglandi")
+            log.ayik(f"top bar: connected to the {ad} signal")
             return
         except Exception:
             continue
-    log.ayik("ust serit: workbench sinyali yok, periyodik tazeleme kullanilacak")
+    log.ayik("top bar: no workbench signal, periodic refresh will be used")
 
 
 def _tazelemeyi_baslat() -> None:
-    """Ilk dakika boyunca periyodik tazeleme.
+    """Periodic refresh during the first minute.
 
-    Sinyal yoksa ya da acilis sirasi tutmadiysa emniyet kemeri. Suresiz
-    calistirmiyoruz: bir dakika sonra her sey oturmus olur, sonsuz timer
-    bosuna is yapar.
+    A safety belt in case there is no signal or the startup order did not
+    line up. We do not run it forever: after a minute everything has
+    settled, an endless timer would just waste work.
     """
     z = QtCore.QTimer()
     z.setInterval(_TAZELEME_MS)
@@ -153,36 +153,36 @@ def _tazelemeyi_baslat() -> None:
 
     z.timeout.connect(tik)
     z.start()
-    _durum["zamanlayici"] = z      # referans tutulmazsa GC toplar
+    _durum["zamanlayici"] = z      # without a reference the GC collects it
 
 
 def _tazele() -> None:
-    """Arac cubugu yoksa ekler; varsa dokunmaz."""
+    """Adds the toolbar if missing; leaves it alone if present."""
     mw = _ana_pencere()
     if mw is None:
         return
     try:
         _eski_menuyu_kaldir(mw)
     except Exception as e:
-        log.ayik(f"eski menu kaldirilamadi: {e}")
+        log.ayik(f"could not remove the old menu: {e}")
     try:
         _arac_cubugunu_ekle(mw)
     except Exception as e:
-        log.uyari(f"ust serit eklenemedi: {e}")
+        log.uyari(f"could not add the top bar: {e}")
 
 
 # --------------------------------------------------------------------------
-# eylemler
+# actions
 # --------------------------------------------------------------------------
 
 def _eylemler(ebeveyn) -> list:
-    """Cubuga girecek eylemler.
+    """Actions that go on the toolbar.
 
-    FreeCAD komutlarinin QAction'i ancak bir menuye eklendiginde olusuyor ve
-    ona ulasmanin tasinabilir bir API'si yok; ana penceredeki QAction'lar
-    objectName ile taraniyor (Gui.addCommand nesne adini komut adiyla ayni
-    koyuyor). Bulunamazsa komutu Gui.runCommand ile calistiran kendi
-    eylemimizi kuruyoruz - cubuk bos kalmasin.
+    A FreeCAD command's QAction is only created once it is added to a menu,
+    and there is no portable API to reach it; the main window's QActions are
+    scanned by objectName (Gui.addCommand names the object after the
+    command). If not found, we build our own action that runs the command
+    via Gui.runCommand - so the toolbar is never empty.
     """
     import FreeCADGui as Gui
 
@@ -201,8 +201,8 @@ def _eylemler(ebeveyn) -> list:
         if e is None:
             e = _kendi_eylemimiz(ad, ebeveyn, logo)
         elif logo is not None and e.icon().isNull():
-            # Komut kayitli ama ikonsuz gelmis: ikon-only cubukta gorunmez
-            # bir dugme olurdu.
+            # The command is registered but came without an icon: on an
+            # icon-only toolbar it would be an invisible button.
             e.setIcon(logo)
         cikti.append(e)
     return cikti
@@ -210,7 +210,7 @@ def _eylemler(ebeveyn) -> list:
 
 def _kendi_eylemimiz(komut_adi: str, ebeveyn, logo):
     baslik = {
-        "CADdy_ShowPanel": "CADdy panelini aç",
+        "CADdy_ShowPanel": "Open CADdy panel",
     }.get(komut_adi, komut_adi)
 
     e = QAction(baslik, ebeveyn)
@@ -219,7 +219,7 @@ def _kendi_eylemimiz(komut_adi: str, ebeveyn, logo):
         e.setIcon(logo)
     if komut_adi == "CADdy_ShowPanel":
         e.setShortcut("Ctrl+Shift+A")
-    # Metin gizlense de fare ustune gelince ne oldugu anlasilsin.
+    # Even with the text hidden, hovering should say what it is.
     e.setToolTip(baslik)
 
     def calistir():
@@ -227,7 +227,7 @@ def _kendi_eylemimiz(komut_adi: str, ebeveyn, logo):
             import FreeCADGui as Gui
             Gui.runCommand(komut_adi, 0)
         except Exception:
-            # Komut kayitli degilse paneli dogrudan ac.
+            # If the command is not registered, open the panel directly.
             if komut_adi == "CADdy_ShowPanel":
                 from .dock import paneli_goster
                 paneli_goster()
@@ -237,7 +237,7 @@ def _kendi_eylemimiz(komut_adi: str, ebeveyn, logo):
 
 
 # --------------------------------------------------------------------------
-# arac cubugu
+# toolbar
 # --------------------------------------------------------------------------
 
 def _arac_cubugunu_ekle(mw) -> None:
@@ -252,9 +252,9 @@ def _arac_cubugunu_ekle(mw) -> None:
 
     eylemler = _eylemler(cubuk)
 
-    # SADECE LOGO. Kullanici istegi (bkz. modul basligi). Metin gizlenince
-    # dugmenin tek anlatimi ikon oluyor, o yuzden _eylemler() ikonsuz bir
-    # eylemi asla dondurmuyor.
+    # LOGO ONLY. User request (see module header). With the text hidden the
+    # icon is the button's only description, so _eylemler() never returns
+    # an action without an icon.
     cubuk.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
 
     for e in eylemler:
@@ -264,17 +264,16 @@ def _arac_cubugunu_ekle(mw) -> None:
 
 
 # --------------------------------------------------------------------------
-# temizlik
+# cleanup
 # --------------------------------------------------------------------------
 
 def _eski_menuyu_kaldir(mw) -> None:
-    """Onceki surumun biraktigi "CADdy" MENUSUNU siler.
+    """Removes the "CADdy" MENU left behind by the previous version.
 
-    Neden gerekli: menu cubugu girdisi FreeCAD'in user.cfg'sinde degil,
-    calisma zamaninda kuruluyor — yani yeni surum onu eklemeyi birakinca
-    kendiliginden kayboluyor. AMA ayni oturumda eski surum calistiysa menu
-    ekranda durmaya devam eder. Bu, "eski surumden yeni surume gecerken
-    ekranda iki CADdy" durumunu onluyor.
+    Why: the menu bar entry is not stored in FreeCAD's user.cfg, it is built
+    at runtime — so once the new version stops adding it, it disappears on
+    its own. BUT if the old version ran in the same session the menu stays
+    on screen. This prevents "two CADdys on screen after upgrading".
     """
     try:
         cubuk = mw.menuBar()
@@ -284,4 +283,4 @@ def _eski_menuyu_kaldir(mw) -> None:
         m = eylem.menu()
         if m is not None and m.objectName() == "CADdyUstMenu":
             cubuk.removeAction(eylem)
-            log.ayik("eski ust menu kaldirildi")
+            log.ayik("old top menu removed")

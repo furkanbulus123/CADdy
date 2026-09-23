@@ -1,21 +1,22 @@
-"""Acik belgeyi metne cevirir.
+"""Turns the open document into text.
 
-Simdiden uyulan kural: **secim bolumu en degerli bayttir.** "Su yuzu 3 mm
-derinlestir" ancak secili alt-eleman adi (Face7), onu ureten ozellik VE o
-yuzun ne oldugu (duzlem mi silindir mi, hangi yone bakiyor, yaricapi ne)
-bilindiginde calisir.
+A rule followed from the start: **the selection section is the most valuable
+byte.** "Make this face 3 mm deeper" only works when the selected sub-element
+name (Face7), the feature that produced it AND what that face is (plane or
+cylinder, which way it faces, what radius) are all known.
 
-OLCUM (caddy_gelisim.txt, kayip 1): en sik tekrar eden kayip buydu. Kullanici
-3B'de bir yuz secip "bunu" diyor; modele yalnizca `alt=Face7` gidiyor. Face7'in
-duzlem mi silindir mi oldugunu, nereye baktigini, capinin ne oldugunu model
-BILMIYOR ve tahmin ediyor. Yanlis tahmin bir tur daha yiyor.
+MEASURED: this was the most frequently repeated loss. The user picks a face
+in 3D and says "this one"; only `sub=Face7` reached the model. The model did
+NOT KNOW whether Face7 was a plane or a cylinder, where it faced or what its
+diameter was, and guessed. A wrong guess cost another turn.
 
-BUTCE DAVRANISI. Eski surum metni sondan kesiyordu; bu, sinira dayanildiginda
-once nesne listesinin kuyrugunu, sonra gerekirse secimi kirpiyordu — yani en
-degerli bayti en once atiyordu. Yeni davranis: baslik ve secim ASLA kirpilmaz,
-kirpma yalnizca nesne listesinden yapilir ve alaka sirasina gore olur
-(secili nesneler > secimin komsulari > gerisi). Bu, M3'te planlanan "hop
-mesafesine gore siralama"nin ucuz hali.
+BUDGET BEHAVIOUR. The old version cut the text from the end; at the limit
+that trimmed the tail of the object list first and then, if needed, the
+selection — i.e. it threw away the most valuable bytes first. New
+behaviour: the header and the selection are NEVER trimmed; trimming only
+happens in the object list and follows relevance (selected objects >
+neighbours of the selection > the rest). A cheap version of ordering by
+graph distance.
 """
 
 from __future__ import annotations
@@ -24,11 +25,11 @@ import math
 
 import FreeCAD as App
 
-BUTCE = 12_000  # karakter
+BUTCE = 12_000  # characters
 
-# Alt eleman ozetinde kullanilan kisa tip adlari. Part'in sinif adlari
-# ('Plane', 'Cylinder', ...) zaten kisa ve net; yalnizca uzun olanlar
-# kisaltiliyor.
+# Short type names used in sub-element summaries. Part's class names
+# ('Plane', 'Cylinder', ...) are already short and clear; only the long
+# ones are abbreviated.
 _TIP_KISA = {
     "BSplineSurface": "bspline",
     "SurfaceOfRevolution": "revolution",
@@ -42,9 +43,9 @@ _TIP_KISA = {
 def _sayi(x) -> str:
     try:
         v = float(x)
-        # -0.0 'i sifira cevir: OCC eksenlerde bunu sikca uretiyor ve
-        # 'axis=(-0,-0,-1)' hem cirkin hem de okuyanda "eksi sifir ne
-        # demek" diye bir duraklama yaratiyor.
+        # Turn -0.0 into zero: OCC produces it a lot on axes and
+        # 'axis=(-0,-0,-1)' is both ugly and makes the reader pause over
+        # "what does minus zero mean".
         if v == 0:
             v = 0.0
         return f"{v:.6g}"
@@ -64,19 +65,20 @@ def _kutu(o) -> str:
     try:
         b = o.Shape.BoundBox
     except Exception:
-        # Mesh::Feature'in Shape'i YOKTUR. Eski surumde bu except sessizce
-        # bos donuyordu, yani model mesh'in olculerini HIC gormuyordu.
-        # Gunlukte modelin kendi cumlesi duruyor (2026-08-20 15:22):
-        # "Mesh nesnesinde cap bilgisi context'te yok" — ve bu yuzden bir
-        # sayiyi ogrenmek icin belgeye olcum nesnesi uretmisti.
+        # Mesh::Feature has NO Shape. In the old version this except quietly
+        # returned empty, so the model NEVER saw a mesh's dimensions. The
+        # log has the model's own sentence: "the diameter of the mesh object
+        # is not in the context" — and so it created a measurement object in
+        # the document just to learn one number.
         try:
             b = o.Mesh.BoundBox
         except Exception:
             return ""
     try:
-        # BOS sekilde OCC "-inf x -inf" ve 1.8e308 kose veriyor. Bunu
-        # baglama yazmak hem gurultu hem yaniltici: model bir olcu gordugunu
-        # saniyor. Bos sekil zaten dogrulamada bulgu olarak raporlaniyor.
+        # For an EMPTY shape OCC gives "-inf x -inf" and 1.8e308 corners.
+        # Writing that into the context is both noise and misleading: the
+        # model thinks it saw a dimension. Empty shapes are already reported
+        # as findings by verification.
         if not all(math.isfinite(v) for v in
                    (b.XLength, b.YLength, b.ZLength, b.XMin, b.YMin, b.ZMin)):
             return ""
@@ -87,11 +89,11 @@ def _kutu(o) -> str:
 
 
 def _mesh_ozeti(o) -> str:
-    """Mesh nesnesi icin tek satirlik durum. Mesh degilse bos.
+    """One-line status for a mesh object. Empty if it is not a mesh.
 
-    Neden bunlar: facet sayisi "ne kadar buyuk", kapali/parca ise
-    "basilabilir mi" sorusunun cevabi. Ucu de bedava (olculdu: 12850
-    facet'te toplam 0.01 sn) ve modelin en cok sordugu seyler.
+    Why these: facet count answers "how big", closed/components answers
+    "is it printable". All three are free (measured: 0.01 s total at 12850
+    facets) and they are what the model asks about most.
     """
     try:
         m = o.Mesh
@@ -100,13 +102,13 @@ def _mesh_ozeti(o) -> str:
         return ""
     p = [f"mesh facet={facet}"]
     try:
-        p.append("kapali" if m.isSolid() else "ACIK(delik var)")
+        p.append("closed" if m.isSolid() else "OPEN(has holes)")
     except Exception:
         pass
     try:
         n = int(m.countComponents())
         if n != 1:
-            p.append(f"parca={n}")
+            p.append(f"components={n}")
     except Exception:
         pass
     return " ".join(p)
@@ -118,7 +120,7 @@ def _tip_adi(nesne) -> str:
 
 
 def _alt_eleman(o, ad: str):
-    """'Face7' -> Part.Face. Bulunamazsa None; ASLA patlamaz."""
+    """'Face7' -> Part.Face. None if not found; NEVER raises."""
     try:
         return o.Shape.getElement(ad)
     except Exception:
@@ -130,9 +132,9 @@ def _alt_eleman(o, ad: str):
 
 
 def _alt_eleman_ozeti(o, ad: str) -> str:
-    """Secili yuz/kenarin GEOMETRIK ozeti — tek satir, kisa.
+    """GEOMETRIC summary of the selected face/edge — one short line.
 
-    Ornek ciktilar:
+    Example output:
         plane area=1200 normal=(0,0,1)
         cylinder r=4 axis=(0,0,1) area=75.4
         line len=20
@@ -147,9 +149,9 @@ def _alt_eleman_ozeti(o, ad: str) -> str:
     yuzey = getattr(e, "Surface", None)
     egri = getattr(e, "Curve", None)
 
-    if yuzey is not None:                       # --- yuz ---
+    if yuzey is not None:                       # --- face ---
         p.append(_tip_adi(yuzey))
-        # Yaricap: silindir/kure/torus'ta dogrudan; koninin iki yaricapi olur.
+        # Radius: direct on cylinder/sphere/torus; a cone has two radii.
         for alan, etiket in (("Radius", "r"), ("Radius1", "r1"),
                              ("Radius2", "r2")):
             d = getattr(yuzey, alan, None)
@@ -157,7 +159,7 @@ def _alt_eleman_ozeti(o, ad: str) -> str:
                 p.append(f"{etiket}={_sayi(d)}")
         eksen = getattr(yuzey, "Axis", None)
         if eksen is not None:
-            # Duzlemde Axis normalin ta kendisi; egri yuzeylerde donme ekseni.
+            # On a plane, Axis is the normal itself; on curved surfaces the rotation axis.
             p.append(("normal=" if _tip_adi(yuzey) == "plane" else "axis=")
                      + _vek(eksen))
         merkez = getattr(yuzey, "Center", None)
@@ -168,7 +170,7 @@ def _alt_eleman_ozeti(o, ad: str) -> str:
         except Exception:
             pass
 
-    elif egri is not None:                      # --- kenar ---
+    elif egri is not None:                      # --- edge ---
         p.append(_tip_adi(egri))
         d = getattr(egri, "Radius", None)
         if d is not None:
@@ -181,7 +183,7 @@ def _alt_eleman_ozeti(o, ad: str) -> str:
         except Exception:
             pass
 
-    else:                                       # --- kose ---
+    else:                                       # --- vertex ---
         nokta = getattr(e, "Point", None)
         if nokta is not None:
             p.append("vertex=" + _vek(nokta))
@@ -190,7 +192,7 @@ def _alt_eleman_ozeti(o, ad: str) -> str:
 
 
 def _yerlesim(o) -> str:
-    """Birim olmayan Placement'i yaz. Birim ise sessiz kal — bayt bosa gitmesin."""
+    """Write a non-identity Placement. Stay silent if identity — do not waste bytes."""
     try:
         yer = o.Placement
         taban, donme = yer.Base, yer.Rotation
@@ -210,10 +212,10 @@ def _yerlesim(o) -> str:
 
 
 def _secim() -> tuple[list[str], set[str]]:
-    """Secili nesneler + alt elemanlar + o elemani ureten ozellik + geometri.
+    """Selected objects + sub-elements + the feature that made them + geometry.
 
-    Doner: (satirlar, secili nesne adlari). Adlar butce kirpmasinda
-    onceligi belirlemek icin gerekiyor.
+    Returns: (lines, selected object names). The names are needed to set
+    priority when trimming to budget.
     """
     satir: list[str] = []
     adlar: set[str] = set()
@@ -228,8 +230,8 @@ def _secim() -> tuple[list[str], set[str]]:
         adlar.add(o.Name)
         temel = f"  {o.Name} ({o.TypeId}) label={o.Label!r}"
 
-        # Secili nesnenin kendi olcusu ve konumu — "bunu 3 mm buyut"
-        # dendiginde neyin buyuyecegini gormek icin.
+        # The selected object's own size and position — to see what grows
+        # when told "make this 3 mm bigger".
         ek = []
         k = _kutu(o)
         if k:
@@ -251,7 +253,7 @@ def _secim() -> tuple[list[str], set[str]]:
         for ad in alt:
             iz = ""
             try:
-                # Bu yuzu/kenari HANGI ozellik uretti — "sunu degistir"in cevabi
+                # WHICH feature produced this face/edge — the answer to "change that"
                 gecmis = o.getElementHistory(ad)
                 if gecmis:
                     iz = (f"  <- {gecmis[0][0].Name}"
@@ -261,18 +263,18 @@ def _secim() -> tuple[list[str], set[str]]:
             nokta = ""
             try:
                 p = s.PickedPoints[alt.index(ad)]
-                nokta = f" tiklanan={_vek(p)}"
+                nokta = f" picked={_vek(p)}"
             except Exception:
                 pass
             ozet = _alt_eleman_ozeti(o, ad)
-            satir.append(f"    alt={ad}"
+            satir.append(f"    sub={ad}"
                          + (f" {ozet}" if ozet else "")
                          + nokta + iz)
     return satir, adlar
 
 
 def _komsular(doc, secili: set[str]) -> set[str]:
-    """Secimin bir hop otesi: girdileri ve onu kullananlar."""
+    """One hop beyond the selection: its inputs and whatever uses it."""
     yakin: set[str] = set()
     for ad in secili:
         o = doc.getObject(ad)
@@ -288,12 +290,12 @@ def _komsular(doc, secili: set[str]) -> set[str]:
 
 
 def _kirpma_notu(n: int) -> str:
-    return (f"  … {n} nesne butce nedeniyle kirpildi "
-            f"(secim ve komsulari korundu)")
+    return (f"  … {n} objects trimmed for budget "
+            f"(selection and its neighbours kept)")
 
 
-# Not satirinin butcedeki yeri. Sayinin kac hane olacagi onceden
-# bilinmedigi icin en genis hal olculuyor.
+# Room the note line takes in the budget. The number of digits is not known
+# in advance, so the widest case is measured.
 _NOT_PAYI = len(_kirpma_notu(999_999)) + 1
 
 
@@ -319,12 +321,12 @@ def _nesne_satiri(o) -> str:
 def belge_metni(doc=None, butce: int = BUTCE) -> str:
     doc = doc or App.ActiveDocument
     if doc is None:
-        return "<document>Acik belge yok.</document>"
+        return "<document>No document is open.</document>"
 
     bas: list[str] = ["<document>"]
     basi = f"name={doc.Name} label={doc.Label!r} objects={len(doc.Objects)}"
-    # App.Document'ta 'Modified' YOK (1.1'de denendi, AttributeError).
-    # Kaydedilmemis degisiklik olup olmadigini isTouched() soyluyor.
+    # App.Document has NO 'Modified' (tried on 1.1, AttributeError).
+    # isTouched() tells whether there are unsaved changes.
     try:
         basi += f" touched={bool(doc.isTouched())}"
     except Exception:
@@ -333,9 +335,9 @@ def belge_metni(doc=None, butce: int = BUTCE) -> str:
     if getattr(doc, "FileName", ""):
         bas.append(f"file={doc.FileName}")
 
-    # GERI ALMA YIGININ TEPESI. Model GERI-AL isteyebiliyor ama yalnizca
-    # kendi isini geri alabiliyor; neyin tepede oldugunu gormeden istemek
-    # korlemesine olurdu. Ilk uc kayit yetiyor, satir kisa.
+    # TOP OF THE UNDO STACK. The model may ask for an undo, but it can only
+    # undo its own work; asking without seeing what is on top would be
+    # blind. The first three entries are enough and keep the line short.
     try:
         adlar = list(getattr(doc, "UndoNames", ()) or ())
         if adlar:
@@ -343,7 +345,7 @@ def belge_metni(doc=None, butce: int = BUTCE) -> str:
     except Exception:
         pass
 
-    # Aktif Body — PartDesign'da yeni ozelliklerin nereye gidecegini belirler
+    # Active Body — in PartDesign it decides where new features go
     try:
         import FreeCADGui as Gui
         gorunum = Gui.ActiveDocument.ActiveView
@@ -355,14 +357,14 @@ def belge_metni(doc=None, butce: int = BUTCE) -> str:
 
     sec, secili = _secim()
     bas.append("<selection>")
-    bas.extend(sec if sec else ["  (secim yok)"])
+    bas.extend(sec if sec else ["  (nothing selected)"])
     bas.append("</selection>")
 
-    # --- nesne listesi ---------------------------------------------------
-    # TopologicalSortedObjects BOS belgede FreeCAD konsoluna
-    # "cyclic dependency detected (no root object)" uyarisi basiyor —
-    # zararsiz ama her turda Report view'i kirletir. 2'den az nesnede
-    # siralamanin zaten anlami yok.
+    # --- object list -----------------------------------------------------
+    # TopologicalSortedObjects on an EMPTY document prints the warning
+    # "cyclic dependency detected (no root object)" to the FreeCAD console —
+    # harmless, but it would litter the Report view every turn. With fewer
+    # than 2 objects sorting is meaningless anyway.
     sirali = doc.Objects
     if len(doc.Objects) > 1:
         try:
@@ -371,7 +373,7 @@ def belge_metni(doc=None, butce: int = BUTCE) -> str:
             pass
 
     yakin = _komsular(doc, secili) if secili else set()
-    # (oncelik, sira, metin) — oncelik 0 en degerli.
+    # (priority, order, text) — priority 0 is the most valuable.
     kayit = []
     for i, o in enumerate(sirali):
         if o.Name in secili:
@@ -382,29 +384,29 @@ def belge_metni(doc=None, butce: int = BUTCE) -> str:
             oncelik = 2
         kayit.append([oncelik, i, _nesne_satiri(o)])
 
-    # Uzunluk TAM hesaplaniyor, tahminen degil: satirlar "\n" ile birlestigi
-    # icin her satir kendi uzunlugu + 1, kapanis satiri haric.
+    # Length is computed EXACTLY, not estimated: lines are joined with "\n",
+    # so each line costs its own length + 1, except the closing line.
     sabit_uzunluk = (sum(len(x) + 1 for x in bas)
                      + len("<objects>") + 1
                      + len("</objects>") + 1
                      + len("</document>"))
     toplam = sabit_uzunluk + sum(len(x[2]) + 1 for x in kayit)
 
-    # Kirpma sirasi: once en dusuk oncelik, o grup icinde EN ESKI nesne.
-    # Eskiden basla, cunku belgenin sonu genelde uzerinde calisilan yerdir
-    # (PartDesign'da tip, Part'ta son boolean); baslangicta ise origin
-    # duzlemleri ve taban eskizler durur — onlarin adlari zaten CLAUDE.md'de
-    # yaziyor, baglama tekrar konmalari sart degil.
+    # Trim order: lowest priority first, and within that group the OLDEST
+    # object. Start from the oldest because the end of the document is
+    # usually where work is happening (the tip in PartDesign, the last
+    # boolean in Part); the beginning holds origin planes and base sketches
+    # — their names are already in CLAUDE.md and need not be repeated.
     atilacak = sorted(range(len(kayit)), key=lambda i: (-kayit[i][0], kayit[i][1]))
     dusen = 0
     for i in atilacak:
         if toplam <= butce:
             break
         if kayit[i][0] == 0:
-            break                      # secili nesne ASLA atilmaz
+            break                      # a selected object is NEVER dropped
         if dusen == 0:
-            # Kirpma notunun KENDISI de butceden yiyor. Ilk olcumde
-            # unutuldu ve 1200 istenen yerde 1232 karakter uretildi.
+            # The trim note ITSELF eats budget too. The first measurement
+            # forgot it and produced 1232 characters where 1200 was asked.
             toplam += _NOT_PAYI
         toplam -= len(kayit[i][2]) + 1
         kayit[i] = None
@@ -419,9 +421,9 @@ def belge_metni(doc=None, butce: int = BUTCE) -> str:
 
     metin = "\n".join(p)
     if len(metin) > butce:
-        # Buraya ancak SECIM tek basina butceyi asarsa gelinir — nesne
-        # listesi bosaltilsa bile sigmiyorsa. Kaba kesme, ama etiketi
-        # kapatarak: yarim kalan bir <document> modeli sasirtir.
-        kuyruk = "\n… (baglam kirpildi)\n</document>"
+        # Only reached if the SELECTION alone exceeds the budget — if it does
+        # not fit even with the object list emptied. A crude cut, but the tag
+        # is closed: a half-finished <document> confuses the model.
+        kuyruk = "\n… (context trimmed)\n</document>"
         metin = metin[:max(0, butce - len(kuyruk))] + kuyruk
     return metin

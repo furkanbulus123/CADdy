@@ -253,10 +253,10 @@ else:
     # doner) ve adi ipucunun ILK SATIRINDA duruyor — kullanici ikonu
     # tanimazsa tek ogrenme yeri orasi.
     _DUGMELER = (
-        ("Yeni sohbet", panel.yeni_dugmesi, "Yeni sohbet", "Bağlamı unutur"),
-        ("Geri al", panel.geri_dugmesi, "Geri al", "Son AI değişikliğini"),
-        ("İleri al", panel.ileri_dugmesi, "İleri al", "TEKRAR uygular"),
-        ("Kayıtlar", panel.kayit_dugmesi, "Kayıtlar", "kaldığı yerden"),
+        ("New chat", panel.yeni_dugmesi, "New chat", "Forgets the context"),
+        ("Undo", panel.geri_dugmesi, "Undo", "Undoes the last AI change"),
+        ("Redo", panel.ileri_dugmesi, "Redo", "Re-applies"),
+        ("History", panel.kayit_dugmesi, "History", "where it left off"),
     )
     for _ad, _dugme, _ilk, _cumle in _DUGMELER:
         _ip = _dugme.toolTip()
@@ -294,7 +294,7 @@ else:
             _enler[0] <= 32, _enler[0])
     ipucu = panel.model_secici.itemData(0, QtCore.Qt.ToolTipRole) or ""
     kontrol("model kutusunun ipucunda TAM etiket var",
-            "kalite" in ipucu, ipucu[:60])
+            "quality" in ipucu, ipucu[:60])
     kontrol("model kutusunda KISA etiket gorunuyor",
             len(panel.model_secici.itemText(0)) < 14,
             panel.model_secici.itemText(0))
@@ -315,7 +315,7 @@ else:
     _eip = panel.efor_secici.itemData(0, QtCore.Qt.ToolTipRole) or ""
     kontrol("ipucu OLCULEN rakami veriyor", "37" in _eip, _eip[:80])
     kontrol("ipucu kalitenin OLCULMEDIGINI de soyluyor",
-            "OLCULMEDI" in _eip.upper(), _eip[:200])
+            "NOT MEASURED" in _eip.upper(), _eip[:200])
 
     # ILERI AL DUGMESI: bos yiginda basilabilir durmasin. Kullanicinin
     # istegi: "geri al'a basmadan once basilmasin".
@@ -323,7 +323,7 @@ else:
     kontrol("panelde ileri dugmesi saklaniyor", hasattr(panel, "ileri_dugmesi"))
     kontrol("BASLANGICTA kapali", not panel.ileri_dugmesi.isEnabled())
     kontrol("ipucu bunu soyluyor",
-            "KAPALIDIR" in panel.ileri_dugmesi.toolTip(),
+            "Disabled" in panel.ileri_dugmesi.toolTip(),
             panel.ileri_dugmesi.toolTip())
 
     _bd = App.newDocument("IleriDugmeTest")
@@ -491,7 +491,7 @@ else:
     _yaz("       akis : %r" % akis.replace("\n", " | "))
 
     kontrol("akistaki satir sayaci gosteriyor",
-            "sn" in akis and "token" in akis, akis)
+            " s" in akis and "token" in akis, akis)
     # Sag ust: hicbir etiket kalmadi. Once sayan saat, sonra "çalışıyor…"
     # da kaldirildi — kullanicinin acik istegi.
     kontrol("sag ustte durum etiketi HIC YOK",
@@ -512,7 +512,7 @@ else:
     panel._durum("oluyor")
     app.processEvents()
     son = [w.text() for w in panel.findChildren(_dock.SaranEtiket)
-           if "iptal" in w.text().lower()]
+           if "cancel" in w.text().lower()]
     kontrol("iptal geri bildirimi akista duruyor", bool(son), son)
 
 # ---------------------------------------------------------------- kod karti
@@ -782,11 +782,11 @@ else:
         _gec = _P(_tf.mkdtemp(prefix="caddy_panel_kayit_"))
         _dosya = _gec / "2026-08-27_9564dc71.txt"
         _dosya.write_text(
-            "=" * 72 + "\nCADdy sohbet gunlugu\n"
-            "oturum : 9564dc71-071d-4ca3-9c21-483cf5766739\n"
-            "model  : claude-opus-5\n"
-            "baslama: 2026-08-27T13:39:39\n" + "=" * 72 + "\n\n"
-            "--- KULLANICI  [13:39:55] ---\nkamyonet tasarla\n\n"
+            "=" * 72 + "\nCADdy chat log\n"
+            "session : 9564dc71-071d-4ca3-9c21-483cf5766739\n"
+            "model   : claude-opus-5\n"
+            "started : 2026-08-27T13:39:39\n" + "=" * 72 + "\n\n"
+            "--- USER  [13:39:55] ---\nkamyonet tasarla\n\n"
             "--- AI  (claude-opus-5)  [13:40:03] ---\nolur\n",
             encoding="utf-8")
         _k = _kayitlar.listele(_gec)[0]
@@ -881,7 +881,7 @@ try:
     _yaz("       karsilama %d satir, %d karakter" % (len(_satir), len(_metin)))
     kontrol("karsilama en fazla iki satir", len(_satir) <= 2, _satir)
     kontrol("karsilama kisa (<160 karakter)", len(_metin) < 160, len(_metin))
-    kontrol("yine de ne yazacagini soyluyor", "küp" in _metin, _metin)
+    kontrol("yine de ne yazacagini soyluyor", "cube" in _metin, _metin)
     kontrol("model adi duruyor", config.model() in _metin, _metin)
 except Exception as e:                                           # noqa: BLE001
     atla("karsilama", str(e)[:150])
