@@ -55,7 +55,12 @@ FreeCAD's `Mod` directory. No admin rights needed. Restart FreeCAD and pick
 
 ## Usage
 
-Open the CADdy panel and describe what you want:
+Click the cat icon in the toolbar to open the CADdy panel. It stays in the
+toolbar in every workbench:
+
+![Where to find CADdy: the cat icon in the FreeCAD toolbar](docs/where_to_find.png)
+
+Then describe what you want:
 
 > *"Add four M3 mounting holes, 5 mm from each corner."*
 
