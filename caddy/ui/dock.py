@@ -1,11 +1,12 @@
-"""CADdy paneli — FreeCAD ana penceresine yerlesen QDockWidget.
+"""The CADdy panel — a QDockWidget that sits in FreeCAD's main window.
 
-Neden Task panel (Gui.Control.showDialog) DEGIL: Task paneli tek bir yuvayi
-isgal eder, Sketcher/PartDesign gibi araclarla catisir ve secim degisince
-kendini kapatir. Sohbet paneli kalici olmali.
+Why NOT a Task panel (Gui.Control.showDialog): the Task panel occupies a
+single slot, clashes with tools like Sketcher/PartDesign and closes itself
+when the selection changes. The chat panel has to be persistent.
 
-Desen `src/Mod/Help/Help.py:481-503`'ten alindi: dock'u objectName ile ara,
-varsa yeniden kullan — yoksa her cagrida bir yenisi birikir.
+The pattern was taken from `src/Mod/Help/Help.py:481-503`: look the dock up
+by objectName and reuse it if it exists — otherwise a new one piles up on
+every call.
 """
 
 from __future__ import annotations
@@ -21,22 +22,23 @@ from .code_card import CodeCard
 
 NESNE_ADI = "CaddyPanel"
 
-# Ikon dugmesinin ikon kenari. Metin dugmesinin genisligini Qt'nin 80 px'lik
-# TABANI belirliyordu (bkz. _arac_cubugu); ikon dugmesi o tabana bagli degil,
-# genisligini biz veriyoruz.
+# Icon edge of the icon button. The width of a text button was set by Qt's
+# 80 px FLOOR (see _arac_cubugu); the icon button is not bound to that floor,
+# we set its width ourselves.
 #
-# 20 -> 18: ust satira dorduncu dugme ("Kayıtlar") eklendi ve kullanici
-# "butonları küçülteceğiz" dedi. Yukseklik burada DEGIL, _yuksekligi_esitle'de
-# belirleniyor (komsu kutulara denkleniyor); bu sabit yalnizca genisligi ve
-# ikonun tavanini veriyor.
+# 20 -> 18: a fourth button ("History") was added to the top row and the
+# user said "we'll make the buttons smaller". The height is NOT set here but
+# in _yuksekligi_esitle (matched to the neighbouring boxes); this constant
+# only gives the width and the icon's ceiling.
 IKON_PX = 18
 
 
 def _ikon(ad: str):
-    """resources/icons/<ad> QIcon olarak; yuklenemezse None.
+    """resources/icons/<ad> as a QIcon; None if it cannot be loaded.
 
-    None donerse cagiran taraf METNE geri doner — ikonsuz ve metinsiz bir
-    dugme tiklanamaz bir bosluk olurdu (ayni gerekce ust_menu._logo'da).
+    If None is returned the caller falls back to TEXT — a button with neither
+    icon nor text would be an unclickable gap (same reasoning as in
+    ust_menu._logo).
     """
     kok = os.path.dirname(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))))
@@ -48,41 +50,43 @@ def _ikon(ad: str):
 
 
 def _ikon_dugmesi(ad: str, yedek_metin: str) -> QtWidgets.QPushButton:
-    """Ikonlu dugme; ikon yoksa METNE doner — islev hicbir halde kaybolmaz.
+    """A button with an icon; falls back to TEXT without one — the function is never lost.
 
-    Ikon dugmesinde etiket gorunmedigi icin cagiran taraf ipucunun ILK
-    SATIRINA dugmenin adini yazmak zorunda: kullanici ikonu tanimazsa ne
-    yaptigini baska yerden ogrenemez.
+    Because the label is not visible on an icon button, the caller has to
+    write the button's name on the FIRST LINE of the tooltip: if the user
+    does not recognise the icon, they cannot learn what it does anywhere
+    else.
     """
     d = QtWidgets.QPushButton()
     ikon = _ikon(ad)
     if ikon is None:
         d.setText(yedek_metin)
-        log.uyari(f"ikon yuklenemedi ({ad}) — dugme metne dondu")
+        log.uyari(f"could not load icon ({ad}) — button fell back to text")
         return d
     d.setIcon(ikon)
     d.setIconSize(QtCore.QSize(IKON_PX, IKON_PX))
-    # YALNIZCA GENISLIK sabit. Yukseklik cagirana birakiliyor: burada
-    # sabitlemek dugmeyi komsularindan (Yeni, model/efor kutulari) DAHA
-    # UZUN yapiyordu ve satir tirtikli gorunuyordu — kullanicinin sikayeti
-    # buydu. Yukseklik _yuksekligi_esitle ile komsulara denklenir.
+    # ONLY THE WIDTH is fixed. The height is left to the caller: fixing it
+    # here made the button TALLER than its neighbours (New, the model/effort
+    # boxes) and the row looked jagged — that was the user's complaint. The
+    # height is matched to the neighbours with _yuksekligi_esitle.
     d.setFixedWidth(IKON_PX + 10)
-    # ...AMA setFixedWidth TEK BASINA YETMIYOR.
+    # ...BUT setFixedWidth ALONE IS NOT ENOUGH.
     #
-    # OLCULDU (kullanicinin Rapor penceresi, 2026-08-28 — offscreen degil,
-    # bkz. MANTIK 45.4b): alti QPushButton'un da ELLE konmus asgarisi
-    # 106 px cikti, oysa buradaki cagri 28 diyor. Sebep FreeCAD'in tema
-    # stil sayfasi: `QPushButton { min-width: ... }` tanimliyor ve Qt bunu
-    # polish sirasinda widget'in uzerinde `setMinimumWidth()` cagirarak
-    # uyguluyor — yani bizim satirimizin USTUNE yaziyor. Ust satir boylece
-    # 4x106 + kutular = 651 px taban koyuyordu ve panel %40'a (512 px) bir
-    # turlu inmiyordu.
+    # MEASURED (the user's Report view, 2026-08-28 — not offscreen, see
+    # MANTIK 45.4b): the hand-set minimum of all six QPushButtons came out
+    # as 106 px, while the call here says 28. The cause is FreeCAD's theme
+    # stylesheet: it defines `QPushButton { min-width: ... }` and Qt applies
+    # it during polish by calling `setMinimumWidth()` on the widget — i.e.
+    # it overwrites OUR line. The top row thus set a floor of 4x106 + boxes
+    # = 651 px and the panel would not go down to 40% (512 px) no matter
+    # what.
     #
-    # Kural sayfayla konuldugu icin ancak sayfayla kalkar: kaskadda daha
-    # OZEL olan (widget'in kendi stil sayfasi) kazanir. Diger tema
-    # kurallari (renk, kenarlik) kaskadda duruyor, yalnizca genislik
-    # eziliyor. `min-width` icerik kutusunu olctugu icin dolgu da burada
-    # kisiliyor, yoksa tema dolgusu genisligi geri buyuturdu.
+    # Because the rule is set by a stylesheet, only a stylesheet removes it:
+    # in the cascade the MORE SPECIFIC one (the widget's own stylesheet)
+    # wins. The other theme rules (colour, border) stay in the cascade, only
+    # the width is overridden. `min-width` measures the content box, so the
+    # padding is trimmed here too, otherwise the theme padding would grow
+    # the width back.
     d.setStyleSheet("QPushButton { min-width: %dpx; max-width: %dpx; "
                     "padding-left: 5px; padding-right: 5px; }"
                     % (IKON_PX, IKON_PX))
@@ -90,23 +94,25 @@ def _ikon_dugmesi(ad: str, yedek_metin: str) -> QtWidgets.QPushButton:
 
 
 def _yuksekligi_esitle(dugmeler, olcutler) -> int:
-    """Ikon dugmelerini KOMSU DUGMELERIN boyuna oturtur; kullanilan boyu doner.
+    """Fits the icon buttons to the height of the NEIGHBOURING widgets; returns the height used.
 
-    Neden olcerek: dugmenin dogal yuksekligi uslupa/temaya/yazi tipine gore
-    degisir; sabit bir sayi yazmak (once 30 px yaziliydi) baska makinede yine
-    tirtikli satir demek.
+    Why by measuring: a button's natural height changes with the
+    style/theme/font; writing a fixed number (30 px was written before)
+    means a jagged row on another machine again.
 
-    Olcut ONCE metin dugmesiydi: satirda hem dugme hem kutu vardi ve Qt'nin
-    dogal boylari esit degil (olculdu, offscreen: dugme 20 px, kutular
-    22 px); ikon dugmesini kutuya denklersek metin dugmesinden ayrisirdi.
-    ARTIK metin dugmesi kalmadi (dordu de ikon), o yuzden olcut KUTULAR —
-    boylece satirin TAMAMI 22 px, tek boy. En UZUN olcut aliniyor.
+    The reference USED TO BE the text button: the row had both buttons and
+    boxes and Qt's natural heights are not equal (measured, offscreen:
+    button 20 px, boxes 22 px); matching the icon button to a box would
+    have set it apart from the text button. There is NO text button left
+    NOW (all four are icons), so the reference is the BOXES — that way the
+    WHOLE row is 22 px, one height. The TALLEST reference is taken.
     """
     h = max([o.sizeHint().height() for o in olcutler] or [0])
     for d in dugmeler:
         d.setFixedHeight(h)
-        # Ikon dugmenin ICINE sigmali: cerceve payi dusulmezse Qt ikonu
-        # kirpar/kucultur ve sekil bulaniklasir. 6 px pay iki yandan.
+        # The icon has to fit INSIDE the button: if the frame margin is not
+        # subtracted, Qt crops/shrinks the icon and the shape gets blurry.
+        # 6 px margin across both sides.
         if not d.icon().isNull():
             k = max(12, h - 6)
             d.setIconSize(QtCore.QSize(k, k))
@@ -121,30 +127,30 @@ _RENK = {
 
 
 class SaranEtiket(QtWidgets.QTextEdit):
-    """Metin kutusu — icerigi panelin SAGINA TASAMAZ. Sert sinir.
+    """A text box — its content CANNOT OVERFLOW to the RIGHT of the panel. A hard limit.
 
-    Neden QLabel DEGIL. Iki ayri sorun var ve QLabel yalnizca birincisini
-    cozebiliyordu:
+    Why NOT a QLabel. There are two separate problems and QLabel could only
+    solve the first:
 
-      1. Sarma acik bir QLabel bile `minimumSizeHint().width()` degerini en
-         uzun BOLUNEMEZ parcaya gore verir. Olculdu: tek bir traceback yolu
-         (C:\\Users\\...\\executor.py) icin 660 piksel. Dar bir yan panelde
-         bu, QScrollArea'ya yatay kaydirma cubugu actiriyordu.
-      2. Asgari genisligi sifirlasan bile QLabel o uzun parcayi BOLEMEZ:
-         satira sigmayan yol sagdan tasar ve gorunmez olur. Kullanicinin
-         ikinci sikayeti tam buydu — "biraz saga kayan metinleri
-         goremiyorum".
+      1. Even a QLabel with wrapping on reports `minimumSizeHint().width()`
+         based on its longest UNBREAKABLE piece. Measured: 660 pixels for a
+         single traceback path (C:\\Users\\...\\executor.py). In a narrow
+         side panel this made the QScrollArea open a horizontal scroll bar.
+      2. Even with the minimum width zeroed, a QLabel CANNOT BREAK that long
+         piece: a path that does not fit on the line overflows to the right
+         and becomes invisible. That was exactly the user's second complaint
+         — "I can't see the text that slides a bit to the right".
 
-    Ikincisinin Qt'deki tek dogru cozumu `QTextOption.
-    WrapAtWordBoundaryOrAnywhere`: once bosluktan boler, olmuyorsa
-    KARAKTERDEN boler. QLabel'da bu ayar YOK; QTextDocument'i olan bir
-    widget gerekiyor. O yuzden gorunusu etikete benzetilmis bir QTextEdit:
-    cercevesiz, saydam, salt okunur, iki kaydirma cubugu da kapali,
-    yuksekligi icerige gore sabitlenmis.
+    The only correct fix for the second in Qt is `QTextOption.
+    WrapAtWordBoundaryOrAnywhere`: it breaks at a space first, and if that
+    does not work, it breaks AT A CHARACTER. QLabel does NOT have this
+    option; it needs a widget with a QTextDocument. So this is a QTextEdit
+    made to look like a label: frameless, transparent, read-only, both
+    scroll bars off, height fixed to the content.
 
-    Tekerlek olayi bilincli olarak YUTULMUYOR: sohbeti kaydirirken imlec
-    bir mesajin uzerine geldiginde kaydirmanin durmasi, cozdugumuz sorundan
-    daha sinir bozucu olurdu.
+    The wheel event is deliberately NOT SWALLOWED: scrolling stopping when
+    the cursor passes over a message while scrolling the chat would be more
+    annoying than the problem we solved.
     """
 
     def __init__(self, metin: str = "", parent=None) -> None:
@@ -168,7 +174,7 @@ class SaranEtiket(QtWidgets.QTextEdit):
         self._bicimle()
         self.setText(metin)
 
-    # -- etiket gibi davranmasi icin ---------------------------------------
+    # -- so it behaves like a label ----------------------------------------
 
     def text(self) -> str:
         return self.toPlainText()
@@ -196,14 +202,14 @@ class SaranEtiket(QtWidgets.QTextEdit):
             + ("font-style:italic;" if self._italik else "")
             + "}")
 
-    # -- yukseklik ---------------------------------------------------------
+    # -- height ------------------------------------------------------------
 
     def _yuksekligi_ayarla(self) -> None:
-        """Yuksekligi SARMA SONRASI gercek icerige gore sabitler.
+        """Fixes the height to the actual content AFTER WRAPPING.
 
-        Dikey cubuk kapali oldugu icin yukseklik yanlissa metin alttan
-        kirpilir — yani yatay tasmayi cozup yerine dikey tasma koymus
-        olurduk.
+        Since the vertical bar is off, a wrong height clips the text at the
+        bottom — i.e. we would have solved horizontal overflow and put
+        vertical overflow in its place.
         """
         d = self.document()
         d.setTextWidth(max(1, self.viewport().width()))
@@ -215,16 +221,16 @@ class SaranEtiket(QtWidgets.QTextEdit):
         self._yuksekligi_ayarla()
 
     def minimumSizeHint(self) -> QtCore.QSize:
-        # Genislik dayatma: panelin ne kadar daralacagini icerik degil
-        # kullanici belirlesin.
+        # Impose no width: the user decides how narrow the panel gets, not
+        # the content.
         return QtCore.QSize(0, self.height())
 
     def sizeHint(self) -> QtCore.QSize:
         return QtCore.QSize(0, self.height())
 
     def wheelEvent(self, olay):
-        # Kaydirma sohbetin isi; burada yutulursa imlec mesaja gelince
-        # sohbet kaydirmasi duruyor.
+        # Scrolling is the chat's job; if it were swallowed here, the chat
+        # scroll would stop when the cursor reaches a message.
         olay.ignore()
 
 
@@ -234,18 +240,18 @@ class CaddyPanel(QtWidgets.QWidget):
         self.ctl = ConversationController(self)
         self._kartlar: list[CodeCard] = []
         self._bekleyen: CodeCard | None = None
-        # Yanit akarken gosterilen gecici kutu. Tur bitince SILINIR ve yerine
-        # duzgun ayristirilmis metin + kod kartlari konur - yoksa ayni yanit
-        # iki kez gorunurdu.
+        # Temporary box shown while the reply streams. It is DELETED when the
+        # turn ends and replaced by the properly parsed text + code cards -
+        # otherwise the same reply would show up twice.
         self._canli: QtWidgets.QLabel | None = None
         self._canli_metin = ""
         self._dusunce: QtWidgets.QLabel | None = None
 
-        # Ilerleme gostergesi. Sabit bir "dusunuyor…" yazisi yetmiyor:
-        # olculdu, zor bir istekte model 131 sn dusunuyor ve bu sure boyunca
-        # ekranda HICBIR SEY degismiyordu — kullanici hakli olarak "takildi"
-        # sandi. Saniye saydiran bir saat + CLI'in nabzindan gelen dusunme
-        # tokeni, "yasiyor" demenin en ucuz yolu.
+        # Progress indicator. A fixed "thinking…" text is not enough:
+        # measured, on a hard request the model thinks for 131 s and during
+        # that time NOTHING changed on screen — the user rightly thought it
+        # was "stuck". A clock counting seconds + the thinking tokens from
+        # the CLI's heartbeat is the cheapest way to say "alive".
         self._ilerleme: QtWidgets.QLabel | None = None
         self._t0 = 0.0
         self._asama_ad = ""
@@ -280,121 +286,131 @@ class CaddyPanel(QtWidgets.QWidget):
 
         self._karsilama()
 
-        # ISITMA. `calistir` icindeki tek pahali olabilecek is, `_hazirla`nin
-        # yaptigi importlar (GUI'de `Draft` olculdu: 0.19 sn). Panel acildiktan
-        # hemen sonra, kullanici daha yazmadan yapiliyor — kritik yolun
-        # disinda. singleShot(0): once pencere cizilsin, sonra isinsin.
+        # WARM-UP. The only potentially expensive work inside `calistir` is
+        # the imports `_hazirla` does (`Draft` in the GUI measured: 0.19 s).
+        # It is done right after the panel opens, before the user has typed
+        # — outside the critical path. singleShot(0): let the window paint
+        # first, then warm up.
         QtCore.QTimer.singleShot(0, self._isit)
 
-        # SAG TIK MENUSU KALDIRILDI. Icinde tek bir oge vardi ("Sohbet
-        # kayıtlarını aç") ve o ogenin sebebi ust satirda yer olmamasiydi.
-        # Kayitlar artik gorunur bir IKON dugmesi (bkz. _arac_cubugu), yani
-        # menu ayni islevin ikinci ve GIZLI kapisiydi; kullanici zaten
-        # bulamadigini soylemisti. Iki kapi yerine gorunen tek kapi.
+        # THE RIGHT-CLICK MENU WAS REMOVED. It had a single item ("Open chat
+        # logs") and the only reason for that item was that there was no
+        # room in the top row. History is now a visible ICON button (see
+        # _arac_cubugu), so the menu was a second, HIDDEN door to the same
+        # function; the user had already said they could not find it. One
+        # visible door instead of two.
 
     def _isit(self) -> None:
-        """Pahali importlari kullanici beklemeden yapar. Sessizce basarisiz olur.
+        """Does the expensive imports without the user waiting. Fails silently.
 
-        Isinmazsa hicbir sey bozulmaz: `_hazirla` ayni importlari zaten
-        kendisi yapiyor, yalnizca faturasi ilk Calistir'a kesiliyor.
+        If it does not warm up nothing breaks: `_hazirla` does the same
+        imports itself, only the bill goes to the first Run.
         """
         try:
             from ..execution.executor import isit
 
             isit()
         except Exception as e:                                   # noqa: BLE001
-            log.ayik(f"isitma yapilamadi: {e}")
+            log.ayik(f"warm-up failed: {e}")
 
     def closeEvent(self, olay):
-        # Kalici surec artik turlar arasi ayakta duruyor; panel kapanirken
-        # onu birakmak, FreeCAD'den sonra da yasayan bir claude.exe demek.
+        # The persistent process now stays up between turns; leaving it
+        # behind when the panel closes means a claude.exe that outlives
+        # FreeCAD.
         try:
             self.ctl.transport.kapat()
         except Exception:
             pass
-        # Sizan bir DocumentObserver kullanicinin HER belge hareketinde
-        # atesler ve panel kapandiktan sonra da yasar.
+        # A leaked DocumentObserver fires on EVERY document action of the
+        # user and outlives the panel.
         try:
             self.ctl.executor.kapat()
         except Exception:
             pass
         super().closeEvent(olay)
 
-    # -- kurulum -----------------------------------------------------------
+    # -- setup -------------------------------------------------------------
 
     def _arac_cubugu(self) -> QtWidgets.QHBoxLayout:
-        """Ust satir — ETIKETLER KISA, aciklama ipucunda.
+        """The top row — LABELS ARE SHORT, the explanation is in the tooltip.
 
-        Neden kisa: bu satir panelin ASGARI genisligini belirliyordu.
-        Olculdu (offscreen, gercek widget'lar): satirin asgari genisligi
-        876 px, panelinki 888 px — ve panel 400 px'e zorlandiginda 888'de
-        kaliyordu. Yani "paneli daralt" istegi, etiketler kisalmadan
-        FIZIKSEL OLARAK imkansizdi; `resizeDocks` bile bu tabani asamaz.
+        Why short: this row set the panel's MINIMUM width. Measured
+        (offscreen, real widgets): the row's minimum width 876 px, the
+        panel's 888 px — and when the panel was forced to 400 px it stayed
+        at 888. So the "make the panel narrower" request was PHYSICALLY
+        IMPOSSIBLE without shortening the labels; not even `resizeDocks`
+        can get below that floor.
 
-        Etiket basina olculen pay:
-            "Son AI değişikliğini geri al"  344 px
-            model kutusu ("Opus (iyi kalite)") 270 px
-            "Yeni sohbet"                   140 px
-            "Kayıtlar"                      104 px
+        Measured share per label (the labels were Turkish at the time):
+            "Undo last AI change"            344 px
+            model box ("Opus (good quality)") 270 px
+            "New chat"                       140 px
+            "History"                        104 px
 
-        Bilgi kaybi yok: her dugmenin tam cumlesi setToolTip'te duruyor,
-        model kutusunun olculmus hiz/kalite notu zaten ipucundaydi.
+        No information is lost: each button's full sentence is in
+        setToolTip, and the model box's measured speed/quality note was
+        already in the tooltip.
 
-        SONRA "Ileri al" eklendi ve taban 492 -> 602 px'e cikti, yani %40
-        hedefinin (592 px) USTUNE. Yeni olcum (offscreen, gercek widget):
+        THEN "Redo" was added and the floor went 492 -> 602 px, i.e. ABOVE
+        the 40% target (592 px). New measurement (offscreen, real widget):
 
-            "Yeni" 80 · "Geri al" 92 · "İleri al" 104 · "Kayıtlar" 104
-            model kutusu 186 · araliklar 24            -> satir 590
+            "New" 80 · "Undo" 92 · "Redo" 104 · "History" 104
+            model box 186 · spacing 24                   -> row 590
 
-        80 px Qt'nin dugme TABANI — "Geri"/"İleri"/"Kayıt" hepsi 80 px, yani
-        o esigin altinda kisaltmak bedava degil, faydasiz. Yer "Kayıtlar" ->
-        "Kayıt" ile acildi (104 -> 80); geri/ileri ciftinin "al"i duruyor,
-        cunku "Geri"/"İleri" tek basina gezinme dugmesi gibi okunuyor.
+        80 px is Qt's button FLOOR — the short labels were all 80 px, so
+        shortening below that threshold is not free, it is useless. Room
+        was made with "History" -> "Log" (104 -> 80); the undo/redo pair
+        kept its full wording, because the bare short words read like
+        navigation buttons.
 
-        EN SON efor kutusu eklendi (dusunme miktari — gecikmenin %91-94'u,
-        bkz. config.EFORLAR). "Kayıt" dugmesini silmek TEK BASINA yetmedi:
+        LAST the effort box was added (amount of thinking — 91-94% of the
+        latency, see config.EFORLAR). Deleting the "Log" button ALONE was
+        not enough:
 
-            Kayıt yok + model(186) + efor(102)   -> panel 600, TASAR
-            Kayıt yok + model(102) + efor( 90)   -> panel 504, sigar
+            no Log + model(186) + effort(102)   -> panel 600, OVERFLOWS
+            no Log + model(102) + effort( 90)   -> panel 504, fits
 
-        Yani model kutusu da kisaldi: "Opus · iyi" -> "Opus" (186 -> 102).
-        Kalite notu kaybolmadi, zaten oge ipucundaydi. "Kayıt" dugmesinin
-        islevi once sag tik menusune tasindi; kullanici bulamadi, bu yuzden
-        simdi ikon dugmesi olarak geri geldi ve menu kaldirildi.
+        So the model box got shorter too: "Opus · good" -> "Opus" (186 ->
+        102). The quality note was not lost, it was already in the item's
+        tooltip. The "Log" button's function first moved to the right-click
+        menu; the user could not find it, so it has now come back as an
+        icon button and the menu was removed.
 
-        EN SON "Geri al"/"İleri al" METINDEN IKONA cevrildi. Sikayet: dar
-        panelde AI yanitinin sag tarafi kirpiliyor. Olculdu (ayni offscreen
-        test, gercek widget'lar):
+        LATER "Undo"/"Redo" were changed FROM TEXT TO ICONS. The complaint:
+        in a narrow panel the right side of the AI reply got clipped.
+        Measured (the same offscreen test, real widgets):
 
-            metin dugmeleri : ust satir 492 -> panel asgari 504 px
-            ikon dugmeleri  : ust satir 356 -> panel asgari 368 px
+            text buttons : top row 492 -> panel minimum 504 px
+            icon buttons : top row 356 -> panel minimum 368 px
 
-        136 px kazanc, cunku metin dugmesi Qt'nin 80 px'lik TABANINA
-        oturuyordu; ikon dugmesinin genisligini biz veriyoruz (30 px, bkz.
-        IKON_PX). Ikonlar arac cubugundakinin aynisi (resources/icons/
-        caddy-undo.svg ve aynasi caddy-redo.svg), yani kullanici ayni sekli
-        iki yerde ayni islev icin goruyor. Etiket kaybi telafi edildi:
-        ipucunun ILK SATIRI artik dugmenin adi.
+        A 136 px gain, because the text button sat on Qt's 80 px FLOOR; the
+        icon button's width is set by us (30 px, see IKON_PX). The icons
+        are the same as on the toolbar (resources/icons/caddy-undo.svg and
+        its mirror caddy-redo.svg), so the user sees the same shape for the
+        same function in two places. The loss of the label was made up for:
+        the FIRST LINE of the tooltip is now the button's name.
 
-        EN SON satirin TAMAMI ikona cevrildi ve "Kayıtlar" geri geldi.
-        Kullanicinin sozu: "yeni yerine artı (+), kayıt yerine dolap gibi
-        kütüphane gibi bir sembol; tüm butonların boyu aynı olacak; 5
-        butondan 6 butona çıkacağız, ona göre butonları küçülteceğiz".
-        Olculdu (offscreen, gercek widget'lar, yerlesim kostuktan sonra):
+        FINALLY the WHOLE row became icons and "History" came back. The
+        user's words: "a plus (+) instead of new, a cabinet/library-like
+        symbol instead of logs; all buttons the same height; we'll go from
+        5 buttons to 6, so make the buttons smaller accordingly". Measured
+        (offscreen, real widgets, after layout ran):
 
-            once (Yeni metin + 2 ikon) : ust satir 356 -> panel asgari 368 px
-            simdi (4 ikon dugme)       : ust satir 334 -> panel asgari 346 px
+            before (New text + 2 icons) : top row 356 -> panel minimum 368 px
+            now (4 icon buttons)        : top row 334 -> panel minimum 346 px
 
-        Yani OGE SAYISI ARTTI ama satir DARALDI: metin dugmesi Qt'nin 80
-        px'lik tabanina oturuyordu, ikon dugmesi 28 px. Boy da tek: dort
-        dugme de 22 px, model ve efor kutulari da 22 px — satirin tamami
-        ayni yukseklikte (bkz. _yuksekligi_esitle, olcut artik KUTULAR
-        cunku metin dugmesi kalmadi).
+        So the NUMBER OF ITEMS WENT UP but the row got NARROWER: the text
+        button sat on Qt's 80 px floor, the icon button is 28 px. The height
+        is one too: all four buttons are 22 px, the model and effort boxes
+        are 22 px as well — the whole row the same height (see
+        _yuksekligi_esitle; the reference is now the BOXES because no text
+        button is left).
 
-        "Kayıtlar" neden geri geldi: islevi sag tik menusune tasinmisti ve
-        kullanici onu BULAMADI. Gorunmeyen bir menu ogesi, olmayan bir
-        ozelliktir. Sag tik menusu de kaldirildi (kullanicinin istegi):
-        ayni islevin gizli ikinci kapisiydi.
+        Why "History" came back: its function had been moved to the
+        right-click menu and the user COULD NOT FIND it. An invisible menu
+        item is a feature that does not exist. The right-click menu was
+        removed too (the user's request): it was a hidden second door to
+        the same function.
         """
         c = QtWidgets.QHBoxLayout()
         b = _ikon_dugmesi("caddy-yeni.svg", "New")
@@ -422,18 +438,19 @@ class CaddyPanel(QtWidgets.QWidget):
                      "NOTE: running new code after an undo clears the redo "
                      "history — the panel will tell you.")
         i.clicked.connect(self.ileri_al)
-        # Bos yiginda basilabilir bir dugme yalan soyler. Ileri alinacak
-        # bir sey olustugunda aciliyor (bkz. _ileri_dugmesini_tazele).
+        # A button that can be pressed on an empty stack is lying. It is
+        # enabled once there is something to redo (see
+        # _ileri_dugmesini_tazele).
         i.setEnabled(False)
         self.ileri_dugmesi = i
         c.addWidget(i)
 
-        # "Kayıt" GERI GELDI — ama metin degil IKON olarak. Metin dugmesi
-        # Qt'nin 80 px tabanina oturdugu icin kaldirilmisti (bkz. yukarisi);
-        # ikon dugmesi o tabana bagli degil, dortte biri kadar yer tutuyor.
-        # Kullanicinin sozu: "kayıt yerine dolap gibi kütüphane gibi bir
-        # sembol". Sag tik menusundeki ayni islev duruyor — kullanici onu
-        # BULAMADI, gorunur bir dugme gerekiyordu.
+        # "History" CAME BACK — but as an ICON, not text. The text button had
+        # been removed because it sat on Qt's 80 px floor (see above); the
+        # icon button is not bound to that floor and takes a quarter of the
+        # space. The user's words: "a cabinet/library-like symbol instead of
+        # logs". The same function in the right-click menu stays — the user
+        # COULD NOT FIND it, a visible button was needed.
         k = _ikon_dugmesi("caddy-kayitlar.svg", "History")
         k.setToolTip("History\n"
                      "Lists past chats. Pick one and press Resume to "
@@ -449,25 +466,26 @@ class CaddyPanel(QtWidgets.QWidget):
         c.addWidget(model)
         c.addWidget(efor)
 
-        # DORT DUGME DE AYNI BOYDA. Kullanicinin istegi: "tüm butonların
-        # boyu aynı olacak". Artik ust satirda metin dugmesi kalmadi, o
-        # yuzden olcut KUTULAR: dugmeleri onlara denkleyince satirin tamami
-        # tek boy oluyor (olculdu: kutu 22 px). Genislik de burada
-        # sabitleniyor — 5 dugmeden 6'ya cikildigi icin daraltildi.
+        # ALL FOUR BUTTONS THE SAME HEIGHT. The user's request: "all buttons
+        # the same height". There is no text button left in the top row
+        # now, so the reference is the BOXES: matching the buttons to them
+        # makes the whole row one height (measured: box 22 px). The width is
+        # fixed here too — narrowed because we went from 5 buttons to 6.
         self.ikon_yuksekligi = _yuksekligi_esitle((b, g, i, k), (model, efor))
-        # Sag ustte METIN YOK. Once sayan saat kaldirildi ("2 yerde
-        # düşünüyor yazısı var"), sonra geriye kalan "çalışıyor…" da:
-        # durumu zaten akistaki ilerleme satiri ve Gonder/Iptal
-        # dugmelerinin etkin/pasif hali soyluyor. Ucuncu bir yer gurultu.
+        # NO TEXT in the top right. First the counting clock was removed
+        # ("it says thinking in 2 places"), then the remaining "working…"
+        # too: the progress line in the stream and the enabled/disabled
+        # state of the Send/Cancel buttons already tell the state. A third
+        # place is noise.
         return c
 
     def _model_secici(self) -> QtWidgets.QComboBox:
-        """Hiz/guvenilirlik takasi. Olculmus rakamlar config.MODELLER'de."""
+        """Speed/reliability trade-off. The measured numbers are in config.MODELLER."""
         kutu = QtWidgets.QComboBox()
         simdiki = config.model()
         for i, (deger, kisa, tam, ipucu) in enumerate(config.MODELLER):
-            # Kutuda KISA etiket duruyor (yer sebebi, bkz. _arac_cubugu);
-            # tam etiket ipucunun ilk satirinda.
+            # The box shows the SHORT label (for space, see _arac_cubugu);
+            # the full label is on the first line of the tooltip.
             kutu.addItem(kisa, deger)
             kutu.setItemData(i, tam + "\n" + ipucu, QtCore.Qt.ToolTipRole)
             if deger == simdiki:
@@ -484,18 +502,20 @@ class CaddyPanel(QtWidgets.QWidget):
         self._ayar_uygula("Model", self.model_secici.currentText())
 
     def _efor_secici(self) -> QtWidgets.QComboBox:
-        """DUSUNME MIKTARI — gecikmenin asil kaynagi.
+        """AMOUNT OF THINKING — the real source of latency.
 
-        Olculdu (2026-08-24, iki gercek oturumun 22 turu): cikti hizi sabit
-        (~75 token/sn), baglam gecikmeyi belirlemiyor, ve cikti token'inin
-        %91-94'u DUSUNME. Yani beklenen surenin onda dokuzu burada.
+        Measured (2026-08-24, 22 turns of two real sessions): output speed is
+        constant (~75 tokens/s), context does not determine latency, and
+        91-94% of output tokens are THINKING. So nine tenths of the expected
+        wait is here.
 
-        Ayni istem, 3 tekrar: varsayilan ortanca 116.1 sn, `low` 37.0 sn —
-        3.1 kat, ucunde de calisan kod. Ayrintisi config.EFORLAR'da.
+        The same prompt, 3 repeats: default median 116.1 s, `low` 37.0 s —
+        3.1x, with working code in all three. Details in config.EFORLAR.
 
-        Neden MODELDEN AYRI kutu: iki bagimsiz eksen. "Sonnet ile derin
-        dusun" da "Opus ile hizli bak" da anlamli istekler; tek listede
-        birlestirmek her kombinasyonu ayri satir yapardi.
+        Why a box SEPARATE FROM THE MODEL: two independent axes. "Think deep
+        with Sonnet" and "take a quick look with Opus" are both meaningful
+        requests; merging them into one list would make every combination a
+        separate row.
         """
         kutu = QtWidgets.QComboBox()
         simdiki = config.efor()
@@ -519,13 +539,13 @@ class CaddyPanel(QtWidgets.QWidget):
         self._ayar_uygula("Thinking", self.efor_secici.currentText())
 
     def _ayar_uygula(self, ad: str, deger: str) -> None:
-        """Surec argumanini etkileyen ayar degisti — GERCEKTEN uygula.
+        """A setting that affects the process arguments changed — ACTUALLY apply it.
 
-        `--model` ve `--effort` surec baslarken veriliyor ve surec turlar
-        boyunca ayakta kaliyor. Bu yuzden model kutusu eskiden "sonraki
-        mesajdan itibaren gecerli" diyor ama oturum ortasinda HICBIR SEY
-        yapmiyordu. Artik bostaki surec olduruluyor; sonraki tur --resume
-        ile yeni argumanlarla basliyor, baglam kaybolmuyor.
+        `--model` and `--effort` are given when the process starts, and the
+        process stays up across turns. So the model box used to say
+        "applies from the next message" but did NOTHING mid-session. Now the
+        idle process is killed; the next turn starts with the new arguments
+        via --resume, and no context is lost.
         """
         if self.ctl.transport.ayarlar_degisti():
             not_ = f"{ad}: {deger} — applies from the next message " \
@@ -534,20 +554,21 @@ class CaddyPanel(QtWidgets.QWidget):
             not_ = f"{ad}: {deger} — applies once the current reply finishes " \
                    "(the streaming reply was not interrupted)."
         self.mesaj_ekle("sistem", not_)
-        # GUNLUGE de yaziliyor: baslik oturumun BASLANGIC degerini gosterir,
-        # ortada degistirilirse logu sonradan inceleyen bunu goremezdi.
+        # It is written to the LOG too: the header shows the session's
+        # STARTING value, so a change in the middle would be invisible to
+        # anyone reviewing the log later.
         try:
-            self.ctl.gunluk.sistem("AYAR DEGISTI — " + not_)
+            self.ctl.gunluk.sistem("SETTING CHANGED — " + not_)
         except Exception:                                        # noqa: BLE001
             pass
 
     def _konusma_alani(self) -> QtWidgets.QScrollArea:
         self.kaydirma = QtWidgets.QScrollArea()
         self.kaydirma.setWidgetResizable(True)
-        # YATAY KAYDIRMA KAPALI. Panel dar bir yan sutun; saga dogru
-        # kaydirilan metin okunmuyor, kullanici kaybolyor. Icerideki her sey
-        # (SaranEtiket, kod karti) genislige gore SARMAK zorunda — cubugu
-        # kapatmak o zorunlulugu somutlastiriyor.
+        # HORIZONTAL SCROLLING OFF. The panel is a narrow side column; text
+        # scrolled to the right is unreadable, the user gets lost. Everything
+        # inside (SaranEtiket, code card) HAS TO WRAP to the width — turning
+        # the bar off makes that requirement concrete.
         self.kaydirma.setHorizontalScrollBarPolicy(
             QtCore.Qt.ScrollBarAlwaysOff)
         ic = QtWidgets.QWidget()
@@ -583,18 +604,18 @@ class CaddyPanel(QtWidgets.QWidget):
         try:
             s = locate.surum()
         except Exception:
-            s = "bulunamadi"
-        # KISA. Eskiden burada yedi satır vardı: abonelik, belge koruma,
-        # adım adım çalışma, varsayım bildirme. Hepsi doğruydu ama hiçbiri
-        # ILK ANDA gerekli değildi — kullanıcının o an ihtiyacı olan tek
-        # şey ne yazacağını bilmek. Panel zaten dar; karşılama, sohbetin
-        # ilk ekranının yarısını yiyordu.
+            s = "not found"
+        # SHORT. There used to be seven lines here: subscription, document
+        # protection, step-by-step work, stating assumptions. All true, but
+        # none of it was needed AT THE FIRST MOMENT — the only thing the user
+        # needs then is to know what to type. The panel is narrow already;
+        # the welcome was eating half of the chat's first screen.
         self.mesaj_ekle(
             "sistem",
             f"CADdy ready · {config.model()} · claude {s}\n"
             "Describe what you want — e.g. “make a 10 mm cube”.")
 
-    # -- olaylar -----------------------------------------------------------
+    # -- events ------------------------------------------------------------
 
     def eventFilter(self, nesne, olay):
         if (nesne is self.giris
@@ -613,30 +634,33 @@ class CaddyPanel(QtWidgets.QWidget):
         self.ctl.gonder(metin)
 
     def geri_al(self) -> None:
-        # Mantik ConversationController'da: AI de ayni kapidan geciyor ve
-        # tehlike ikisinde de ayni — yiginin tepesinde kimin isi var.
-        # Eskiden burada kosulsuz `doc.undo()` vardi; dugmenin etiketi "Son
-        # AI degisikligini geri al" oldugu halde kullanicinin kendi elle
-        # yaptigi son islemi de geri aliyordu.
+        # The logic is in ConversationController: the AI goes through the
+        # same door and the danger is the same in both — whose work is on
+        # top of the stack. There used to be an unconditional `doc.undo()`
+        # here; even though the button's label was "Undo last AI change", it
+        # also undid the user's own last manual operation.
         oldu, aciklama = self.ctl.geri_al()
         self.mesaj_ekle("sistem",
                         f"Undone: {aciklama}" if oldu else aciklama)
         self._ileri_dugmesini_tazele()
 
     def _ileri_dugmesini_tazele(self) -> None:
-        """Ileri al dugmesi, ileri alinacak bir sey VARSA acik.
+        """The Redo button is enabled if there IS something to redo.
 
-        Kullanicinin istegi: "geri al'a basmadan once basilmasin". Bos
-        yiginda basilabilir duran bir dugme, olmayan bir yetenek vaat eder.
+        The user's request: "it shouldn't be pressable before Undo is
+        pressed". A button that can be pressed on an empty stack promises an
+        ability that does not exist.
 
-        UC yerden cagriliyor, cunku yigini degistiren bizim uc yolumuz bu:
-        geri alma (doldurur), ileri alma (bosaltir) ve kod calistirma
-        (silebilir — bkz. ConversationController.ileri_al'daki olcum).
+        It is called from THREE places, because these are our three paths
+        that change the stack: undo (fills it), redo (empties it) and running
+        code (can clear it — see the measurement in
+        ConversationController.ileri_al).
 
-        SINIRI: kullanici FreeCAD'in kendi Ctrl+Z'sine basarsa bundan
-        haberimiz olmaz ve dugme kapali kalir. O yol icin FreeCAD'in kendi
-        Ctrl+Y'si zaten calisiyor. Saat ya da DocumentObserver kurmadik:
-        biri gereksiz surekli is, digeri bu projede bir kez sizmisti.
+        ITS LIMIT: if the user presses FreeCAD's own Ctrl+Z we don't hear
+        about it and the button stays disabled. For that path FreeCAD's own
+        Ctrl+Y already works. We did not set up a timer or a
+        DocumentObserver: one is needless constant work, the other leaked
+        once in this project.
         """
         dugme = getattr(self, "ileri_dugmesi", None)
         if dugme is None:
@@ -647,9 +671,9 @@ class CaddyPanel(QtWidgets.QWidget):
             pass
 
     def ileri_al(self) -> None:
-        # Yanlislikla geri alinan is geri getiriliyor. Mantik yine
-        # ConversationController'da; gerekcesi ve olculen yigin davranisi
-        # ConversationController.ileri_al docstring'inde.
+        # Work undone by mistake is brought back. The logic is again in
+        # ConversationController; the reasoning and the measured stack
+        # behaviour are in the ConversationController.ileri_al docstring.
         oldu, aciklama = self.ctl.ileri_al()
         self.mesaj_ekle("sistem",
                         f"Redone: {aciklama}" if oldu else aciklama)
@@ -659,7 +683,7 @@ class CaddyPanel(QtWidgets.QWidget):
         self.bilgi.setText(metin)
         self.bilgi.setToolTip(ipucu)
 
-    # -- canli akis --------------------------------------------------------
+    # -- live stream -------------------------------------------------------
 
     _ASAMA_ADI = {
         "baglaniyor": "connecting",
@@ -676,13 +700,14 @@ class CaddyPanel(QtWidgets.QWidget):
         self._dusunce_tk = tk
         self._ilerlemeyi_yaz()
 
-    # Bekleyis uzadikca verilen ogut. Esikler OLCUMDEN geliyor: basit bir
-    # istek 8-12 sn'de biter, zor bir istek 77-183 sn surer. Yani 30 sn'yi
-    # gecen her sey "buyuk istek" demektir ve kullanicinin bunu bilmesi lazim.
+    # Advice given as the wait gets longer. The thresholds come from
+    # MEASUREMENT: a simple request finishes in 8-12 s, a hard one takes
+    # 77-183 s. So anything past 30 s means "big request" and the user needs
+    # to know that.
     #
-    # Neden zamana bakiyoruz da istegin METNINE bakmiyoruz: "bu istek zor mu"
-    # diye Turkce metinden tahmin yurutmek kirilgan ve yaniltici olur.
-    # Gecen sure ise dogrudan olculen gercek.
+    # Why we look at time and not at the request's TEXT: guessing "is this
+    # request hard" from free text would be fragile and misleading. The
+    # elapsed time is a directly measured fact.
     _OGUT = (
         (150, "This request looks too big for one step. Cancel and ask "
               "for one part of it — e.g. fix the position/size first, add "
@@ -693,25 +718,25 @@ class CaddyPanel(QtWidgets.QWidget):
     )
 
     def _ilerlemeyi_yaz(self) -> None:
-        """Saniye + asama + dusunme tokenini AKISA yazar.
+        """Writes seconds + stage + thinking tokens INTO THE STREAM.
 
-        Eskiden ayni metin hem burada hem sag ustteki durum etiketinde
-        duruyordu: "düşünüyor · 27 sn · ~500 token" iki yerde birden.
-        Kullanicinin sozu: "2 yerde düşünüyor yazısı var, ona gerek yok."
-        Ust etiket artik yalnizca DURUMU soyluyor (hazır / çalışıyor /
-        iptal ediliyor); sayan saat akistaki tek satirda.
+        The same text used to be both here and in the status label at the
+        top right: "thinking · 27 s · ~500 tokens" in two places at once.
+        The user's words: "it says thinking in 2 places, no need for that."
+        The top label now only tells the STATE (ready / working /
+        cancelling); the counting clock is in the single line in the stream.
 
-        Akistaki hali secildi cunku ogut satiri (30/75/150 sn esikleri) da
-        orada ve ikisi birbirini tamamliyor; ust etikette yalnizca sayilar
-        vardi.
+        The stream version was picked because the advice line (30/75/150 s
+        thresholds) is there too and the two complement each other; the top
+        label only had numbers.
         """
         if not self._tiklayici.isActive():
             return
         gecen = int(time.monotonic() - self._t0)
         parca = [self._asama_ad or "working", f"{gecen} s"]
         if self._dusunce_tk:
-            # "düşünce" degil "token": olculen sey token sayisi, kullanici
-            # da oyle adlandirilmasini istedi.
+            # "token", not "thought": what is measured is a token count, and
+            # the user asked for it to be called that too.
             parca.append(f"~{_kisa_sayi(self._dusunce_tk)} token")
         metin = " · ".join(parca)
 
@@ -753,8 +778,8 @@ class CaddyPanel(QtWidgets.QWidget):
         if self._canli is None:
             self._akis_basladi()
         self._canli_metin += parca
-        # Kod bloklarini akarken ham gostermek gurultu; kart zaten gelecek.
-        # Yalnizca bloklardan onceki duz metni canli gosteriyoruz.
+        # Showing code blocks raw while they stream is noise; the card is
+        # coming anyway. We only show the plain text before the blocks live.
         gorunen = self._canli_metin.split("```")[0].rstrip()
         if len(self._canli_metin.split("```")) > 1:
             gorunen += "\n… (writing code)"
@@ -790,14 +815,15 @@ class CaddyPanel(QtWidgets.QWidget):
             subprocess.Popen(["explorer", str(klasor)])
 
     def _kayitlari_ac(self) -> None:
-        """Kutuphane: eski sohbetleri listeler ve secileni SURDURUR.
+        """The library: lists old chats and RESUMES the chosen one.
 
-        Kullanicinin sikayeti: "logdan baslatma yok galiba, sadece logu
-        goruyorum, o baglamda FreeCAD'de baslatamiyorum". Eskiden bu dugme
-        yalnizca klasoru aciyordu — okunacak bir arsiv, donulecek bir is
-        degil. Artik kimlik gunluk basligindan okunuyor ve sonraki tur
-        `claude --resume <oturum>` ile gidiyor: gecmisi biz tasimiyoruz,
-        CLI kendi oturum dosyasindan yukluyor, yani baglam kaybi yok.
+        The user's complaint: "I guess there's no starting from the log, I
+        only see the log, I can't start it in FreeCAD in that context". This
+        button used to only open the folder — an archive to read, not work
+        to go back to. Now the id is read from the log header and the next
+        turn goes out with `claude --resume <session>`: we don't carry the
+        history, the CLI loads it from its own session file, so no context
+        is lost.
         """
         d = QtWidgets.QDialog(self)
         d.setWindowTitle("History — past chats")
@@ -815,8 +841,9 @@ class CaddyPanel(QtWidgets.QWidget):
             oge = QtWidgets.QListWidgetItem(k.etiket())
             oge.setData(QtCore.Qt.UserRole, k)
             if not k.surdurulebilir:
-                # Kimliksiz gunluk okunur ama surdurulemez. Gizlemek yerine
-                # gosterip SEBEBINI yazmak, "dugme neden calismadi"dan iyi.
+                # A log without an id can be read but not resumed. Showing it
+                # and saying WHY is better than hiding it and leaving "why
+                # didn't the button work".
                 oge.setToolTip("This log has no session id — "
                                "it can be read but not resumed.")
                 oge.setForeground(QtGui.QColor("#888888"))
@@ -854,10 +881,10 @@ class CaddyPanel(QtWidgets.QWidget):
         self._sohbeti_surdur(k)
 
     def _sohbeti_surdur(self, kayit) -> None:
-        """Secilen kaydi yukler: ekrani tazeler, sonra denetleyiciye devreder."""
-        # Ekrani TEMIZLEMIYORUZ: "Yeni sohbet" de temizlemiyor ve akisi
-        # silmek, o ana kadar calistirilan kod kartlarini da goturur.
-        # Ayrac olarak sistem satiri yeterli.
+        """Loads the chosen log: refreshes the screen, then hands over to the controller."""
+        # We DO NOT CLEAR the screen: "New chat" does not clear it either,
+        # and wiping the stream would also take away the code cards run so
+        # far. A system line is enough as a separator.
         self.mesaj_ekle("sistem",
                         "Resumed chat: %s\n(%s)"
                         % (kayit.etiket(), kayit.dosya.name))
@@ -870,31 +897,31 @@ class CaddyPanel(QtWidgets.QWidget):
         self.ctl.sohbeti_surdur(kayit.oturum, kayit.dosya)
 
     def _belgeyi_eslestir(self, kayit) -> None:
-        """Sohbet geldi — BELGE de gelsin (PLAN S14).
+        """The chat came back — the DOCUMENT should come too (PLAN S14).
 
-        Kullanicinin sikayeti: "kaldigi yerden basladiginda ve o modelin
-        icinde degilsem bile o modelde basliyor... kaldigi model o degil."
-        Sohbet dogru, belge yanlisti; kod o an acik olan belgede kosuyor ve
-        adlar cakisirsa (Kutu, Govde, Taban) sessizce yanlis modeli
-        degistirir.
+        The user's complaint: "when it resumes where it left off, even if
+        I'm not in that model it starts in that model... the model it left
+        off in isn't that one." The chat was right, the document was wrong;
+        code runs in whatever document is open at that moment and, if names
+        clash (Box, Body, Base), silently changes the wrong model.
 
-        DORT DAL, hepsi karar `kayitlar.belge_durumu`'nda:
-          acik           -> sessizce o sekmeye gec
-          kapali         -> SOR, acma
-          kayip          -> uyar, acma
-          kaydedilmemis  -> uyar + yedek kopyanin yolunu bilgi olarak ver
-          bilinmiyor     -> hicbir sey yazma (eski gunluklerde belge satiri
-                            yok; bilmedigimizi uyari diye yazmak gercek
-                            uyarilari da degersizlestirir)
+        FOUR BRANCHES, all decided in `kayitlar.belge_durumu`:
+          open           -> silently switch to that tab
+          closed         -> ASK, don't open
+          missing        -> warn, don't open
+          unsaved        -> warn + give the backup copy's path as info
+          unknown        -> write nothing (old logs have no document line;
+                            writing what we don't know as a warning would
+                            devalue the real warnings too)
 
-        NEDEN OTOMATIK ACMIYORUZ. Belge acmak kullanicinin ekranini
-        degistiren, geri alinmasi olmayan bir hareket. Yanlis tahmin
-        edersek is bozulmaz ama can sikar; sormanin maliyeti tek tik.
+        WHY WE DON'T OPEN IT AUTOMATICALLY. Opening a document changes the
+        user's screen and cannot be undone. If we guess wrong nothing
+        breaks but it is annoying; asking costs one click.
         """
         try:
             durum = kayitlar.belge_durumu(kayit)
         except Exception as e:                                   # noqa: BLE001
-            log.uyari(f"belge durumu okunamadi: {e}")
+            log.uyari(f"could not read the document status: {e}")
             return
 
         d = durum["durum"]
@@ -911,7 +938,7 @@ class CaddyPanel(QtWidgets.QWidget):
             self.mesaj_ekle("sistem", durum["mesaj"])
             return
 
-        # DURUM_KAPALI — tek soru soran dal.
+        # DURUM_KAPALI — the one branch that asks a question.
         cevap = QtWidgets.QMessageBox.question(
             self, "Chat document",
             durum["mesaj"] + "\n\nOpen the document? "
@@ -937,26 +964,29 @@ class CaddyPanel(QtWidgets.QWidget):
         else:
             self._ilerlemeyi_durdur()
             if durum == "oluyor":
-                # Iptal, kalici sureci de olduruyor — bu bir saniyeden uzun
-                # surebiliyor ve o sirada ekranda hicbir sey degismezse
-                # "tiklamadi mi" sanilir. Akista tek satir.
+                # Cancel kills the persistent process too — that can take
+                # more than a second, and if nothing changes on screen in the
+                # meantime people think "didn't it click". One line in the
+                # stream.
                 self.mesaj_ekle("sistem", "cancelling…")
         self.btn_gonder.setEnabled(not calisiyor)
         self.btn_iptal.setEnabled(calisiyor)
 
     def _calisma_sonucu(self, sonuc) -> None:
-        # Calisan kod ileri yiginini silmis olabilir (olculdu: degisiklik
-        # yapip iptal edilen islem de siliyor). Dugme onu yansitsin.
+        # The code that ran may have cleared the redo stack (measured: an
+        # aborted transaction that made a change clears it too). The button
+        # should reflect that.
         self._ileri_dugmesini_tazele()
         if self._bekleyen is not None:
             self._bekleyen.sonucu_goster(sonuc)
             self._bekleyen = None
-        # Tekrar korumasi durdurduysa gosterilecek tek sey ACIKLAMA. Ne
-        # yedek, ne cikti, ne dogrulama — hicbiri olusmadi, kod kosmadi.
+        # If the repeat guard stopped it, the only thing to show is the
+        # EXPLANATION. No backup, no output, no verification — none of them
+        # happened, the code did not run.
         if getattr(sonuc, "engellendi", False):
             self.mesaj_ekle("sistem", sonuc.hata_izi)
             return
-        # Belge basina bir kez dolu gelir: ilk AI degisikliginden onceki kopya.
+        # Filled once per document: the copy from before the first AI change.
         if getattr(sonuc, "yedek", ""):
             self.mesaj_ekle("sistem",
                             "Backup saved before the first change:\n"
@@ -965,15 +995,15 @@ class CaddyPanel(QtWidgets.QWidget):
             self.mesaj_ekle("sistem", sonuc.cikti)
         for u in sonuc.uyarilar:
             self.mesaj_ekle("sistem", "warning: " + u)
-        # FreeCAD'in kendi konsolu (Report view'daki turuncu/kirmizi).
+        # FreeCAD's own console (orange/red in the Report view).
         for u in sonuc.konsol_hata:
             self.mesaj_ekle("sistem", "FreeCAD ERROR: " + u)
         for u in sonuc.konsol_uyari:
             self.mesaj_ekle("sistem", "FreeCAD warning: " + u)
-        # Deterministik geometri kontrolu. Panelde YALNIZCA bulgular
-        # gosteriliyor; kosan kontrollerin tam listesi modele gidiyor ama
-        # kullaniciyi ilgilendiren sey neyin bozuk oldugu. Bulgu yoksa
-        # hicbir sey yazilmiyor — her calistirmada "temiz" yazmak gurultu.
+        # Deterministic geometry check. The panel shows ONLY the findings;
+        # the full list of checks that ran goes to the model, but what
+        # matters to the user is what is broken. With no findings nothing is
+        # written — writing "clean" on every run is noise.
         d = getattr(sonuc, "dogrulama", None)
         if d is not None:
             for b in d.bulgular:
@@ -981,7 +1011,7 @@ class CaddyPanel(QtWidgets.QWidget):
         if not sonuc.basarili:
             self.mesaj_ekle("sistem", sonuc.hata_izi.strip().splitlines()[-1])
 
-    # -- akisa ekleme ------------------------------------------------------
+    # -- adding to the stream ----------------------------------------------
 
     def _ekle(self, w: QtWidgets.QWidget) -> None:
         self.akis.insertWidget(self.akis.count() - 1, w)
@@ -1005,8 +1035,8 @@ class CaddyPanel(QtWidgets.QWidget):
         self._ekle(k)
 
     def _kart_calistir(self, blok) -> None:
-        # Hangi kartin sonucu bekledigini tut — sinyal geri geldiginde
-        # dogru karta yazilsin.
+        # Remember which card is waiting for the result — so it is written
+        # to the right card when the signal comes back.
         for k in self._kartlar:
             if k.blok is blok:
                 self._bekleyen = k
@@ -1016,18 +1046,18 @@ class CaddyPanel(QtWidgets.QWidget):
 
 # --------------------------------------------------------------------------
 
-# Yerlesim birkac piksel sapabilir (kenarlik, ayirici). Bunun altindaki
-# fark "hedefe ulasildi" sayilir; ustu gercek bir basarisizliktir.
+# The layout can be off by a few pixels (border, splitter). A difference
+# below this counts as "target reached"; above it is a real failure.
 TOLERANS = 8
 
 
 def _engelleyen_komsular(mw, dock, hedef: int) -> list:
-    """Sutunu hedeften genis tutan komsu dock'lari bulur.
+    """Finds the neighbouring docks that keep the column wider than the target.
 
-    Ayni dock alanindaki, gorunur, yuzmeyen ve bizden farkli dock'lardan
-    asgari genisligi hedeften BUYUK olanlar. `(dock, asgari, acik_asgari)`
-    uclusu dondurur; `acik_asgari` ic widget'a ELLE konmus minimumWidth
-    (0 ise asgari icerikten geliyor demektir).
+    Docks in the same dock area, visible, not floating and not us, whose
+    minimum width is LARGER than the target. Returns `(dock, minimum,
+    explicit_minimum)` triples; `explicit_minimum` is the minimumWidth set BY
+    HAND on the inner widget (0 means the minimum comes from the content).
     """
     engel = []
     try:
@@ -1051,18 +1081,19 @@ def _engelleyen_komsular(mw, dock, hedef: int) -> list:
 
 
 def _asgari_dokumu(kok, adet: int = 10) -> list:
-    """Panelin asgari genisligini KIM belirliyor — satir satir.
+    """WHO sets the panel's minimum width — line by line.
 
-    NEDEN VAR (2026-08-28). Bu soruyu iki kez offscreen olctum ve iki kez
-    yanildim: `QT_QPA_PLATFORM=offscreen` altinda panelin asgarisi 346 px
-    cikiyordu, kullanicinin gercek FreeCAD'inde ayni panel **651 px**.
-    Fark yazi tipinden geliyor — offscreen'deki yedek font, FreeCAD'in
-    gercek arayuz fontundan cok daha dar. Yani bu olcum SIMULE EDILEMEZ,
-    yalnizca calisan FreeCAD'de alinabilir.
+    WHY IT EXISTS (2026-08-28). I measured this question offscreen twice and
+    was wrong twice: under `QT_QPA_PLATFORM=offscreen` the panel's minimum
+    came out as 346 px, in the user's real FreeCAD the same panel is
+    **651 px**. The difference comes from the font — the fallback font
+    offscreen is much narrower than FreeCAD's real UI font. So this
+    measurement CANNOT BE SIMULATED, it can only be taken in a running
+    FreeCAD.
 
-    Bu yuzden panel kendi dokumunu Rapor penceresine yaziyor: hedefe
-    ulasilamadiginda hangi widget'in ne kadar taban koydugu orada gorunur.
-    Tahmin etmek yerine bakiyoruz.
+    That is why the panel writes its own breakdown to the Report view: when
+    the target cannot be reached, it shows there which widget sets how much
+    of a floor. We look instead of guessing.
     """
     bulunan = []
 
@@ -1098,11 +1129,12 @@ def _asgari_dokumu(kok, adet: int = 10) -> list:
 
 
 def _kenardaki_docklar(mw, dock) -> list:
-    """Panelle AYNI kenardaki tum dock'lar — teshis dokumu icin.
+    """All docks on the SAME edge as the panel — for the diagnostic dump.
 
-    `(ad, genislik, asgari, elle_asgari)` dortlusu dondurur. Filtre YOK:
-    hedefi asmayan komsu da yazilir, cunku "hicbiri asmiyor ama panel yine
-    genis" bilgisi de bir teshistir — sebebin komsu OLMADIGINI soyler.
+    Returns `(name, width, minimum, hand_set_minimum)` quadruples. NO
+    filter: a neighbour that does not exceed the target is written too,
+    because "none of them exceeds it but the panel is still wide" is also a
+    diagnosis — it says the cause is NOT a neighbour.
     """
     liste = []
     try:
@@ -1116,7 +1148,7 @@ def _kenardaki_docklar(mw, dock) -> list:
             if mw.dockWidgetArea(d) != alan:
                 continue
             ic = d.widget()
-            liste.append((d.objectName() or d.windowTitle() or "(adsiz)",
+            liste.append((d.objectName() or d.windowTitle() or "(unnamed)",
                           d.width(), d.minimumSizeHint().width(),
                           ic.minimumWidth() if ic else 0))
         except Exception:                                        # noqa: BLE001
@@ -1125,20 +1157,21 @@ def _kenardaki_docklar(mw, dock) -> list:
 
 
 def _komsulari_gevset(mw, dock, hedef: int) -> list:
-    """Engelleyen komsularin ELLE konmus asgari genisligini kaldirir.
+    """Removes the hand-set minimum width of the blocking neighbours.
 
-    Yalnizca `minimumWidth` acikca konmussa dokunuyoruz: 0 yapinca widget
-    kendi icerik asgarisine (minimumSizeHint) duser. Icerikten gelen
-    asgariye dokunmuyoruz — olculdu, oradaki tek numara komsuya kalici
-    `maximumWidth` koymak olurdu ve o, kullanicinin o paneli bir daha
-    genisletmesini engellerdi; bizim panelimiz icin FreeCAD'in kendi
-    panelini kafese koymayiz. O halde durust davranip UYARI yaziyoruz.
+    We only touch it if `minimumWidth` was set explicitly: setting it to 0
+    drops the widget to its own content minimum (minimumSizeHint). We don't
+    touch a minimum that comes from content — measured, the only trick
+    there would be putting a permanent `maximumWidth` on the neighbour, and
+    that would stop the user from ever widening that panel again; we don't
+    cage FreeCAD's own panel for the sake of ours. So we behave honestly
+    and write a WARNING.
 
-    Gevsetmeyi geri ALMIYORUZ — olculdu: geri konunca sutun aninda eski
-    genisligine sicriyor. Kalici etkisi yalnizca o panelin daha dar
-    cekilebilmesi.
+    We DO NOT UNDO the loosening — measured: once it is put back the column
+    instantly jumps back to its old width. Its only lasting effect is that
+    that panel can be dragged narrower.
 
-    Gevsettiklerinin adlarini dondurur (gunluge yazilsin diye).
+    Returns the names of what it loosened (so they get logged).
     """
     gevsetilen = []
     for d, _asgari, acik in _engelleyen_komsular(mw, dock, hedef):
@@ -1154,41 +1187,42 @@ def _komsulari_gevset(mw, dock, hedef: int) -> list:
 
 
 def genisligi_ayarla(mw, dock) -> None:
-    """Paneli ana pencerenin `PanelYuzde` kadarina getirir.
+    """Sizes the panel to `PanelYuzde` percent of the main window.
 
-    Neden gerekli: Qt bir dock'a sizeHint kadar yer verir ve panelin
-    sizeHint'i icerigine gore SISER. Olculdu — ust satirdaki uzun dugme
-    etiketleri panelin asgari genisligini 888 px'e cikariyordu; panel
-    400 px'e zorlandiginda bile 888'de kaliyordu. Once o taban dusuruldu
-    (bkz. CaddyPanel._arac_cubugu), bu cagri onun uzerine oturuyor.
+    Why it is needed: Qt gives a dock as much room as its sizeHint, and the
+    panel's sizeHint GROWS with its content. Measured — the long button
+    labels in the top row pushed the panel's minimum width to 888 px; even
+    when the panel was forced to 400 px it stayed at 888. First that floor
+    was lowered (see CaddyPanel._arac_cubugu), this call sits on top of it.
 
-    Yalnizca panel ILK OLUSTURULURKEN cagriliyor: sonradan kullanici
-    kenarini surukleyip kendi genisligini secebilsin diye. Dock her FreeCAD
-    oturumunda bizim kodumuzla yeniden kuruldugu icin varsayilan her acilista
-    yeniden gecerli olur.
+    It is only called when the panel is FIRST CREATED: afterwards the user
+    can drag the edge and choose their own width. Since the dock is rebuilt
+    by our code in every FreeCAD session, the default applies again on
+    every start.
 
-    KOMSU DOCK'LAR: Qt'de sag alandaki dock'lar TEK BIR SUTUNU paylasir.
-    Sutunun genisligi, icindeki dock'larin en buyuk asgarisi kadar dar
-    olabilir — yani bizim asgarimiz 346 px olsa bile, yanimizdaki Model
-    agaci 650 px asgari istiyorsa bizim dock da 650 px kalir. Olculdu
-    (offscreen, gercek widget'lar; scratchpad/panel_genislik2.py):
+    NEIGHBOURING DOCKS: in Qt the docks in the right area share A SINGLE
+    COLUMN. The column can only be as narrow as the largest minimum of the
+    docks in it — so even if our minimum is 346 px, if the Model tree next
+    to us wants a 650 px minimum, our dock stays at 650 px too. Measured
+    (offscreen, real widgets; scratchpad/panel_genislik2.py):
 
-        kardes asgari 100 px -> hedef 514, gercek 514   ✔
-        kardes asgari 300 px -> hedef 514, gercek 514   ✔
-        kardes asgari 650 px -> hedef 514, gercek 650   ✘
+        sibling minimum 100 px -> target 514, actual 514   ✔
+        sibling minimum 300 px -> target 514, actual 514   ✔
+        sibling minimum 650 px -> target 514, actual 650   ✘
 
-    Kullanicinin bildirdigi hal tam bu: "651 px, 514 olmasi gerekirken".
-    Eski kod bunu SESSIZCE gecirdi, cunku yalnizca KENDI asgarimizi
-    kontrol ediyordu (346 < 514, sorun yok sanildi).
+    The case the user reported is exactly this: "651 px, when it should be
+    514". The old code let it pass SILENTLY, because it only checked OUR
+    OWN minimum (346 < 514, assumed no problem).
 
-    Cozum: hedefe ulasilamadiysa, engelleyen komsunun ic widget'inin
-    asgari genisligini gevsetip bir kez daha deniyoruz. Gevsetmeyi GERI
-    ALMIYORUZ — olculdu: geri konunca sutun aninda 650 px'e sicriyor.
-    Yani gevsetme kalici; yaptigi tek sey kullanicinin (ve bizim) o
-    paneli daha dar cekebilmesi. Ne yaptigimizi gunluge yaziyoruz.
+    Fix: if the target could not be reached, we loosen the minimum width of
+    the blocking neighbour's inner widget and try once more. We DO NOT UNDO
+    the loosening — measured: once it is put back the column instantly
+    jumps to 650 px. So the loosening is permanent; all it does is let the
+    user (and us) drag that panel narrower. We log what we did.
 
-    Sonuc GUNLUGE yaziliyor. Hedefe hala ulasilamadiysa bu artik UYARI —
-    "ayarladim" deyip gecmek, ayarlamadigini gizlerdi.
+    The result is written to the LOG. If the target still could not be
+    reached, that is now a WARNING — saying "I set it" and moving on would
+    hide that it was not set.
     """
     try:
         yuzde = config.panel_yuzde()
@@ -1206,17 +1240,17 @@ def genisligi_ayarla(mw, dock) -> None:
                     mw.resizeDocks([dock], [hedef], QtCore.Qt.Horizontal)
                     QtCore.QTimer.singleShot(0, lambda: _son_rapor(gevsetilen))
                     return
-                # KOMSU ENGELLEMIYOR ama panel yine genis. Geriye tek
-                # aciklama kaliyor: yerlesim BIZDEN SONRA oturdu ve son
-                # sozu o soyledi. FreeCAD kapanirken dock duzenini
-                # kaydediyor; panel eklendiginde Qt o kayitli genisligi
-                # geri yukluyor ve tek seferlik `resizeDocks` cagrimizin
-                # ustune yaziyor. Bu yuzden bir kez DAHA deniyoruz.
+                # NO NEIGHBOUR IS BLOCKING but the panel is still wide. Only
+                # one explanation is left: the layout settled AFTER US and
+                # had the last word. FreeCAD saves the dock layout when it
+                # closes; when the panel is added, Qt restores that saved
+                # width and overwrites our one-off `resizeDocks` call. So we
+                # try ONCE MORE.
                 #
-                # Neden iki deneme: birincisi yerlesimin ilk turundan,
-                # ikincisi geri yuklemeden sonra dusuyor. Ucuncusu bugune
-                # kadar hicbir olcumde gerekmedi; sinirsiz denemek de
-                # kullanici paneli elle genisletirse onunla kavga ederdi.
+                # Why two attempts: the first lands after the layout's first
+                # pass, the second after the restore. A third has not been
+                # needed in any measurement so far; unlimited attempts would
+                # also fight the user if they widened the panel by hand.
                 if _rapor.kalan > 0:
                     _rapor.kalan -= 1
                     mw.resizeDocks([dock], [hedef], QtCore.Qt.Horizontal)
@@ -1229,51 +1263,52 @@ def genisligi_ayarla(mw, dock) -> None:
         def _son_rapor(gevsetilen):
             g = dock.width()
             pay = (100.0 * g / mw.width()) if mw.width() else 0.0
-            # SESSIZ. Bu satir her aciliste Rapor penceresinde piksel dolu
-            # bir bildirim olarak cikiyordu ve kullanici "en basta gelen
-            # piksel uyarisi gelmesin" dedi. Olcum kaybolmadi: ayikla
-            # acikken yine yaziliyor, ve ASIL onemli olan hal (hedefe
-            # ulasilamadi) asagida hala UYARI olarak duruyor. Isler
-            # yolundayken konusmak, bozuldugunda konusmayi degersizlestirir.
-            log.ayik(f"panel genisligi: hedef {hedef}px (%{yuzde}), "
-                     f"asgari {asgari}px, gercek {g}px (%{pay:.0f})")
+            # SILENT. This line used to show up in the Report view on every
+            # start as a notice full of pixels, and the user said "I don't
+            # want the pixel warning at the very start". The measurement was
+            # not lost: it is still written when debug is on, and the case
+            # that REALLY matters (target not reached) is still a WARNING
+            # below. Talking while things are fine devalues talking when
+            # they break.
+            log.ayik(f"panel width: target {hedef}px ({yuzde}%), "
+                     f"minimum {asgari}px, actual {g}px ({pay:.0f}%)")
             if gevsetilen:
-                log.ayik("panel icin asgarisi gevsetilen komsu dock'lar: "
-                         + ", ".join(gevsetilen))
+                log.ayik("neighbouring docks whose minimum was loosened for "
+                         "the panel: " + ", ".join(gevsetilen))
             if g > hedef + TOLERANS:
-                # BASARISIZLIKTA TAM DOKUM. Once yalnizca "engelleyen"
-                # komsular yazilirdi; hicbiri hedefi asmayinca satir
-                # "bilinmiyor" diyordu ve elimizde tesghis kalmiyordu.
-                # Artik ayni kenardaki HER dock yaziliyor — genisligi ve
-                # asgarisiyle. Sebep hangisiyse orada gorunur.
-                log.uyari(f"panel hedefe ulasamadi: hedef {hedef}px, "
-                          f"gercek {g}px, kendi asgarimiz {asgari}px, "
-                          f"ana pencere {mw.width()}px, "
-                          f"{2 - _rapor.kalan} ek deneme yapildi")
+                # FULL DUMP ON FAILURE. Only the "blocking" neighbours used
+                # to be written; when none exceeded the target, the line said
+                # "unknown" and we were left with no diagnosis. Now EVERY
+                # dock on the same edge is written — with its width and
+                # minimum. Whichever is the cause shows up there.
+                log.uyari(f"panel did not reach its target: target {hedef}px, "
+                          f"actual {g}px, our own minimum {asgari}px, "
+                          f"main window {mw.width()}px, "
+                          f"{2 - _rapor.kalan} extra attempts made")
                 for d, gen, asg, elle in _kenardaki_docklar(mw, dock):
-                    log.uyari(f"  ayni kenarda: {d} — genislik {gen}px, "
-                              f"asgari {asg}px"
-                              + (f" (elle {elle}px)" if elle > 0 else ""))
-                # ASIL SORU: taban KENDIMIZDEYSE hangi widget koyuyor.
-                # Bu, yalnizca gercek FreeCAD'de dogru cikan bir olcum
-                # (bkz. _asgari_dokumu).
+                    log.uyari(f"  on the same edge: {d} — width {gen}px, "
+                              f"minimum {asg}px"
+                              + (f" (by hand {elle}px)" if elle > 0 else ""))
+                # THE REAL QUESTION: if the floor is OUR OWN, which widget
+                # sets it. This is a measurement that is only correct in a
+                # real FreeCAD (see _asgari_dokumu).
                 if asgari > hedef:
-                    log.uyari("  panelin kendi tabani — en genis ogeler:")
+                    log.uyari("  the panel's own floor — widest items:")
                     for etkin, asg, elle, yol, etiket in _asgari_dokumu(
                             dock.widget()):
-                        log.uyari("    %4dpx (hint %d, elle %d) %s%s"
+                        log.uyari("    %4dpx (hint %d, by hand %d) %s%s"
                                   % (etkin, asg, elle, yol,
-                                     f"  metin={etiket!r}" if etiket else ""))
+                                     f"  text={etiket!r}" if etiket else ""))
 
-        # Yerlesim resizeDocks'tan hemen sonra oturmuyor; gercek genisligi
-        # olay dongusu bir tur donunce okuyoruz.
+        # The layout does not settle right after resizeDocks; we read the
+        # real width once the event loop has gone round once.
         QtCore.QTimer.singleShot(0, _rapor)
     except Exception as e:
-        log.uyari(f"panel genisligi ayarlanamadi: {e}")
+        log.uyari(f"could not set the panel width: {e}")
 
 
 def paneli_goster():
-    """Dock'u olusturur ya da varsa one getirir."""
+    """Creates the dock, or brings it to the front if it exists."""
     import FreeCADGui as Gui
 
     mw = Gui.getMainWindow()
@@ -1285,11 +1320,11 @@ def paneli_goster():
         dock.setWindowTitle("CADdy")
         dock.setWidget(CaddyPanel(dock))
         mw.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
-        log.bilgi("panel olusturuldu")
+        log.bilgi("panel created")
     dock.show()
     dock.raise_()
     if yeni:
-        # show()'dan SONRA: gosterilmemis bir dock'ta resizeDocks'un etkisi
-        # yerlesime islemiyor.
+        # AFTER show(): on a dock that has not been shown, resizeDocks has no
+        # effect on the layout.
         genisligi_ayarla(mw, dock)
     return dock

@@ -114,7 +114,7 @@ kontrol("mesh KAPANDI", doc.getObject("Delikli").Mesh.isSolid(),
 # calistirma surecteki tek seferlik import bedelini de odiyor: olculdu,
 # ayni test arka arkaya 16.5 sn ve 1.56 sn verdi. Duvar saatine bakan esik
 # bu yuzden kirilgandi ve olcmek istedigimiz seyi olcmuyordu.
-_m = re.search(r"onarildi \(([\d.]+) sn\)", s.cikti)
+_m = re.search(r"repaired \(([\d.]+) s\)", s.cikti)
 kontrol("onarim suresi ciktida yaziyor", _m is not None, s.cikti)
 if _m:
     kontrol("onarim makul surede (< 1 sn)", float(_m.group(1)) < 1.0,
@@ -128,7 +128,7 @@ t.Mesh = Mesh.createBox(20, 20, 10)
 doc.recompute()
 onceki_facet = t.Mesh.CountFacets
 s = kos("mesh_onar(doc.getObject('Temiz'))", "temiz mesh")
-kontrol("temiz mesh'te 'zaten temiz' dedi", "zaten temiz" in s.cikti, s.cikti)
+kontrol("temiz mesh'te 'zaten temiz' dedi", "already clean" in s.cikti, s.cikti)
 kontrol("temiz mesh'e DOKUNMADI",
         doc.getObject("Temiz").Mesh.CountFacets == onceki_facet,
         doc.getObject("Temiz").Mesh.CountFacets)
@@ -139,7 +139,7 @@ s = kos("mesh_onar(doc.getObject('Temiz'))\n"
         "k.Shape = _P.makeBox(5,5,5)\n"
         "mesh_onar(k)", "kati uzerinde")
 kontrol("kati nesnede mesh_onar reddediyor",
-        "mesh nesnesi degil" in s.cikti, s.cikti)
+        "not a mesh object" in s.cikti, s.cikti)
 
 
 # ===================================================== 2. MESH -> KATI
@@ -153,8 +153,8 @@ doc.recompute()
 
 s = kos("kati_yap(doc.getObject('Acik'))", "acik mesh")
 _yaz("       " + s.cikti.strip())
-kontrol("ACIK mesh'i REDDEDIYOR", "KAPALI DEGIL" in s.cikti, s.cikti)
-kontrol("ne yapmasi gerektigini soyluyor", "mesh_onar" in s.cikti, s.cikti)
+kontrol("ACIK mesh'i REDDEDIYOR", "NOT CLOSED" in s.cikti, s.cikti)
+kontrol("ne yapmasi gerektigini soyluyor", "repair_mesh" in s.cikti, s.cikti)
 kontrol("nesne EKLEMEDI", doc.getObject("Acik_kati") is None)
 
 s = kos("k = kati_yap(doc.getObject('Delikli'))\nprint('ad:', k.Name)",
@@ -162,10 +162,10 @@ s = kos("k = kati_yap(doc.getObject('Delikli'))\nprint('ad:', k.Name)",
 _yaz("       " + s.cikti.strip().replace("\n", "\n       "))
 kontrol("kapali mesh katiya cevrildi", s.basarili, s.hata_izi)
 kontrol("kati nesne olustu", doc.getObject("Delikli_kati") is not None)
-kontrol("yuz sayisi yazildi", "yuz" in s.cikti, s.cikti)
-kontrol("hacim sapmasi raporlandi", "sapmasi" in s.cikti, s.cikti)
+kontrol("yuz sayisi yazildi", "faces" in s.cikti, s.cikti)
+kontrol("hacim sapmasi raporlandi", "volume deviation" in s.cikti, s.cikti)
 kontrol("PARAMETRIK OLMADIGINI soyluyor",
-        "PARAMETRIK bir kati degil" in s.cikti, s.cikti)
+        "NOT a PARAMETRIC solid" in s.cikti, s.cikti)
 kontrol("orijinal mesh gizlendi",
         doc.getObject("Delikli").Visibility is False)
 
@@ -179,7 +179,7 @@ kontrol("buyuk mesh gercekten buyuk", buyuk.Mesh.CountFacets > 4000,
         buyuk.Mesh.CountFacets)
 s = kos("kati_yap(doc.getObject('Buyuk'), azami_facet=1500)", "buyuk mesh")
 _yaz("       " + s.cikti.strip().replace("\n", "\n       "))
-kontrol("facet dususu bildirildi", "decimate uygulandi" in s.cikti, s.cikti)
+kontrol("facet dususu bildirildi", "decimate applied" in s.cikti, s.cikti)
 kontrol("buyuk mesh'te de kati uretildi",
         doc.getObject("Buyuk_kati") is not None)
 
@@ -206,11 +206,11 @@ if kabuk is not None:
 
 s = kos("icini_bosalt(doc.getObject('Silindir'), 500)", "asiri kalinlik")
 kontrol("asiri kalinlikta sessiz kalmiyor",
-        "olmadi" in s.cikti or "UYARI" in s.cikti or "kabuk" in s.cikti,
+        "failed" in s.cikti or "WARNING" in s.cikti or "shell" in s.cikti,
         s.cikti)
 
 s = kos("icini_bosalt(doc.getObject('Temiz'))", "mesh uzerinde")
-kontrol("mesh nesnesinde reddediyor", "kati nesne gerek" in s.cikti, s.cikti)
+kontrol("mesh nesnesinde reddediyor", "needs a solid object" in s.cikti, s.cikti)
 
 
 # ===================================================== 4. OLCU TABLOSU
@@ -220,7 +220,7 @@ s = kos("olcu_tablosu(cap=55.5, yukseklik=95, duvar=2)", "tablo")
 _yaz("       " + s.cikti.strip().replace("\n", "\n       "))
 kontrol("tablo olustu", doc.getObject("Olculer") is not None)
 kontrol("degerler yazildi", "cap=55.5" in s.cikti, s.cikti)
-kontrol("nasil kullanilacagi soylendi", "bagla(" in s.cikti, s.cikti)
+kontrol("nasil kullanilacagi soylendi", "bind(" in s.cikti, s.cikti)
 
 s = kos("sil2 = doc.addObject('Part::Cylinder','Bagli')\n"
         "bagla(sil2, 'Radius', 'Olculer.cap / 2')", "bagla")
@@ -238,7 +238,7 @@ kontrol("hucre degisince model guncellendi", "20" in s.cikti, s.cikti)
 
 s = kos("bagla(doc.getObject('Bagli'), 'Radius', 'Olculer.olmayan_ad * 2')",
         "bozuk ifade")
-kontrol("bozuk ifadede COZULMEDI diyor", "COZULMEDI" in s.cikti, s.cikti)
+kontrol("bozuk ifadede COZULMEDI diyor", "DID NOT RESOLVE" in s.cikti, s.cikti)
 kontrol("hangi alias'in olmadigini soyluyor", "olmayan_ad" in s.cikti, s.cikti)
 kontrol("eski deger korundu", abs(float(bagli.Radius) - 20.0) < 0.01,
         bagli.Radius)
@@ -251,7 +251,7 @@ s = kos("y = yazi('CADdy', boyut=10, kalinlik=2)", "yazi")
 _yaz("       " + s.cikti.strip().replace("\n", "\n       "))
 kontrol("yazi uretildi", s.basarili and "CADdy" in s.cikti, s.cikti)
 kontrol("olculeri yazildi", "mm" in s.cikti, s.cikti)
-kontrol("nereye kondugu soylendi", "XY duzleminde" in s.cikti, s.cikti)
+kontrol("nereye kondugu soylendi", "XY plane" in s.cikti, s.cikti)
 
 s = kos("yazi('X', font=r'C:\\yok\\boyle\\bir\\font.ttf')", "font yolu yanlis")
 kontrol("yanlis font yolunda calisir kaliyor (sistemden buluyor)",
@@ -270,10 +270,10 @@ if vd is not None:
     kontrol("gecerli", vd.Shape.isValid())
     kontrol("hacim silindirden BUYUK (dis disari cikiyor)",
             vd.Shape.Volume > 3.14159 * 16 * 20, vd.Shape.Volume)
-    kontrol("tur sayisi yazildi", "tur" in s.cikti, s.cikti)
+    kontrol("tur sayisi yazildi", "turns" in s.cikti, s.cikti)
 
 s = kos("vida_disi(-1, 1, 10)", "gecersiz olcu")
-kontrol("gecersiz olcuyu reddediyor", "pozitif olmali" in s.cikti, s.cikti)
+kontrol("gecersiz olcuyu reddediyor", "must be positive" in s.cikti, s.cikti)
 
 
 # ===================================================== 7. AGIRLIK
@@ -289,11 +289,11 @@ kontrol("PLA 50mm kup = ~155 g", "155" in s.cikti, s.cikti)
 kontrol("filament uzunlugu da verildi", "m filament" in s.cikti, s.cikti)
 
 s = kos("agirlik(doc.getObject('Kup'), 'PETG', doluluk=0.2)", "doluluk")
-kontrol("doluluk hesaba katildi", "doluluk" in s.cikti, s.cikti)
-kontrol("alt sinir oldugunu soyluyor", "alt sinir" in s.cikti, s.cikti)
+kontrol("doluluk hesaba katildi", "infill" in s.cikti, s.cikti)
+kontrol("alt sinir oldugunu soyluyor", "lower bound" in s.cikti, s.cikti)
 
 s = kos("agirlik(doc.getObject('Kup'), 'ADAMANTIUM')", "bilinmeyen malzeme")
-kontrol("bilinmeyen malzemede liste veriyor", "Bilinenler" in s.cikti, s.cikti)
+kontrol("bilinmeyen malzemede liste veriyor", "Known:" in s.cikti, s.cikti)
 
 
 # ===================================================== 8. BASKIYA BOLME
@@ -308,8 +308,8 @@ _yaz("       " + s.cikti.strip().replace("\n", "\n       "))
 kontrol("iki parca olustu",
         doc.getObject("Uzun_p1") is not None
         and doc.getObject("Uzun_p2") is not None, s.cikti)
-kontrol("parca olculeri yazildi", "hacim=" in s.cikti, s.cikti)
-kontrol("gecme uyarisi verildi", "gecme" in s.cikti, s.cikti)
+kontrol("parca olculeri yazildi", "volume=" in s.cikti, s.cikti)
+kontrol("gecme uyarisi verildi", "joint" in s.cikti, s.cikti)
 if doc.getObject("Uzun_p1") is not None:
     kontrol("parcalarin toplami butune esit",
             abs(doc.getObject("Uzun_p1").Shape.Volume
@@ -317,7 +317,7 @@ if doc.getObject("Uzun_p1") is not None:
             doc.getObject("Uzun_p1").Shape.Volume)
 
 s = kos("baskiya_bol(doc.getObject('Uzun'), z=9999)", "govde disi")
-kontrol("govde disinda z reddediliyor", "disinda" in s.cikti, s.cikti)
+kontrol("govde disinda z reddediliyor", "outside" in s.cikti, s.cikti)
 
 
 # ===================================================== 9. DIZILER
@@ -337,7 +337,7 @@ _yaz("       " + s.cikti.strip().replace("\n", "\n       "))
 kontrol("dogrusal dizi kuruldu", s.basarili and "x3" in s.cikti, s.cikti)
 
 s = kos("dizi_polar(doc.getObject('Kup'), 1)", "adet 1")
-kontrol("adet<2 reddediliyor", "en az 2" in s.cikti, s.cikti)
+kontrol("adet<2 reddediliyor", "at least 2" in s.cikti, s.cikti)
 
 
 # ===================================================== 10. TABANA OTURTMA
@@ -351,7 +351,7 @@ doc.recompute()
 
 s = kos("tabana_otur(doc.getObject('YatikKutu'))", "yatik kutu")
 _yaz("       " + s.cikti.strip())
-kontrol("dondurulup oturtuldu", s.basarili and "tablaya oturtuldu" in s.cikti,
+kontrol("dondurulup oturtuldu", s.basarili and "placed on the bed" in s.cikti,
         s.cikti)
 kontrol("z tabandan basliyor",
         abs(doc.getObject("YatikKutu").Shape.BoundBox.ZMin) < 0.01,
@@ -362,7 +362,7 @@ kure.Shape = Part.makeSphere(20)
 doc.recompute()
 s = kos("tabana_otur(doc.getObject('Kure'))", "duz yuzu yok")
 kontrol("duz yuzu olmayan parcada UYDURMUYOR",
-        "duz bir yuz bulunamadi" in s.cikti or "duz yeri yok" in s.cikti,
+        "no flat face found" in s.cikti or "no flat" in s.cikti,
         s.cikti)
 
 
@@ -378,14 +378,14 @@ s = kos("a = doc.addObject('Part::Feature','GovdeA')\n"
 _yaz("       " + s.cikti.strip().replace("\n", "\n       "))
 kontrol("birlesik nesne olustu", doc.getObject("GovdeA_birlesik") is not None,
         s.cikti)
-kontrol("tek kati oldugu dogrulandi", "1 kati" in s.cikti, s.cikti)
+kontrol("tek kati oldugu dogrulandi", "1 solid(s)" in s.cikti, s.cikti)
 
 s = kos("c = doc.addObject('Part::Feature','UzakC')\n"
         "c.Shape = Part.makeBox(5,5,5, App.Vector(500,500,0))\n"
         "doc.recompute()\n"
         "birlestir(doc.getObject('GovdeA'), c)", "degmeyen parcalar")
 kontrol("degmeyen parcalarda UYARI veriyor",
-        "DEGMIYOR" in s.cikti, s.cikti)
+        "NOT BE TOUCHING" in s.cikti, s.cikti)
 
 
 bolum("birlestir — MESH yolu (gunlukteki 16 dakikalik cikmazin testi)")
@@ -422,7 +422,7 @@ if birlesik is not None:
             + doc.getObject("MeshKulp").Mesh.Volume)
     kontrol("hacim ayri toplamdan KUCUK (gercekten kaynasti)",
             m.Volume < ayri, "%.1f >= %.1f" % (m.Volume, ayri))
-    kontrol("sure ciktida yaziyor", " sn]" in s.cikti, s.cikti)
+    kontrol("sure ciktida yaziyor", " s]" in s.cikti, s.cikti)
 
 # ACIK mesh reddedilmeli — acik mesh'ten kati cikmaz.
 s = kos(_mesh_kur +
@@ -435,7 +435,7 @@ s = kos(_mesh_kur +
         "print('acik mi:', not acik.Mesh.isSolid())\n"
         "birlestir(acik, kapali)", "acik mesh")
 kontrol("ACIK mesh'te reddediyor ve mesh_onar oneriyor",
-        "KAPALI DEGIL" in s.cikti and "mesh_onar" in s.cikti, s.cikti)
+        "NOT CLOSED" in s.cikti and "repair_mesh" in s.cikti, s.cikti)
 kontrol("acik mesh'te YARIM nesne birakmiyor",
         doc.getObject("AcikMesh_birlesik") is None)
 
@@ -445,8 +445,8 @@ s = kos(_mesh_kur +
         "u2 = _mesh('UzakMesh2', Part.makeBox(10,10,10, App.Vector(400,0,0)))\n"
         "doc.recompute()\n"
         "birlestir(u1, u2)", "degmeyen mesh")
-kontrol("degmeyen mesh'lerde DEGMIYOR diyor", "DEGMIYOR" in s.cikti, s.cikti)
-kontrol("bosluk sayisi veriliyor", "bosluk" in s.cikti, s.cikti)
+kontrol("degmeyen mesh'lerde DEGMIYOR diyor", "DO NOT TOUCH" in s.cikti, s.cikti)
+kontrol("bosluk sayisi veriliyor", "gap" in s.cikti, s.cikti)
 kontrol("degmeyen mesh'te YARIM nesne birakmiyor",
         doc.getObject("UzakMesh1_birlesik") is None)
 
@@ -463,7 +463,7 @@ s = kos(_mesh_kur +
         "doc.recompute()\n"
         "birlestir(km, kk)", "karisik tur")
 kontrol("kati+mesh karisiminda kati_yap oneriyor",
-        "kati_yap" in s.cikti, s.cikti)
+        "make_solid" in s.cikti, s.cikti)
 
 
 # ===================================================== 12. SESSIZ DESEN HATASI
@@ -781,7 +781,7 @@ s = kos("import Part\n"
         "print('nesne dondu:', r is not None)", "birlestir temiz")
 kontrol("temiz birlesme oluyor", "nesne dondu: True" in s.cikti, s.cikti)
 kontrol("BASKI verdikti veriliyor — hacim tek basina yetmez",
-        "baskiya hazir" in s.cikti, s.cikti)
+        "ready to print" in s.cikti, s.cikti)
 kontrol("hangi yolun kullanildigi yaziliyor", "(connect)" in s.cikti, s.cikti)
 kontrol("facet sayisi da yaziliyor (kanit)", "facet" in s.cikti, s.cikti)
 
@@ -803,9 +803,9 @@ s = kos("import Mesh, Part\n"
 kontrol("connect patlayinca None DONMUYOR", "nesne dondu: True" in s.cikti,
         s.cikti)
 kontrol("duz fuse'a dustugu SOYLENIYOR",
-        "fuse ile devam" in s.cikti and "(fuse)" in s.cikti, s.cikti)
+        "continuing with a plain fuse" in s.cikti and "(fuse)" in s.cikti, s.cikti)
 kontrol("sonuc tek kati", "kati sayisi: 1" in s.cikti, s.cikti)
-kontrol("bu yolda da baski verdikti var", "baskiya hazir" in s.cikti, s.cikti)
+kontrol("bu yolda da baski verdikti var", "ready to print" in s.cikti, s.cikti)
 
 # yaz=False cagiran ciktiyi istemiyorsa MALIYETI de odememeli.
 s = kos("import time, Part\n"
@@ -818,7 +818,7 @@ s = kos("import time, Part\n"
         "print('sessiz sure: %.3f' % (time.time() - t))\n"
         "print('hic cikti var mi: HAYIR')", "birlestir sessiz")
 kontrol("yaz=False hicbir sey yazdirmiyor",
-        "baskiya hazir" not in s.cikti, s.cikti)
+        "ready to print" not in s.cikti, s.cikti)
 
 
 # ===================================================== SONUC

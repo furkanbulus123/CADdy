@@ -1,7 +1,7 @@
-"""Tur orkestrasyonu - panel ile tasima/calistirma arasindaki beyin.
+"""Turn orchestration - the brain between the panel and transport/execution.
 
-Arayuz BILMEZ (widget import etmez); yalnizca sinyal yayar. Boylece sohbet
-mantigi arayuzden bagimsiz test edilebilir.
+It does NOT KNOW the UI (imports no widgets); it only emits signals. That way
+the chat logic can be tested independently of the UI.
 """
 
 from __future__ import annotations
@@ -19,84 +19,91 @@ from .sohbet_log import SohbetGunlugu
 from .transport.transport import KaliciTransport, TurSonucu
 
 
-# Modelin gorsel istemek icin kullandigi isaret. Sozlesme "yanitini bu
-# isaretle BITIR" diyor; kabul edilen iki yer de bu: kendi satirinda ya da
-# mesajin en sonunda. Isaretin metnin ortasinda gecmesi tetiklemez, yoksa
-# "gorsel-kontrol yapmama gerek yok" gibi bir cumle resim cektirirdi.
-# Turkce karakterli yazma ihtimaline karsi iki yazim da kabul ediliyor.
-# Sonuna "3" gelirse model UC ACI istiyor demektir (buyuk degisiklik).
+# The marker the model uses to ask for an image. The contract says "END your
+# reply with this marker"; the two accepted places are exactly that: on its
+# own line or at the very end of the message. The marker appearing in the
+# middle of the text does not trigger, otherwise a sentence like "no need
+# for a GORSEL-KONTROL" would take a picture. Both spellings are accepted in
+# case it is written with the Turkish character. A trailing "3" means the
+# model wants THREE ANGLES (a big change).
 #
-# NEDEN SATIR SONU DA KABUL: olculdu — model "...baskiya hazir —
-# GORSEL-KONTROL" yazdi, isaret kendi satirinda olmadigi icin host SESSIZCE
-# hicbir sey gondermedi ve model bunu ogrenemedi. 5 istekten 1'i boyle
-# kayboldu, 41 saniye sonra kullanici yazmak zorunda kaldi.
+# WHY END-OF-LINE IS ACCEPTED TOO: measured — the model wrote "...ready to
+# print — GORSEL-KONTROL", and because the marker was not on its own line
+# the host SILENTLY sent nothing and the model never found out. 1 in 5
+# requests got lost this way; 41 seconds later the user had to type.
 #
-# "YAKIN <ad>" eki: kamerayi o nesnelere yaklastirir (bkz. gorunum.
-# yakala_yakin). Gerekcesi olculdu — tum model kadraja sigdiginda kare
-# ~4 piksel/mm veriyor ve ince isler gorunmuyor (MANTIK 39). Adlar FreeCAD
-# IC ADI, virgulle ayrilir; desende bosluga izin YOK ki cumlenin devami
-# yanlislikla ad sanilmasin.
+# The "YAKIN <name>" suffix: moves the camera close to those objects (see
+# gorunum.yakala_yakin). The reason was measured — when the whole model fits
+# in the frame, the frame gives ~4 pixels/mm and fine work is invisible
+# (MANTIK 39). Names are FreeCAD INTERNAL NAMES, comma separated; the
+# pattern does NOT allow spaces so the rest of the sentence is not mistaken
+# for a name.
 _GORSEL_ISARET = re.compile(
     r"(?:^[ \t]*|[ \t—:-][ \t]*)G[OÖ]RSEL-KONTROL(?:[ \t]+(3))?"
     r"(?:[ \t]+YAKIN[ \t]+([A-Za-z0-9_]+(?:,[A-Za-z0-9_]+)*))?[ \t]*$",
     re.MULTILINE | re.IGNORECASE)
 
-# Yakin cekimde en fazla kac nesne. Uctan fazlasi "yakin" olmaktan cikar:
-# kamera hepsini kadraja almak icin geri cekilir ve elimizde yine genel
-# kare kalir.
+# At most how many objects in a close-up. More than three is no longer
+# "close": the camera pulls back to fit them all in the frame and we are
+# left with the general frame again.
 _YAKIN_AZAMI = 3
 
-# Isaret metinde GECIYOR ama yukaridaki kaliba uymuyor mu? O zaman sessiz
-# kalinmaz: bir sonraki otomatik isteme tek cumle iliştirilir. Ek tur
-# harcamaz, mevcut isteme biner.
+# Does the marker APPEAR in the text but not match the pattern above? Then
+# we do not stay silent: one sentence is attached to the next automatic
+# prompt. It costs no extra turn, it rides on the existing prompt.
 _GORSEL_ANAHTAR = re.compile(r"G[OÖ]RSEL-KONTROL", re.IGNORECASE)
 _GORSEL_UYARI = ("Note: your reply contained GORSEL-KONTROL but not at "
                  "the END, so no image was sent. If you really want to "
                  "look, end your reply with that marker alone.")
 
-# Arka arkaya en fazla kac gorsel kontrol turu. Model resme bakip yine resim
-# isteyebilir; ucuncude durup topu kullaniciya birakiyoruz.
+# At most how many visual check turns in a row. The model can look at the
+# image and ask for an image again; on the third we stop and hand the ball
+# to the user.
 _GORSEL_SINIR = 2
 
-# GORSEL SISTEMI SIMDILIK KAPALI (kullanici karari, 2026-08-28).
+# THE VISUAL SYSTEM IS OFF FOR NOW (user decision, 2026-08-28).
 #
-# KOD SILINMEDI, ETKISIZ BIRAKILDI — gelecekte duzeltip acabiliriz.
-# Acmak icin: bunu True yap ve transport.SISTEM_SOZLESMESI'ne GORSEL-KONTROL
-# maddesini geri koy (ikisi birden gerekli; sozlesme anlatmazsa model
-# isaretini hic yazmaz).
+# THE CODE WAS NOT DELETED, IT WAS DISABLED — we may fix it and turn it back
+# on in the future. To turn it on: set this to True and put the
+# GORSEL-KONTROL clause back into transport.SISTEM_SOZLESMESI (both are
+# needed; if the contract does not describe it, the model never writes the
+# marker).
 #
-# NEDEN KAPATILDI — deney yapildi (PLAN S9, ayni istem uc kez):
-#   A  fotografli   6 blok, 129 KB kare, 48.7k token -> iyi
-#   B1 fotografsiz  4 blok,      0 KB,   37.2k token -> kotu
-#   B2 fotografsiz  8 blok,      0 KB,   50.6k token -> EN IYI
-# En iyi ve en kotu kosu AYNI koldaydi. Yani kaliteyi ayiran sey goruntu
-# degil ADIM SAYISI cikti (4 -> kotu, 6 -> iyi, 8 -> en iyi) ve fotografin
-# olculen bedeli bu ciftte %31 token, %44 sure idi. Goruntunun katkisi
-# olcum gurultusunun altinda kaldi; kesin hukum icin ornek yetmiyor ama
-# masrafi kesin, faydasi degil.
+# WHY IT WAS TURNED OFF — an experiment was run (PLAN S9, same prompt three
+# times):
+#   A  with photos     6 blocks, 129 KB frames, 48.7k tokens -> good
+#   B1 without photos  4 blocks,      0 KB,     37.2k tokens -> bad
+#   B2 without photos  8 blocks,      0 KB,     50.6k tokens -> BEST
+# The best and the worst run were in the SAME arm. So what separated quality
+# was not the image but the NUMBER OF STEPS (4 -> bad, 6 -> good, 8 -> best),
+# and the measured cost of the photo in that pair was 31% tokens, 44% time.
+# The image's contribution stayed below the measurement noise; the sample is
+# not enough for a firm verdict, but the cost is certain and the benefit is
+# not.
 GORSEL_ACIK = False
 
-# Modelin KENDI degisikligini geri almak icin kullandigi isaret.
-# Kullanicinin sorusu: "geri almayi da AI yapamaz mi, niye kullaniciya zorla
-# yaptiriyor?" Yapabilir — yalnizca neyi geri aldigi denetlenmeli.
+# The marker the model uses to undo its OWN change.
+# The user's question: "can't the AI do the undo too, why does it force the
+# user to do it?" It can — only what it undoes has to be checked.
 _GERI_AL_ISARET = re.compile(r"^[ \t]*GER[İI]-AL[ \t]*$",
                              re.MULTILINE | re.IGNORECASE)
 
-# Arka arkaya en fazla kac otomatik geri alma. Model geri alip yine geri
-# almak isteyebilir; boyle bir dongu kullanicinin isini turu turu soker.
+# At most how many automatic undos in a row. The model can undo and want to
+# undo again; such a loop would take the user's work apart turn by turn.
 _GERI_AL_SINIR = 2
 
-# Executor'un actigi islemlerin oneki. Geri almanin tepe kaydini AI'in mi
-# yoksa kullanicinin mi biraktigini AYIRT EDEN tek sey bu.
+# Prefix of the transactions the executor opens. It is the only thing that
+# TELLS APART whether the top undo entry was left by the AI or the user.
 _AI_ONEK = "AI: "
 
-# Kod patladiginda kac kez OTOMATIK onarim turu istenir. PLAN M4'un butcesi.
-# Ikiden fazlasi kullanicinin haberi olmadan uzun bir zincire donusur.
+# How many AUTOMATIC repair turns are requested when code blows up. PLAN
+# M4's budget. More than two turns into a long chain without the user
+# knowing.
 _ONARIM_SINIRI = 2
 
 
 def _kisa_sayi(n: int) -> str:
-    """12400 -> '12.4k'. Panelde yer dar, ham rakam okunmuyor."""
+    """12400 -> '12.4k'. Space in the panel is tight, raw digits don't read well."""
     if n >= 1_000_000:
         return f"{n / 1_000_000:.1f}M"
     if n >= 1_000:
@@ -106,17 +113,17 @@ def _kisa_sayi(n: int) -> str:
 
 class ConversationController(QtCore.QObject):
     # role: "user" | "ai" | "sistem"
-    mesaj = QtCore.Signal(str, str)          # role, metin
-    akis_basladi = QtCore.Signal()           # canli yanit kutusu acilsin
-    akis_parcasi = QtCore.Signal(str)        # yanit metni, akarken
-    dusunce_parcasi = QtCore.Signal(str)     # modelin dusunme metni (varsa)
-    dusunce_olcusu = QtCore.Signal(int)      # tahmini dusunme tokeni
+    mesaj = QtCore.Signal(str, str)          # role, text
+    akis_basladi = QtCore.Signal()           # open the live reply box
+    akis_parcasi = QtCore.Signal(str)        # reply text, while streaming
+    dusunce_parcasi = QtCore.Signal(str)     # the model's thinking text (if any)
+    dusunce_olcusu = QtCore.Signal(int)      # estimated thinking tokens
     akis_bitti = QtCore.Signal()
     asama = QtCore.Signal(str)               # baglaniyor | dusunuyor | yaziyor
     oneri = QtCore.Signal(object)            # blocks.KodBloku
     calisma_sonucu = QtCore.Signal(object)   # executor.CalismaSonucu
     durum = QtCore.Signal(str)               # bosta | calisiyor | oluyor
-    bilgi_satiri = QtCore.Signal(str, str)   # metin, ipucu (tooltip)
+    bilgi_satiri = QtCore.Signal(str, str)   # text, hint (tooltip)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -124,24 +131,26 @@ class ConversationController(QtCore.QObject):
         self.executor = CodeExecutor()
         self.gunluk = SohbetGunlugu()
 
-        # Oturum boyunca biriken token - "bu sohbette ne kadar harcadim"
+        # Tokens accumulated over the session - "how much did I spend in this chat"
         self._tk_toplam = 0
         self._tur_sayisi = 0
         self._akan_var = False
 
-        # Gorsel kontrol durumu. `_gorsel_bekliyor`: model GORSEL-KONTROL
-        # istedi ama ayni yanitta kod da vardi -> kod calistiktan SONRA cek.
+        # Visual check state. `_gorsel_bekliyor`: the model asked for
+        # GORSEL-KONTROL but the same reply also had code -> capture AFTER
+        # the code runs.
         self._gorsel_bekliyor = False
         self._gorsel_tur = 0
-        # Model bu sefer UC ACI istedi mi ("GORSEL-KONTROL 3").
+        # Did the model ask for THREE ANGLES this time ("GORSEL-KONTROL 3").
         self._gorsel_cok = False
-        # "GORSEL-KONTROL YAKIN Ad1,Ad2" — kamerayi yaklastirilacak nesneler.
+        # "GORSEL-KONTROL YAKIN Name1,Name2" — objects to zoom the camera in on.
         self._gorsel_yakin: list[str] = []
-        # Isaret metinde gecti ama yanitin sonunda degildi -> bir sonraki
-        # OTOMATIK isteme tek cumlelik not iliştirilecek.
+        # The marker appeared in the text but was not at the end of the
+        # reply -> a one-sentence note will be attached to the next
+        # AUTOMATIC prompt.
         self._gorsel_uyari = False
-        # Son calisan blogun EKLEDIGI nesneler. Uc kare hakkini host bunun
-        # uzerinden veriyor (bkz. _kac_kare).
+        # Objects ADDED by the last block that ran. The host grants the
+        # three-frame allowance based on this (see _kac_kare).
         self._son_eklenen: list[str] = []
         self._geri_al_tur = 0
         self._onarim_tur = 0
@@ -158,7 +167,7 @@ class ConversationController(QtCore.QObject):
 
         self.gunluk.oturum_ac(self.transport.oturum)
 
-    # -- disari acik -------------------------------------------------------
+    # -- public ------------------------------------------------------------
 
     def mesgul_mu(self) -> bool:
         return self.transport.mesgul_mu()
@@ -173,8 +182,9 @@ class ConversationController(QtCore.QObject):
                                       "Wait for it or press Cancel.")
             return
 
-        # ASIL kullanici mesaji gorsel-kontrol sayacini sifirlar; otomatik
-        # gonderilen gorsel turu sifirlamaz, yoksa sinir hic dolmazdi.
+        # A REAL user message resets the visual-check counter; an
+        # automatically sent visual turn does not, otherwise the limit would
+        # never fill up.
         if kullanici_mi:
             self._gorsel_tur = 0
             self._geri_al_tur = 0
@@ -182,16 +192,17 @@ class ConversationController(QtCore.QObject):
             self._son_hata = ""
             self._gorsel_uyari = False
         elif self._gorsel_uyari:
-            # Dusen gorsel istegi SESSIZ kalmaz. Ek tur acmiyoruz; zaten
-            # gidecek olan otomatik istemin sonuna biniyor.
+            # A dropped image request does not stay SILENT. We don't open an
+            # extra turn; it rides at the end of the automatic prompt that is
+            # going out anyway.
             metin = metin + "\n\n" + _GORSEL_UYARI
             self._gorsel_uyari = False
 
         if kullanici_mi:
             self.mesaj.emit("user", metin)
         self.gunluk.oturum_ac(self.transport.oturum)
-        # Insanin yazdigi mesaj ile panelin kendiliginden gonderdigi tur
-        # gunlukte AYIRT EDILEBILIR olmali.
+        # A message a human typed and a turn the panel sent on its own must
+        # be TELL-APART-ABLE in the log.
         (self.gunluk.kullanici if kullanici_mi else self.gunluk.otomatik)(metin)
 
         self.executor.oturumu_ayarla(self.transport.oturum)
@@ -201,8 +212,8 @@ class ConversationController(QtCore.QObject):
         try:
             baglam = serializer.belge_metni()
         except Exception as e:
-            log.uyari(f"belge baglami alinamadi: {e}")
-            baglam = "<document>okunamadi</document>"
+            log.uyari(f"could not read the document context: {e}")
+            baglam = "<document>unreadable</document>"
 
         self.transport.tur_gonder(f"{baglam}\n\n<request>\n{metin}\n</request>",
                                   gorsel=gorsel)
@@ -215,23 +226,23 @@ class ConversationController(QtCore.QObject):
         self.executor.namespace_temizle()
         self._tk_toplam = 0
         self._tur_sayisi = 0
-        # Yeni oturum = YENI DOSYA. "1 session = 1 log" kurali.
+        # New session = NEW FILE. The "1 session = 1 log" rule.
         self.gunluk.oturum_ac(self.transport.oturum)
         self.mesaj.emit("sistem", "New chat started — previous context forgotten.")
         self.bilgi_satiri.emit("", "")
 
     def sohbeti_surdur(self, oturum: str, dosya) -> None:
-        """Kutuphaneden secilen eski bir sohbete geri doner.
+        """Returns to an old chat picked from the library.
 
-        `yeni_sohbet`ten iki farki var ve ikisi de kasitli:
-        - isim alanini TEMIZLEMIYORUZ; kullanici ayni FreeCAD belgesinde
-          calismaya devam ediyor, degiskenlerini silmek isine yaramaz.
-        - gunluk YENI dosya acmiyor, eskisine devam ediyor (bkz.
-          `sohbet_log.dosyaya_devam`) — bir sohbet bir dosya.
+        It differs from `yeni_sohbet` in two ways, both deliberate:
+        - we do NOT CLEAR the namespace; the user keeps working in the same
+          FreeCAD document, deleting their variables would not help them.
+        - the log does NOT open a new file, it continues the old one (see
+          `sohbet_log.dosyaya_devam`) — one chat, one file.
 
-        Sayaclar sifirlanir: token toplami ve tur sayisi BU oturumdaki
-        turlari sayiyor; devralinan gecmisi bizim sayacimiz bilmiyor ve
-        bilir gibi yapmasi yanlis bir rakam uretirdi.
+        The counters are reset: the token total and turn count count the
+        turns in THIS session; our counter does not know the inherited
+        history, and pretending it did would produce a wrong number.
         """
         self.transport.oturumu_surdur(oturum)
         self._tk_toplam = 0
@@ -239,25 +250,26 @@ class ConversationController(QtCore.QObject):
         try:
             self.gunluk.dosyaya_devam(oturum, dosya)
         except Exception as e:                                   # noqa: BLE001
-            log.uyari(f"gunluge devam edilemedi: {e}")
+            log.uyari(f"could not continue the log: {e}")
         self.executor.oturumu_ayarla(oturum)
         self.bilgi_satiri.emit("", "")
 
     def blogu_calistir(self, blok: blocks.KodBloku) -> None:
-        """Panelden 'Calistir'a basildiginda."""
+        """When 'Run' is pressed in the panel."""
         self.gunluk.kod(blok.kod, blok.baslik)
         ileri_vardi = self._ileri_sayisi()
         sonuc = self.executor.calistir(blok.kod, blok.baslik)
         self.gunluk.calisma(sonuc)
-        # ARADA IS YAPILDI: gorsel sayaci "bak - yine bak" zincirini sayar,
-        # "bak - degistir - yine bak"i degil (bkz. _gorseli_gonder). Kod
-        # kostuysa yeni bakilacak bir sey var demektir.
+        # WORK WAS DONE IN BETWEEN: the visual counter counts the "look -
+        # look again" chain, not "look - change - look again" (see
+        # _gorseli_gonder). If code ran, there is something new to look at.
         if not sonuc.engellendi:
             self._gorsel_tur = 0
             self._son_eklenen = list(getattr(sonuc, "eklenen", None) or [])
-        # Geri aldiktan SONRA calisan kod ileri yiginini yakar (olculdu, bkz.
-        # ileri_al). Sessizce kaybolmasin: kullanici geri aldigi seye geri
-        # donebilecegini saniyor ve dugmeye bastiginda bos bir yigin buluyor.
+        # Code that runs AFTER an undo burns the redo stack (measured, see
+        # ileri_al). It should not vanish silently: the user thinks they can
+        # go back to what they undid and finds an empty stack when they
+        # press the button.
         if ileri_vardi and self._ileri_sayisi() == 0:
             self.mesaj.emit("sistem",
                             f"Redo history cleared ({ileri_vardi} steps) "
@@ -271,22 +283,24 @@ class ConversationController(QtCore.QObject):
         except Exception:
             pass
 
-        # Tekrar korumasi durdurduysa kod HIC kosmadi. Bu bir hata degil,
-        # kullaniciya sorulmus bir soru; modele "kodun patladi" diye
-        # gondermek onu bos yere baska bir yol aramaya iter.
+        # If the repeat guard stopped it, the code NEVER ran. That is not an
+        # error, it is a question put to the user; sending the model "your
+        # code blew up" would push it to look for another way for nothing.
         if sonuc.engellendi:
             return
 
-        # Model bu kodun SONUCUNU gormek istemisti. Simdi cekiyoruz: kod
-        # calisti, 3B guncel. updateGui() yukarida cagrildigi icin goruntu
-        # yeni geometriyi icerir.
+        # The model wanted to see the RESULT of this code. We capture it now:
+        # the code ran, the 3D is up to date. Since updateGui() was called
+        # above, the image contains the new geometry.
         if self._gorsel_bekliyor:
             if sonuc.basarili:
-                # Cikti varsa AYNI tura bindiriliyor — ayri bir tur harcamak
-                # gereksiz ve model iki mesaji sirayla degil birlikte gormeli.
+                # If there is output it rides on the SAME turn — spending a
+                # separate turn is unnecessary and the model should see the
+                # two messages together, not one after the other.
                 self._gorseli_gonder(sonuc.cikti)
                 return
-            # Kod patladi, islem geri alindi - gosterecek yeni bir sey yok.
+            # The code blew up, the transaction was rolled back - nothing new
+            # to show.
             self._gorsel_bekliyor = False
 
         if not sonuc.basarili:
@@ -295,28 +309,30 @@ class ConversationController(QtCore.QObject):
             self._ciktiyi_yolla(sonuc)
 
     def _ciktiyi_yolla(self, sonuc) -> None:
-        """Kod BASARILI oldu ve print ile bir sey yazdi: modele geri gonder.
+        """The code SUCCEEDED and printed something: send it back to the model.
 
-        NEDEN. Gunluk incelemesi (2026-08-21, madde 1) sunu olctu: print()
-        iceren 8 blok kosmus, 8'inin de ciktisi modele HIC ulasmamis.
-        Executor ciktiyi yakaliyordu, gunluge yaziyordu, panelde de
-        gosteriyordu — yalnizca modele gondermiyordu. Karttaki "Sonucu AI'a
-        gonder" dugmesi de yalnizca UYARI varken goruluyordu, yani sadece
-        ciktidan ibaret bir sonucu iletmenin HICBIR yolu yoktu.
+        WHY. The log review (2026-08-21, item 1) measured this: 8 blocks
+        containing print() ran, and the output of all 8 NEVER reached the
+        model. The executor captured the output, wrote it to the log and
+        showed it in the panel — it just did not send it to the model. The
+        card's "Send result to AI" button was also only visible when there
+        was a WARNING, so there was NO way at all to pass on a result that
+        consisted only of output.
 
-        Modelin buna verdigi tepki gunlukte duruyor ve maliyeti buydu:
+        The model's reaction to this is in the log, and this was its cost:
 
-          * olcum icin belgeye nesne uretmek (bir sayi ogrenmek icin Draft
-            cemberi ekleyip bir SONRAKI turda yaricapini okumak),
-          * sonucu kasitli bir istisnaya gomup geri almak — kendi cumlesi:
-            "sonucu kasitli bir hataya gomup size otomatik olarak geri
-            gelmesini saglayacagim". Calisiyordu, cunku HATA yolu otomatik
-            besleniyor, BASARI yolu beslenmiyordu. Model host'un acik
-            biraktigi tek deligi bulmustu.
+          * creating objects in the document to measure (adding a Draft
+            circle to learn a number and reading its radius on the NEXT
+            turn),
+          * burying the result in a deliberate exception to get it back — in
+            its own words: "I'll bury the result in a deliberate error so it
+            comes back to you automatically". It worked, because the ERROR
+            path was fed automatically and the SUCCESS path was not. The
+            model had found the one hole the host left open.
 
-        Simdi basari yolu da besleniyor; o iki kalibin ikisi de gereksiz.
-        Dongu riski yok: her tur kullanicinin Calistir'a basmasiyla
-        basliyor, kendiliginden zincirlenmiyor.
+        Now the success path is fed too; both of those patterns are
+        unnecessary. There is no loop risk: every turn starts with the user
+        pressing Run, it does not chain by itself.
         """
         if self.mesgul_mu():
             return
@@ -324,36 +340,38 @@ class ConversationController(QtCore.QObject):
                            f"({len(sonuc.cikti)} chars)")
         self.sonucu_gonder(sonuc, kullanici_mi=False)
 
-    # -- otomatik onarim ---------------------------------------------------
+    # -- automatic repair --------------------------------------------------
 
     @staticmethod
     def _hata_imzasi(sonuc) -> str:
-        """Tracebackin son satiri — hatanin kimligi.
+        """The last line of the traceback — the identity of the error.
 
-        Satir numaralari ve yollar degisebilir; degisen sey hatanin TURU ve
-        mesaji degilse model ayni duvara toslamaya devam ediyor demektir.
+        Line numbers and paths can change; if what changes is not the TYPE
+        and message of the error, the model is still hitting the same wall.
         """
         satirlar = (sonuc.hata_izi or "").strip().splitlines()
         return satirlar[-1].strip() if satirlar else ""
 
     def _otomatik_onar(self, sonuc) -> None:
-        """Kod patlayinca hatayi KENDILIGINDEN modele gonderir.
+        """When the code blows up, sends the error to the model BY ITSELF.
 
-        NEDEN. Eskiden bunun icin kullanicinin "Hatayi AI'a gonder" dugmesine
-        BASMASI gerekiyordu; basmazsa model kodunun patladigini hic bilmezdi.
-        Bu, geri alma sorununun (MANTIK 19) birebir ayni kalibi: host'un
-        kendiliginden yapabilecegi bir is insana yaptiriliyordu. Gunlukte
-        kullanici o dugmeye uc kez basmis — akis her seferinde ayni, tek fark
-        bir tiklama ve kullanicinin o an baska yere bakiyor olma ihtimali.
+        WHY. This used to require the user to PRESS the "Send error to AI"
+        button; if they didn't, the model never learned its code had blown
+        up. That is exactly the same pattern as the undo problem (MANTIK
+        19): a job the host could do on its own was being made a human's
+        job. In the log the user pressed that button three times — the flow
+        was the same every time, the only difference a click and the chance
+        that the user was looking elsewhere at that moment.
 
-        IKI SINIR. PLAN M4 "2 deneme butcesi" diyordu:
+        TWO LIMITS. PLAN M4 said "a budget of 2 attempts":
 
-        1. En fazla _ONARIM_SINIRI otomatik tur. Sonrasinda durulur ve top
-           kullaniciya birakilir — dugme yerinde duruyor, elle gonderilebilir.
-        2. AYNI hata iki kez gelirse HEMEN durulur. Butceyi doldurmanin
-           anlami yok: model ayni duvara tosluyor ve ucuncu deneme de ayni
-           yere carpar. Bu, butce sinirindan daha erken devreye giren
-           gercek sinir.
+        1. At most _ONARIM_SINIRI automatic turns. After that it stops and
+           the ball goes to the user — the button stays in place, it can be
+           sent by hand.
+        2. If the SAME error comes twice, stop IMMEDIATELY. There is no point
+           filling up the budget: the model is hitting the same wall and a
+           third attempt would crash into the same place. This is the real
+           limit that kicks in earlier than the budget limit.
         """
         imza = self._hata_imzasi(sonuc)
 
@@ -375,7 +393,7 @@ class ConversationController(QtCore.QObject):
             return
 
         if self.mesgul_mu():
-            return                     # elle gonderme yolu acik kalsin
+            return                     # keep the manual send path open
 
         self._onarim_tur += 1
         self._son_hata = imza
@@ -384,18 +402,19 @@ class ConversationController(QtCore.QObject):
                         f"({self._onarim_tur}/{_ONARIM_SINIRI}).")
         self._hatayi_yolla(sonuc, kullanici_mi=False)
 
-    # -- geri alma ---------------------------------------------------------
+    # -- undo --------------------------------------------------------------
 
     def geri_al(self, ai_mi: bool = False) -> tuple[bool, str]:
-        """Son AI degisikligini geri alir. Doner: (oldu_mu, aciklama).
+        """Undoes the last AI change. Returns: (done, explanation).
 
-        Hem paneldeki dugme hem modelin GERI-AL isareti BURAYA girer, cunku
-        tehlikeli olan sey ikisinde de ayni: yiginin tepesinde KIMIN isi var.
+        Both the panel button and the model's GERI-AL marker come in HERE,
+        because the dangerous thing is the same in both: WHOSE work is on
+        top of the stack.
 
-        Eski dugme `doc.undo()`'yu kosulsuz cagiriyordu ve etiketi "Son AI
-        degisikligini geri al" idi. Kullanici AI'in kodundan sonra elle bir
-        seyler yaptiysa dugme ONUN isini geri aliyordu — etiket yalan
-        soyluyordu. Artik tepe kaydin oneki denetleniyor.
+        The old button called `doc.undo()` unconditionally and its label was
+        "Undo last AI change". If the user had done something by hand after
+        the AI's code, the button undid THEIR work — the label was lying.
+        Now the prefix of the top entry is checked.
         """
         import FreeCAD as App
 
@@ -417,8 +436,8 @@ class ConversationController(QtCore.QObject):
         try:
             doc.recompute()
         except Exception as e:                                   # noqa: BLE001
-            log.uyari(f"geri alma sonrasi recompute: {e}")
-        # Bayat baglama = SERT COKME riski (bkz. executor.namespace_temizle).
+            log.uyari(f"recompute after undo: {e}")
+        # Stale binding = HARD CRASH risk (see executor.namespace_temizle).
         self.executor.namespace_temizle()
         kim = "AI" if ai_mi else "User"
         self.gunluk.sistem(f"UNDO ({kim}): {tepe}")
@@ -426,7 +445,7 @@ class ConversationController(QtCore.QObject):
 
     @staticmethod
     def _ileri_sayisi() -> int:
-        """Ileri yiginindaki adim sayisi. Belge yoksa 0."""
+        """Number of steps on the redo stack. 0 if there is no document."""
         import FreeCAD as App
 
         doc = App.ActiveDocument
@@ -435,33 +454,35 @@ class ConversationController(QtCore.QObject):
         return len(list(getattr(doc, "RedoNames", ()) or ()))
 
     def ileri_al(self) -> tuple[bool, str]:
-        """Geri alinan son degisikligi TEKRAR UYGULAR. Doner: (oldu_mu, aciklama).
+        """RE-APPLIES the last undone change. Returns: (done, explanation).
 
-        OLCULDU (LOG/2026-08-24_3ad4cef1.txt, 12:09:33 -> 12:09:58): kullanici
-        tam da "evet guzel oldu istedigim gibi" dedigi sonucu yanlislikla geri
-        aldi — alti saniye icinde uc kez. Sonra eski kod blogunu yeniden
-        calistirmayi denedi, iki kez ayni hatayi aldi ("bunny veya
-        Karin_dolgusu yok" — cunku dolguyu geri alma silmisti) ve oturum orada
-        bitti. O anda FreeCAD'in ileri yiginda UC kayit hala duruyordu; 25
-        dakikalik is bir dugme eksikligi yuzunden geri gelmedi.
+        MEASURED (LOG/2026-08-24_3ad4cef1.txt, 12:09:33 -> 12:09:58): the
+        user accidentally undid exactly the result they had just called
+        "yes, that's nice, just what I wanted" — three times in six seconds.
+        Then they tried to re-run the old code block, got the same error
+        twice ("bunny or Belly_fill missing" — because the undo had deleted
+        the fill) and the session ended there. At that moment FreeCAD's redo
+        stack still held THREE entries; 25 minutes of work did not come back
+        because a button was missing.
 
-        GERI-AL'IN AKSINE kullanicinin kendi kaydi da ileri alinabiliyor.
-        Asimetri kasitli: geri alma is SILER (yigininin tepesinde kullanicinin
-        emegi varsa onu yok eder — bu yuzden orada denetim var), ileri alma is
-        GERI GETIRIR. Reddetmenin koruyacagi bir sey yok, o yuzden yalnizca
-        neyin geri geldigi soyleniyor.
+        UNLIKE GERI-AL, the user's own entry can be redone too. The
+        asymmetry is deliberate: undo DELETES work (if the user's effort is
+        on top of the stack it destroys it — that is why there is a check
+        there), redo BRINGS work BACK. Refusing would protect nothing, so we
+        only say what came back.
 
-        OLCULDU — ileri yigini TAM OLARAK ne zaman siliniyor (FreeCAD 1.1.1):
+        MEASURED — EXACTLY when the redo stack is cleared (FreeCAD 1.1.1):
 
-            bos transaction (commit ya da abort)   -> KORUNUR
-            salt-okunur kod (sadece print)         -> KORUNUR
-            SyntaxError (transaction hic acilmadi) -> KORUNUR
-            DEGISIKLIK yapip iptal edilen islem    -> SILINIR
-            yeni ve basarili islem                 -> SILINIR (normal davranis)
+            empty transaction (commit or abort)       -> KEPT
+            read-only code (print only)               -> KEPT
+            SyntaxError (transaction never opened)    -> KEPT
+            aborted transaction that MADE A CHANGE    -> CLEARED
+            new, successful transaction               -> CLEARED (normal behaviour)
 
-        Yani gunlukteki iki basarisiz calistirma yigina DOKUNMAMISTI; dugme o
-        gun var olsaydi is geri gelirdi. Yine de "degisiklik yapip patlayan"
-        kod yigini yakiyor — blogu_calistir bunu fark edince soyluyor.
+        So the two failed runs in the log had NOT touched the stack; had the
+        button existed that day, the work would have come back. Still, code
+        that "makes a change and blows up" burns the stack — blogu_calistir
+        notices this and says so.
         """
         import FreeCAD as App
 
@@ -478,29 +499,31 @@ class ConversationController(QtCore.QObject):
         try:
             doc.recompute()
         except Exception as e:                                   # noqa: BLE001
-            log.uyari(f"ileri alma sonrasi recompute: {e}")
-        # Bayat baglama = SERT COKME riski — geri almadaki gerekcenin aynisi.
+            log.uyari(f"recompute after redo: {e}")
+        # Stale binding = HARD CRASH risk — the same reason as for undo.
         self.executor.namespace_temizle()
         self.gunluk.sistem(f"REDO: {tepe}")
         return True, tepe
 
     def _ai_geri_al(self) -> None:
-        """Modelin GERI-AL istegini yerine getirir.
+        """Carries out the model's GERI-AL request.
 
-        OLCULDU (LOG/2026-08-20_baa70fa4.txt) — bu ozelligin yoklugu uc ayri
-        kayba yol acti:
+        MEASURED (LOG/2026-08-20_baa70fa4.txt) — the lack of this feature
+        caused three separate losses:
 
-          15:32:51  AI: "Ilk adim kod degil: Ctrl+Z ile ... geri don."
-          15:46:12  KULLANICI: "geri aldim"
-                    -> 13 dakika 21 saniye, oturum tamamen durdu.
+          15:32:51  AI: "The first step is not code: go back with Ctrl+Z ..."
+          15:46:12  USER: "undone"
+                    -> 13 minutes 21 seconds, the session stalled completely.
 
-          16:04:52  AI yine ayni seyi soyledi.
-          16:05:20  AI: "GERI ALINDIGININ VARSAYIP devam ediyorum"
-                    -> ve o varsayimin uzerine kod uretti. Kullanici "tamam"
-                       demisti; bu "geri aldim" mi "devam et" mi belli degil.
-                       Model dogrulayamadigi bir duruma kod yazdi.
+          16:04:52  The AI said the same thing again.
+          16:05:20  AI: "I'm continuing ASSUMING it was undone"
+                    -> and generated code on top of that assumption. The user
+                       had said "ok"; whether that meant "undone" or "carry
+                       on" was unclear. The model wrote code for a state it
+                       could not verify.
 
-        Ucuncusu asil olan: bu bir hiz sorunu degil, DOGRULUK sorunu.
+        The third is the real one: this is not a speed problem, it is a
+        CORRECTNESS problem.
         """
         if self._geri_al_tur >= _GERI_AL_SINIR:
             self.mesaj.emit("sistem",
@@ -515,11 +538,11 @@ class ConversationController(QtCore.QObject):
             self.mesaj.emit("sistem", f"AI undid: {aciklama}")
             return
 
-        # BASARISIZ. Model kendi istegini yerine getirilmis SANIYOR ve bir
-        # sonraki adimi o varsayimla kuracak — olculen 3. kaybin ta kendisi.
-        # Bu yuzden sessiz kalmiyoruz: tek otomatik tur harcanip modele
-        # neyin olmadigi soyleniyor. Basarili halde tur HARCANMIYOR, cunku
-        # orada modelin varsayimi zaten dogru.
+        # FAILED. The model THINKS its request was carried out and will build
+        # the next step on that assumption — exactly the measured 3rd loss.
+        # So we do not stay silent: one automatic turn is spent telling the
+        # model what did not happen. On success NO turn is spent, because
+        # there the model's assumption is already correct.
         self.mesaj.emit("sistem", "The AI asked to undo but it was not done: "
                                   + aciklama)
         self.gunluk.sistem("UNDO refused: " + aciklama)
@@ -531,14 +554,15 @@ class ConversationController(QtCore.QObject):
             kullanici_mi=False)
 
     def sonucu_gonder(self, sonuc, kullanici_mi: bool = True) -> None:
-        """Calistirma sonucunu (cikti ve konsol uyarilari dahil) modele yollar.
+        """Sends the run result (including output and console warnings) to the model.
 
-        Kullanicinin istegi: "uyari ve haber kodlarini da AI gorsun, yani
-        turuncu kisimlari." FreeCAD'in konsol uyarilari cogu zaman istisna
-        firlatmiyor; kod basarili gorunuyor ama bir sey ters gitmis oluyor.
+        The user's request: "let the AI see the warning and notice codes too,
+        I mean the orange parts." FreeCAD's console warnings often do not
+        raise an exception; the code looks successful but something has gone
+        wrong.
 
-        Cikti varsa buraya _ciktiyi_yolla kendiliginden giriyor; dugme
-        yalnizca kullanici ekstra bir sey gondermek istediginde gerekiyor.
+        When there is output, _ciktiyi_yolla comes in here by itself; the
+        button is only needed when the user wants to send something extra.
         """
         self.gonder(
             "The code you just gave was run. The result is below, "
@@ -550,11 +574,11 @@ class ConversationController(QtCore.QObject):
             kullanici_mi=kullanici_mi)
 
     def hatayi_gonder(self, sonuc) -> None:
-        """Panelden "Hatayi AI'a gonder" dugmesi.
+        """The "Send error to AI" button in the panel.
 
-        Otomatik onarim (bkz. _otomatik_onar) devreye girdikten sonra bu
-        dugme hala duruyor: butce dolunca ya da ayni hata tekrarlayinca
-        kullanici yine de gondermek isteyebilir.
+        After automatic repair (see _otomatik_onar) kicks in this button is
+        still there: once the budget is used up or the same error repeats,
+        the user may still want to send it.
         """
         self._hatayi_yolla(sonuc, kullanici_mi=True)
 
@@ -568,11 +592,11 @@ class ConversationController(QtCore.QObject):
             f"<execution_error>\n{sonuc.hata_izi.strip()}\n</execution_error>",
             kullanici_mi=kullanici_mi)
 
-    # -- ic ---------------------------------------------------------------
+    # -- internal ----------------------------------------------------------
 
     def _metin_parcasi(self, parca: str) -> None:
-        # Ilk parca gelene kadar canli kutuyu acmiyoruz; kodsuz/bos yanitlarda
-        # bos bir balon birakmasin.
+        # We don't open the live box until the first part arrives; for
+        # code-only/empty replies it should not leave an empty bubble.
         if not self._akan_var:
             self._akan_var = True
             self.akis_basladi.emit()
@@ -594,23 +618,23 @@ class ConversationController(QtCore.QObject):
 
         duz, bulunan = blocks.ayikla(sonuc.metin)
 
-        # GORSEL-KONTROL isteniyor mu? Isareti kullaniciya gostermiyoruz -
-        # o bir protokol sozcugu, mesajin parcasi degil.
+        # Is GORSEL-KONTROL requested? We don't show the marker to the user -
+        # it is a protocol word, not part of the message.
         gorsel_esleme = _GORSEL_ISARET.search(duz or "")
         gorsel_istendi = gorsel_esleme is not None
         if gorsel_istendi:
-            # "GORSEL-KONTROL 3" = model kendisi uc aci istedi (buyuk
-            # degisiklik yapti ve tek kareye guvenmiyor).
+            # "GORSEL-KONTROL 3" = the model itself asked for three angles
+            # (it made a big change and does not trust a single frame).
             self._gorsel_cok = bool(gorsel_esleme.group(1))
-            # "YAKIN Ad1,Ad2" = kamerayi o nesnelere yaklastir.
+            # "YAKIN Name1,Name2" = zoom the camera in on those objects.
             adlar = (gorsel_esleme.group(2) or "").strip()
             self._gorsel_yakin = [a for a in adlar.split(",")
                                   if a][:_YAKIN_AZAMI]
             duz = _GORSEL_ISARET.sub("", duz).strip()
         elif _GORSEL_ANAHTAR.search(duz or ""):
-            # Isaret var ama yerinde degil. Kanali SESSIZ birakmiyoruz:
-            # gunluge yaziliyor ve bir sonraki otomatik isteme not olarak
-            # biniyor (bkz. gonder).
+            # The marker is there but not in its place. We do NOT leave the
+            # channel SILENT: it is written to the log and rides on the next
+            # automatic prompt as a note (see gonder).
             self._gorsel_uyari = True
             self.gunluk.sistem("GORSEL-KONTROL marker was not at the end "
                                "of the reply — no image sent, the model "
@@ -625,9 +649,9 @@ class ConversationController(QtCore.QObject):
         elif not bulunan:
             self.mesaj.emit("ai", "(empty reply)")
 
-        # Geri alma, kod kartlarindan ONCE. Ayni yanitta hem "bunu geri al"
-        # hem duzeltilmis kod olabiliyor; kullanici Calistir'a bastiginda
-        # belge dogru noktada olmali.
+        # Undo BEFORE the code cards. The same reply can contain both "undo
+        # this" and corrected code; when the user presses Run the document
+        # must be at the right point.
         if geri_al_istendi:
             self._ai_geri_al()
 
@@ -635,9 +659,10 @@ class ConversationController(QtCore.QObject):
             self.oneri.emit(b)
 
         self.gunluk.oturum_ac(sonuc.oturum or self.transport.oturum, sonuc.model)
-        # Gunluge HARCAMA ve BAGLAM ayri yaziliyor; ikisini tek sayiya
-        # katlamak baglami 2 kat gosteren sicramayi uretmisti. `api=` de
-        # burada: sicrama yine olursa sebebi gunlukte gorunsun.
+        # SPEND and CONTEXT are written to the log separately; folding them
+        # into one number had produced the jump that showed context doubled.
+        # `api=` is here too: if the jump happens again, the reason shows up
+        # in the log.
         olcu = f"{sonuc.tk_toplam} token · context {sonuc.tk_baglam}"
         if sonuc.api_cagrisi > 1:
             olcu += f" · api={sonuc.api_cagrisi}"
@@ -647,31 +672,32 @@ class ConversationController(QtCore.QObject):
 
         if gorsel_istendi:
             if bulunan:
-                # Kod var: simdi cekmek eski hali gosterirdi. Calistiktan
-                # sonra cekilecek (bkz. blogu_calistir).
+                # There is code: capturing now would show the old state. It
+                # will be captured after it runs (see blogu_calistir).
                 self._gorsel_bekliyor = True
             else:
                 self._gorseli_gonder()
 
-    # -- gorsel kontrol ----------------------------------------------------
+    # -- visual check ------------------------------------------------------
 
     def _cakisma_metni(self, adlar: list[str]) -> str:
-        """YAKIN cekimdeki nesnelerin cakisma olcumu — metin olarak.
+        """Overlap measurement of the objects in the close-up — as text.
 
-        Neden host yapiyor da modelden istemiyoruz: olculdu (MANTIK 39),
-        model goruntuye bakip "cakisma yok" dedi ve yanildi. Yakindan
-        bakmak istedigi an dogru cevabi ELINE VERIYORUZ; bir tur daha
-        harcamiyor ve unutma ihtimali kalmiyor.
+        Why the host does it instead of asking the model: measured (MANTIK
+        39), the model looked at the image, said "no overlap" and was wrong.
+        The moment it wants to look closely we HAND IT the right answer; it
+        spends no extra turn and there is no chance of forgetting.
 
-        ODAK MODU (2026-08-27). Eskiden burada nesneler bir listeye konup
-        `cakisma_kontrol(*hepsi)` cagriliyordu ve bu, docstring'in aksine
-        TUM BELGEYI tariyordu. Olculdu (LOG/2026-08-27_9564dc71.txt): 44
-        nesne, 946 cift, 2 sn butce doldu, **431 cift hic olculmedi** ve
-        donen 38 satirin cogu gizli kesme tabanlariydi — yani sorulan
-        cevap gelmiyordu, gurultu geliyordu.
+        FOCUS MODE (2026-08-27). Objects used to be put in a list here and
+        `cakisma_kontrol(*all)` was called, which, contrary to the
+        docstring, scanned THE WHOLE DOCUMENT. Measured
+        (LOG/2026-08-27_9564dc71.txt): 44 objects, 946 pairs, the 2 s budget
+        ran out, **431 pairs were never measured**, and most of the 38 lines
+        returned were hidden cut bases — so the answer asked for was not
+        coming, noise was.
 
-        Artik `odak=` kullaniliyor: yalnizca yakin cekimdeki nesneyi
-        ilgilendiren ciftler. Ayni belgede 16 cift, 0.38 sn, 2 satir.
+        Now `odak=` is used: only the pairs that involve the object in the
+        close-up. On the same document 16 pairs, 0.38 s, 2 lines.
         """
         try:
             import FreeCAD as App
@@ -686,33 +712,33 @@ class ConversationController(QtCore.QObject):
             if not nesneler:
                 return ""
             if len(nesneler) == 1:
-                # Tek nesne: o nesneyi ILGILENDIREN ciftler. Adaylari
-                # cakisma_kontrol kendisi buluyor ve tuketilmis olanlari
-                # eliyor (bkz. kesif.tuketilmis_mi).
+                # A single object: the pairs that INVOLVE that object.
+                # cakisma_kontrol finds the candidates itself and drops the
+                # consumed ones (see kesif.tuketilmis_mi).
                 sonuc = olcum.cakisma_kontrol(odak=nesneler[0], yaz=False)
                 return sonuc.get("satir", "")
-            # Birden fazla nesne ACIKCA istendi: tam olarak onlar olculur,
-            # eleme yok — model neyi sorduysa onu alir.
+            # Several objects were asked for EXPLICITLY: exactly those are
+            # measured, no filtering — the model gets what it asked for.
             sonuc = olcum.cakisma_kontrol(*nesneler, yaz=False)
             return sonuc.get("satir", "")
         except Exception as e:                                   # noqa: BLE001
-            log.uyari(f"yakin cekim cakisma olcumu yapilamadi: {e}")
+            log.uyari(f"close-up overlap measurement failed: {e}")
             return ""
 
     def _gorsel_yerine_cikti(self, cikti: str, sebep: str) -> None:
-        """Gorsel gonderilemedi. CIKTI ONA BINMISTI — onu da yutma.
+        """The image could not be sent. THE OUTPUT WAS RIDING ON IT — don't swallow that too.
 
-        OLCULDU (LOG/2026-08-24_3ad4cef1.txt, 12:03:26): basarili bir
-        calistirmadan sonra gunluge HICBIR sey dusmedi — ne cikti ne gorsel.
-        Sebep gorsel butcesiydi, ama fatura ciktiya kesildi: cikti bu cagriya
-        BINDIRILIYOR (bkz. blogu_calistir), gorsel yolu erken donunce
-        `dolgu alani: 3080 mm2 | cakisma: 0.00 mm2` da beraberinde gitti.
-        Model, basarili bir calistirma hakkinda sifir geri bildirim aldi.
+        MEASURED (LOG/2026-08-24_3ad4cef1.txt, 12:03:26): after a successful
+        run NOTHING landed in the log — neither output nor image. The cause
+        was the image budget, but the bill went to the output: the output
+        RIDES on this call (see blogu_calistir), and when the image path
+        returned early, `fill area: 3080 mm2 | overlap: 0.00 mm2` went with
+        it. The model got zero feedback about a successful run.
 
-        Ayrica bastirma artik GUNLUGE de yaziliyor. Eskiden yalnizca panele
-        `mesaj.emit` ediliyordu; oteki butun bastirma yollari (ornegin
-        "AUTO-REPAIR budget exhausted") gunluge yaziyor. Bu yuzden logu
-        sonradan inceleyen biri o bosluga bir sebep bulamiyordu.
+        The suppression is now also written to the LOG. It used to be only
+        `mesaj.emit`-ed to the panel; every other suppression path (e.g.
+        "AUTO-REPAIR budget exhausted") writes to the log. So anyone
+        reviewing the log later could not find a reason for that gap.
         """
         self.gunluk.sistem("IMAGE NOT SENT: " + sebep)
         if not cikti:
@@ -728,31 +754,34 @@ class ConversationController(QtCore.QObject):
             kullanici_mi=False)
 
     def _kac_kare(self) -> tuple[bool, str]:
-        """Uc kare mi tek kare mi — KARARI HOST VERIYOR, model degil.
+        """Three frames or one — THE HOST DECIDES, not the model.
 
-        NEDEN DEGISTI (olculdu, LOG/2026-08-27_9564dc71.txt). Eski kural
-        "model 'GORSEL-KONTROL 3' derse uc kare"ydi, yani karar modeldeydi.
-        Sonuc: 30 gorsel gonderiminin **27'si uc kare** (%90), ve sozlesmeye
-        "uc kare varsayilan degil" yazildiktan SONRA bile oran %90 kaldi.
-        Bir sistem istemi satiri, modelin kendi baglamindaki 40 ornegi
-        yenmiyor. Kural tutmuyorsa, kurali uygulayacak yere tasinir.
+        WHY IT CHANGED (measured, LOG/2026-08-27_9564dc71.txt). The old rule
+        was "three frames if the model says 'GORSEL-KONTROL 3'", i.e. the
+        decision was the model's. Result: **27 of 30** image sends were
+        three frames (90%), and even AFTER "three frames is not the default"
+        was written into the contract the rate stayed at 90%. One system
+        prompt line does not beat 40 examples in the model's own context.
+        If a rule does not hold, it moves to where it can be enforced.
 
-        Bedeli olculdu: 30 gonderim 916 KB, tur basina ortalama 30 KB ve
-        modelin karmasiklastikca buyuyor (ilk yarida 22 KB, ikinci yarida
-        47 KB) — baglam penceresinin kabaca ucte biri.
+        The cost was measured: 30 sends, 916 KB, 30 KB per turn on average,
+        and it grows as the model gets more complex (22 KB in the first
+        half, 47 KB in the second) — roughly a third of the context window.
 
-        Kazanci olculmedi, cunku YOK: gorsel donusu olan 30 turun 7'sinde
-        model bir sorun buldu ve **yedisinde de** delil yazdirilan bir
-        sayiydi (bbox, hacim, cakisma_kontrol) — "0.2 mm tasma" gibi
-        kalemler zaten 4 piksel/mm'de gorunmez. Goruntunun tek basina
-        yakaladigi tek bulgu yok.
+        The gain was not measured, because there is NONE: in 7 of the 30
+        turns with an image, the model found a problem, and in **all seven**
+        the evidence was a printed number (bbox, volume, cakisma_kontrol) —
+        items like "0.2 mm overhang" are invisible at 4 pixels/mm anyway.
+        There is not a single finding the image caught on its own.
 
-        Uc kare hakki iki durumda veriliyor:
-          * son blok YENI NESNE ekledi — uzayda yeri hic kanitlanmamis bir
-            sey var, tek aci "havada mi duruyor"u kapatmaz; ya da
-          * bu arka arkaya ikinci bakis — ilk kare soruyu kapatmamis.
-        Ikisi de yoksa tek kare gider ve modele NEDEN tek kare oldugu
-        soylenir; yoksa ayni istegi tekrarlar.
+        The three-frame allowance is granted in two cases:
+          * the last block added a NEW OBJECT — there is something whose
+            place in space was never proven, one angle does not settle
+            "is it floating"; or
+          * this is the second look in a row — the first frame did not
+            settle the question.
+        If neither holds, one frame is sent and the model is told WHY it
+        was one frame; otherwise it repeats the same request.
         """
         istedi = self._gorsel_cok
         yeni_nesne = bool(self._son_eklenen)
@@ -773,70 +802,76 @@ class ConversationController(QtCore.QObject):
         return False, ""
 
     def _gorseli_gonder(self, cikti: str = "") -> None:
-        """3B gorunumu yakalayip modele yollar. Basarisizlikta sessiz kalmaz.
+        """Captures the 3D view and sends it to the model. Does not stay silent on failure.
 
-        `cikti` verilirse ayni mesaja bindirilir: kod hem bir sey yazdirmis
-        hem gorsel istenmisse iki tur harcamanin anlami yok.
+        If `cikti` is given it rides on the same message: if the code both
+        printed something and an image was requested, there is no point
+        spending two turns.
         """
         self._gorsel_bekliyor = False
 
-        # GORSEL KAPALI (bkz. GORSEL_ACIK). En basta duruyor ki asagidaki
-        # sayaclarin hicbirini kirletmesin; acildiginda eski davranis
-        # oldugu gibi geri gelsin.
+        # IMAGES OFF (see GORSEL_ACIK). This sits at the very top so it does
+        # not pollute any of the counters below; when turned on, the old
+        # behaviour comes back as it was.
         #
-        # Model yine de isteyebilir (sozlesmede madde kalmasa bile eski
-        # aliskanlikla yazabilir). O yuzden SESSIZ KALMIYORUZ: cikti
-        # gonderiliyor ve "goruntuye bakmis gibi konusma" deniyor.
+        # The model may still ask (even without the clause in the contract
+        # it can write it out of old habit). So we DO NOT STAY SILENT: the
+        # output is sent and it is told "don't talk as if you looked at an
+        # image".
         if not GORSEL_ACIK:
             self._gorsel_cok = False
             self._son_eklenen = []
             self._gorsel_yakin = []
             self._gorsel_yerine_cikti(
-                cikti, "gorsel sistemi kapali — olcerek ilerle")
+                cikti, "the image system is off — proceed by measuring")
             return
 
-        # DONGU EMNIYETI: model resme bakip yine resim isteyebilir. Iki tur
-        # yeter; ucuncude durup topu kullaniciya birakiyoruz.
+        # LOOP SAFETY: the model can look at the image and ask for an image
+        # again. Two turns are enough; on the third we stop and hand the
+        # ball to the user.
         #
-        # SAYAC NEYI SAYAR. Yalnizca ARKA ARKAYA, arada is yapilmadan gelen
-        # bakislari. Kod calistiginda sifirlaniyor (bkz. blogu_calistir),
-        # cunku korumanin hedefi "bakip yine bakmak"ti, "bak - degistir -
-        # yine bak" degil. Olculdu (LOG/2026-08-24_3ad4cef1.txt): Opus
-        # 11:46 / 11:53 / 11:58'de bakti, her bakis arasinda GERI-AL verip
-        # yeni kod yazdi — yani tam da istedigimiz dongu — ve dorduncude
-        # butce doldugu icin cezalandirildi.
+        # WHAT THE COUNTER COUNTS. Only looks that come IN A ROW, with no
+        # work done in between. It is reset when code runs (see
+        # blogu_calistir), because the guard was aimed at "look, then look
+        # again", not "look - change - look again". Measured
+        # (LOG/2026-08-24_3ad4cef1.txt): Opus looked at 11:46 / 11:53 /
+        # 11:58, gave GERI-AL between each look and wrote new code — exactly
+        # the loop we want — and was penalised on the fourth because the
+        # budget was full.
         if self._gorsel_tur >= _GORSEL_SINIR:
             self.mesaj.emit("sistem",
                             f"The AI asked for a visual check {_GORSEL_SINIR} "
                             "times in a row; stopped. You can describe "
                             "what it should look at.")
             self._gorsel_yerine_cikti(
-                cikti, f"arka arkaya {_GORSEL_SINIR} kez istendi, durduruldu")
+                cikti, f"requested {_GORSEL_SINIR} times in a row, stopped")
             return
 
         if not gorunum.yakalanabilir_mi():
             self.mesaj.emit("sistem",
                             "The AI wanted to see the 3D view but there "
                             "is no active 3D window. Open a document and retry.")
-            self._gorsel_yerine_cikti(cikti, "acik 3B pencere yok")
+            self._gorsel_yerine_cikti(cikti, "no open 3D window")
             return
 
         cok_aci, kare_notu = self._kac_kare()
         self._gorsel_cok = False
-        # Hak BIR KEZ kullanilir. Temizlemezsek bir onceki turda eklenmis
-        # nesne, sonraki bakislara da uc kare hakki vermeye devam ederdi.
+        # The allowance is used ONCE. If we did not clear it, an object added
+        # in an earlier turn would keep granting three frames to later looks.
         self._son_eklenen = []
         yakin = list(self._gorsel_yakin)
         self._gorsel_yakin = []
 
         if yakin:
-            # YAKIN CEKIM. Genel kare ince isi gostermiyor: 201 mm'lik bir
-            # modelde 900x640 kare ~4 piksel/mm, yani 0.6 mm'lik parca 2
-            # piksel (olculdu, MANTIK 39). Kamera nesneye yaklasiyor.
+            # CLOSE-UP. The general frame does not show fine work: on a
+            # 201 mm model a 900x640 frame is ~4 pixels/mm, so a 0.6 mm part
+            # is 2 pixels (measured, MANTIK 39). The camera moves in on the
+            # object.
             kareler = gorunum.yakala_yakin(yakin, cok_aci=cok_aci)
             if not kareler:
-                # Yaklasamadiysak SESSIZ kalmiyoruz: normal kareye dusuyoruz
-                # ve modele bunu soyluyoruz (asagida istem metninde).
+                # If we could not zoom in we DO NOT stay silent: we fall back
+                # to the normal frame and tell the model (in the prompt text
+                # below).
                 tek = gorunum.yakala()
                 kareler = [tek] if tek else []
                 yakin_dustu = True
@@ -854,7 +889,7 @@ class ConversationController(QtCore.QObject):
             self.mesaj.emit("sistem",
                             "The AI asked for the 3D view but the capture "
                             "failed (details in the Report view).")
-            self._gorsel_yerine_cikti(cikti, "goruntu alinamadi")
+            self._gorsel_yerine_cikti(cikti, "the image could not be captured")
             return
 
         veri = kareler if len(kareler) > 1 else kareler[0]
@@ -885,14 +920,15 @@ class ConversationController(QtCore.QObject):
                      "fix. If one angle is not enough to be sure, do not "
                      "guess: end your reply with GORSEL-KONTROL 3 to look "
                      "from three angles.")
-        # Host uc kareyi tek kareye indirdiyse SEBEBINI soyluyoruz. Sessizce
-        # indirmek modeli ayni istegi tekrarlamaya iter.
+        # If the host reduced three frames to one, we say WHY. Reducing it
+        # silently pushes the model to repeat the same request.
         istem += kare_notu
 
-        # YAKIN CEKIMDE OLCUM DE GIDIYOR. Kullanicinin karari: "yakindan
-        # baksin ve ayrintili incelesin" + goruntuyle birlikte sayi. Cakisma
-        # sorusu zaten goruntuyle kapanmiyor (MANTIK 39), o yuzden ayni
-        # mesajda deterministik cevabi da veriyoruz — ek tur harcamadan.
+        # IN A CLOSE-UP THE MEASUREMENT GOES TOO. The user's decision: "let
+        # it look closely and inspect in detail" + numbers along with the
+        # image. The overlap question is not settled by the image anyway
+        # (MANTIK 39), so we give the deterministic answer in the same
+        # message too — without spending an extra turn.
         if yakin:
             istem = (f"CLOSE-UP: the camera zoomed in on — "
                      f"{', '.join(yakin)}. " + istem)
@@ -912,23 +948,25 @@ class ConversationController(QtCore.QObject):
         self.gonder(istem, gorsel=veri, kullanici_mi=False)
 
     def _bilgi(self, s: TurSonucu, blok_sayisi: int) -> tuple[str, str]:
-        """Alt bilgi cubugu metni + ipucu.
+        """Footer bar text + hint.
 
-        Dolar YERINE token gosteriliyor: abonelikte dolar tahsil edilmiyor,
-        o rakam yalnizca "API fiyatiyla yapilsaydi" karsiligiydi ve
-        "para harciyorum" diye yanlis anlasildi. Token ise gercekten
-        kullanilan kaynak.
+        Tokens are shown INSTEAD OF dollars: on a subscription no dollars
+        are charged, that figure was only the "if it were done at API
+        prices" equivalent and was misread as "I'm spending money". Tokens
+        are the resource actually used.
         """
         satir = [f"{s.sure_ms / 1000:.1f} s"]
         if s.model:
             satir.append(s.model)
         satir.append(f"{_kisa_sayi(s.tk_toplam)} token")
-        # BAGLAM DOLULUGU. Limiti CLI bildirmiyor (init ve result alanlarinin
-        # tamami tarandi), o yuzden modelin katalog degeri sabit yaziliyor -
-        # bkz. config.BAGLAM_SINIRI. Kullanilan taraf ise gercek olcum.
+        # CONTEXT FILL. The CLI does not report the limit (every field of
+        # init and result was scanned), so the model's catalog value is
+        # hard-coded - see config.BAGLAM_SINIRI. The used side is a real
+        # measurement.
         satir.append(f"{_kisa_sayi(s.tk_baglam)}/{config.baglam_siniri_kisa()} context")
-        # "0 kod blogu" yazmiyoruz: bilgi tasimayan gurultu, kullanici hakli
-        # olarak "o ne, gereksizse sil" dedi. Sifirdan buyukse anlamli.
+        # We don't write "0 code blocks": noise that carries no information,
+        # the user rightly said "what is that, delete it if it's useless".
+        # Above zero it is meaningful.
         if blok_sayisi:
             satir.append(f"{blok_sayisi} code block" + ("s" if blok_sayisi > 1 else ""))
 

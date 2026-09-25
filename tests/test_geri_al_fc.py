@@ -341,7 +341,7 @@ import inspect
 from caddy.ui import dock as _dock
 
 kaynak = inspect.getsource(_dock.CaddyPanel._arac_cubugu)
-kontrol("arac cubugunda 'İleri al' dugmesi var", "İleri al" in kaynak, kaynak[:200])
+kontrol("arac cubugunda 'İleri al' dugmesi var", "Redo" in kaynak, kaynak[:200])
 kontrol("dugme ileri_al'a bagli", "self.ileri_al" in kaynak, kaynak[:400])
 kontrol("panelde ileri_al metodu var", hasattr(_dock.CaddyPanel, "ileri_al"))
 kontrol("panel metodu controller'i cagiriyor",

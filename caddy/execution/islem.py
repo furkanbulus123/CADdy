@@ -1,29 +1,30 @@
-"""FreeCAD'in HAZIR yeteneklerini modele tek cagri olarak acan yardimcilar.
+"""Helpers that expose FreeCAD's READY-MADE capabilities to the model as a single call.
 
-NEDEN VAR. Model, FreeCAD'de tek cagri olan isleri elle yaziyordu ve bunu
-yaparken modeli bozuyordu. Gunlukte olculdu (LOG/2026-08-20_baa70fa4.txt):
-flood-fill ile parca ayirma, sinir dongusu orerek delik kapatma, BFS ile
-normal duzeltme — uc tur ust uste denendi, her seferinde govdede GERCEK
-DELIK acildi ve kullanici geri almak zorunda kaldi. Ayni isi yapan hazir
-zincir sekiz satir ve 0.024 saniye.
+WHY IT EXISTS. The model was hand-writing jobs that are a single call in
+FreeCAD, and damaging the model while doing it. Measured in the log
+(LOG/2026-08-20_baa70fa4.txt): splitting parts with flood-fill, closing
+holes by stitching boundary loops, fixing normals with BFS — tried three
+turns in a row, and each time a REAL HOLE was torn in the body and the user
+had to undo. The ready-made chain that does the same job is eight lines and
+0.024 seconds.
 
-HIZ. Bu modul turlari yavaslatmiyor, HIZLANDIRIYOR. Gecikmeyi belirleyen
-sey uretilen token: gunlugun en yavas turlari (149.6 sn, 118.5 sn) tam
-olarak modelin 45-50 satir elle geometri yazdigi turlar. `mesh_onar()`
-yazmak bir buyukluk mertebesi hizli.
+SPEED. This module does not slow turns down, it SPEEDS THEM UP. What
+determines latency is generated tokens: the slowest turns in the log
+(149.6 s, 118.5 s) are exactly the turns where the model hand-wrote 45-50
+lines of geometry. Writing `mesh_onar()` is an order of magnitude faster.
 
-ORTAK KURAL: YARDIMCI KENDI ETKISINI DOGRULAR.
-`PartDesign::PolarPattern` olculurken cikan ders: primitif uzerinde hata
-VERMIYOR, State "Up-to-date" diyor, hacim degismiyor — sessizce tek kopya
-birakiyor. Model "6 delik actim" der, belgede bir delik vardir. O yuzden
-buradaki her yardimci isini yaptiktan sonra sonucu OLCER ve bekledigini
-bulamazsa acikca soyler. Olcum katmanindaki "YUVARLAK DEGIL" kalibinin
-aynisi.
+COMMON RULE: A HELPER VERIFIES ITS OWN EFFECT.
+The lesson from measuring `PartDesign::PolarPattern`: on a primitive it
+does NOT raise an error, State says "Up-to-date", the volume does not
+change — it silently leaves a single copy. The model says "I made 6 holes",
+the document has one hole. So every helper here MEASURES the result after
+doing its job and says so plainly if it does not find what it expected. The
+same pattern as "NOT ROUND" in the measurement layer.
 
-Hepsi print ediyor: cikti otomatik olarak modele donuyor.
-Hicbiri istisna sizdirmiyor.
+They all print: the output goes back to the model automatically.
+None of them leaks an exception.
 
-KATMAN KURALI (MANTIK 12): burada Qt YOK.
+LAYER RULE (MANTIK 12): NO Qt here.
 """
 
 from __future__ import annotations
@@ -36,16 +37,16 @@ import FreeCAD as App
 
 from . import olcum
 
-# 3B baski malzemelerinin yogunluklari (g/cm3).
+# Densities of 3D printing materials (g/cm3).
 YOGUNLUK = {
     "PLA": 1.24, "PETG": 1.27, "ABS": 1.04, "ASA": 1.07,
     "TPU": 1.21, "NAYLON": 1.14, "PA": 1.14, "RECINE": 1.15,
     "PC": 1.20, "PP": 0.90,
 }
 
-# Mesh'ten katiya cevirmede ust sinir. Uzerinde her ucgen bir YUZ oluyor:
-# olculdu, 8000 facet -> 8000 yuzlu kati, 4.64 sn. Boyle bir katida her
-# boolean aci verici sekilde yavas.
+# Upper limit for converting a mesh to a solid. Above it, every triangle
+# becomes a FACE: measured, 8000 facets -> an 8000-face solid, 4.64 s. On
+# such a solid every boolean is painfully slow.
 AZAMI_FACET = 4000
 
 
@@ -80,17 +81,18 @@ def _mesh_durumu(m) -> dict:
 
 
 def _mesh_kati(m, azami_facet: int = AZAMI_FACET):
-    """Mesh -> Part katisi. BELGEYE NESNE EKLEMEZ. (kati, son_facet) doner.
+    """Mesh -> Part solid. ADDS NO OBJECT TO THE DOCUMENT. Returns (solid, final_facets).
 
-    Hem `kati_yap` hem `birlestir`in mesh yolu bunu kullaniyor — donusumun
-    tek bir yerde durmasi, iki yolun sessizce ayrisamamasi demek.
+    Both `kati_yap` and the mesh path of `birlestir` use this — keeping the
+    conversion in one place means the two paths cannot silently diverge.
 
-    Facet siniri KRITIK, olculdu (silindir+torus, katiya cevir + fuse +
-    mesh'e geri don):
-        2 172 facet ->  2.9 sn   kapali, kesismesiz, 1 parca
-        3 784 facet ->  7.4 sn   kapali, kesismesiz, 1 parca
-       32 756 facet -> 59.2 sn   gecerli kati AMA mesh'te KESISME var
-    Yani sinir yalnizca hiz icin degil, SONUCUN TEMIZLIGI icin de var.
+    The facet limit is CRITICAL, measured (cylinder+torus, convert to solid
+    + fuse + back to mesh):
+        2 172 facets ->  2.9 s   closed, no self-intersection, 1 component
+        3 784 facets ->  7.4 s   closed, no self-intersection, 1 component
+       32 756 facets -> 59.2 s   valid solid BUT the mesh has SELF-INTERSECTIONS
+    So the limit is not only for speed, it is also for the CLEANLINESS OF THE
+    RESULT.
     """
     import Part
 
@@ -109,26 +111,27 @@ def _mesh_kati(m, azami_facet: int = AZAMI_FACET):
 
 
 def _kati_baski_gercegi(sekil, sapma: float = 0.1):
-    """KATI bir sonucun BASKI gercegi. (durum, sure_sn) doner; olmazsa None.
+    """The PRINT reality of a SOLID result. Returns (state, seconds); None if it fails.
 
-    NEDEN BURADA. `dogrulama` kendiyle kesisme kontrolunu KATI (BRep)
-    nesnelerde KOSMUYOR — OCC'de pahali ve her calistirmada her nesne icin
-    odenirdi. Ama `birlestir` zaten saniyeler suren bir islem, ve kesisme
-    uretmeye en yatkin yer tam da orasi.
+    WHY HERE. `dogrulama` does NOT RUN the self-intersection check on SOLID
+    (BRep) objects — it is expensive in OCC and would be paid for every
+    object on every run. But `birlestir` is already an operation that takes
+    seconds, and it is exactly the place most likely to produce
+    self-intersections.
 
-    OLCULEN KAYIP (LOG/2026-08-24_3ad4cef1.txt, 12:08 -> 12:09): birlestir
-    "hacim=5.551e+04 mm3, 1 kati" dedi, dogrulama "kati=1" dedi, sekil
-    isValid() True idi. AYNI sekil 0.05 mm'de mesh'lenince kapali degil +
-    kendini kesen + non-manifold cikti. Yani 108 saniyelik islem yanlis bir
-    guven verdi ve hata ancak disa aktarma aninda, isin sonunda ortaya cikti.
-    `isValid()` ve `Solids == 1` baskiya hazir demek DEGILDIR.
+    MEASURED LOSS (LOG/2026-08-24_3ad4cef1.txt, 12:08 -> 12:09): birlestir
+    said "volume=5.551e+04 mm3, 1 solid", verification said "solid=1", the
+    shape's isValid() was True. The SAME shape meshed at 0.05 mm came out
+    not closed + self-intersecting + non-manifold. So a 108-second operation
+    gave false confidence, and the error only showed up at export, at the
+    end of the job. `isValid()` and `Solids == 1` do NOT mean ready to print.
 
-    MALIYET OLCULDU — kontrol (mesh'leme + uc soru) / islemin kendisi:
-        iki kutu           0.047 sn / connect 0.285 sn
-        silindir + kure    0.064 sn / connect 0.059 sn
-        mesh kokenli kati  0.929 sn / fuse    1.802 sn
-    En kotu durumda ~1 sn, ve riskin en yuksek oldugu mesh kokenli yolda
-    islemin kucuk bir yuzdesi. Bu yuzden kosulsuz kosuyor.
+    COST MEASURED — the check (meshing + three questions) / the operation:
+        two boxes              0.047 s / connect 0.285 s
+        cylinder + sphere      0.064 s / connect 0.059 s
+        mesh-derived solid     0.929 s / fuse    1.802 s
+    ~1 s in the worst case, and a small percentage of the operation on the
+    mesh-derived path where the risk is highest. So it runs unconditionally.
     """
     import time
 
@@ -144,54 +147,54 @@ def _kati_baski_gercegi(sekil, sapma: float = 0.1):
 
 
 def _baski_verdikti(d: dict) -> list:
-    """Baski acisindan neyin bozuk oldugu. Bos liste = temiz."""
+    """What is broken from a printing point of view. Empty list = clean."""
     sorun = []
     if d.get("kapali") is False:
-        sorun.append("kapali degil (su sizdirmaz degil)")
+        sorun.append("not closed (not watertight)")
     if d.get("kesisme"):
-        sorun.append("kendiyle kesisme var — isValid() bunu YAKALAMAZ")
+        sorun.append("self-intersecting — isValid() does NOT catch this")
     if d.get("manifold_disi"):
         sorun.append("non-manifold")
     if d.get("parca") not in (None, 1):
-        sorun.append(f"{d['parca']} ayri parca")
+        sorun.append(f"{d['parca']} separate components")
     return sorun
 
 
 def _durum_metni(d: dict) -> str:
-    p = [("kapali" if d.get("kapali") else "ACIK"),
-         f"facet={d.get('facet')}"]
+    p = [("closed" if d.get("kapali") else "OPEN"),
+         f"facets={d.get('facet')}"]
     if d.get("parca") not in (None, 1):
-        p.append(f"parca={d['parca']}")
+        p.append(f"components={d['parca']}")
     if d.get("kesisme"):
-        p.append("KESISME")
+        p.append("SELF-INTERSECTING")
     if d.get("manifold_disi"):
-        p.append("MANIFOLD-DISI")
+        p.append("NON-MANIFOLD")
     return " ".join(p)
 
 
 # ==========================================================================
-# TUR 1 — indirilen mesh'i calisilabilir hale getir
+# ROUND 1 — make a downloaded mesh workable
 # ==========================================================================
 
 def mesh_onar(nesne=None, yaz: bool = True) -> dict:
-    """Mesh'i FreeCAD'in kendi onarim zinciriyle duzeltir.
+    """Fixes a mesh with FreeCAD's own repair chain.
 
-    ZINCIR (sirasi onemli): tekrarlanan noktalar -> indeksler -> dejenere
-    ucgenler -> kendiyle kesisme -> non-manifold -> delikler -> normaller.
+    THE CHAIN (order matters): duplicated points -> indices -> degenerate
+    triangles -> self-intersections -> non-manifolds -> holes -> normals.
 
-    Bu, elle yazilan "flood-fill + sinir dongusu orme" denemelerinin
-    yerini alir. Olculdu: delikli bir mesh'te isSolid False -> True,
-    0.024 sn.
+    This replaces the hand-written "flood-fill + boundary loop stitching"
+    attempts. Measured: on a mesh with a hole, isSolid False -> True,
+    0.024 s.
 
-    Zaten temiz bir mesh'e DOKUNMAZ: gereksiz yere facet degistirmek
-    kullanicinin modelini sebepsiz bozmaktir.
+    It DOES NOT TOUCH an already clean mesh: changing facets for no reason
+    is damaging the user's model for nothing.
     """
     nesne = _hedef(nesne)
     m = _mesh_al(nesne)
     if m is None:
         if yaz:
-            print("mesh_onar: bu bir mesh nesnesi degil "
-                  "(kati icin Shape.fix/removeSplitter'a bak)")
+            print("repair_mesh: this is not a mesh object "
+                  "(for a solid look at Shape.fix/removeSplitter)")
         return {}
 
     ad = getattr(nesne, "Name", "?")
@@ -199,67 +202,67 @@ def mesh_onar(nesne=None, yaz: bool = True) -> dict:
     if (once.get("kapali") and not once.get("kesisme")
             and not once.get("manifold_disi")):
         if yaz:
-            print(f"{ad}: zaten temiz ({_durum_metni(once)}) — dokunulmadi")
+            print(f"{ad}: already clean ({_durum_metni(once)}) — not touched")
         return {"degisti": False, "once": once, "sonra": once}
 
     t0 = time.time()
     yeni = m.copy()
     adimlar = []
     for adim, cagri in (
-            ("tekrar eden noktalar", lambda: yeni.removeDuplicatedPoints()),
-            ("indeksler", lambda: yeni.fixIndices()),
-            ("dejenere ucgenler", lambda: yeni.fixDegenerations(0.001)),
-            ("kendiyle kesisme", lambda: yeni.fixSelfIntersections()),
+            ("duplicated points", lambda: yeni.removeDuplicatedPoints()),
+            ("indices", lambda: yeni.fixIndices()),
+            ("degenerate triangles", lambda: yeni.fixDegenerations(0.001)),
+            ("self-intersections", lambda: yeni.fixSelfIntersections()),
             ("non-manifold", lambda: yeni.removeNonManifolds()),
-            ("delikler", lambda: yeni.fillupHoles(1000, 0)),
-            ("normaller", lambda: yeni.harmonizeNormals())):
+            ("holes", lambda: yeni.fillupHoles(1000, 0)),
+            ("normals", lambda: yeni.harmonizeNormals())):
         try:
             cagri()
         except Exception as e:                                   # noqa: BLE001
-            adimlar.append(f"{adim}(atlandi: {e})")
+            adimlar.append(f"{adim}(skipped: {e})")
 
     try:
         nesne.Mesh = yeni
     except Exception as e:                                       # noqa: BLE001
         if yaz:
-            print(f"mesh_onar: sonuc yazilamadi ({e})")
+            print(f"repair_mesh: could not write the result ({e})")
         return {}
 
     sonra = _mesh_durumu(yeni)
     d = {"degisti": True, "once": once, "sonra": sonra,
          "sure": time.time() - t0}
     if yaz:
-        print(f"{ad} onarildi ({d['sure']:.2f} sn): "
+        print(f"{ad} repaired ({d['sure']:.2f} s): "
               f"{_durum_metni(once)}  ->  {_durum_metni(sonra)}")
         for a in adimlar:
             print(f"    {a}")
-        # DURUSTLUK: zincir her seyi duzeltemez. Duzelmedigini soylemek,
-        # "onardim" deyip birakmaktan iyidir.
+        # HONESTY: the chain cannot fix everything. Saying what did not get
+        # fixed is better than saying "repaired" and leaving it.
         kalan = []
         if not sonra.get("kapali"):
-            kalan.append("hala ACIK (delik cok buyuk olabilir)")
+            kalan.append("still OPEN (the hole may be too large)")
         if sonra.get("kesisme"):
-            kalan.append("hala kendiyle kesisiyor")
+            kalan.append("still self-intersecting")
         if sonra.get("manifold_disi"):
-            kalan.append("hala non-manifold")
+            kalan.append("still non-manifold")
         if kalan:
-            print("    KALAN SORUN: " + ", ".join(kalan))
+            print("    REMAINING PROBLEM: " + ", ".join(kalan))
     return d
 
 
 def kati_yap(nesne=None, azami_facet: int = AZAMI_FACET, yaz: bool = True):
-    """Mesh'i KATIYA cevirir — parametrik araclarin kapisi.
+    """Converts a mesh into a SOLID — the door to the parametric tools.
 
-    NEDEN GEREKLI: ice aktarilan (STL/OBJ/3MF) her sey mesh. Mesh'te fillet yok,
-    pocket yok, boolean zor. Katiya cevirince FreeCAD'in tum Part/PartDesign
-    araclari acilir.
+    WHY IT IS NEEDED: everything imported (STL/OBJ/3MF) is a mesh. A mesh has
+    no fillet, no pocket, and booleans are hard. Converted to a solid, all of
+    FreeCAD's Part/PartDesign tools open up.
 
-    IKI DURUSTLUK KURALI:
-      * Mesh KAPALI DEGILSE reddeder. Acik bir mesh'ten yapilan "kati" bir
-        yalandir; once mesh_onar cagrilmali.
-      * Sonuc PARAMETRIK DEGILDIR ve bunu soyler. Olculdu: 8000 facet ->
-        8000 YUZLU kati, 4.64 sn. Facet siniri asilirsa once decimate
-        uygulanir ve kaca indigi yazilir.
+    TWO HONESTY RULES:
+      * If the mesh is NOT CLOSED it refuses. A "solid" made from an open
+        mesh is a lie; mesh_onar has to be called first.
+      * The result is NOT PARAMETRIC and it says so. Measured: 8000 facets
+        -> an 8000-FACE solid, 4.64 s. If the facet limit is exceeded,
+        decimate is applied first and the new count is printed.
     """
     import Part
 
@@ -267,16 +270,16 @@ def kati_yap(nesne=None, azami_facet: int = AZAMI_FACET, yaz: bool = True):
     m = _mesh_al(nesne)
     if m is None:
         if yaz:
-            print("kati_yap: bu bir mesh nesnesi degil")
+            print("make_solid: this is not a mesh object")
         return None
 
     ad = getattr(nesne, "Name", "?")
     durum = _mesh_durumu(m)
     if not durum.get("kapali"):
         if yaz:
-            print(f"kati_yap: {ad} KAPALI DEGIL ({_durum_metni(durum)}). "
-                  f"Acik bir mesh'ten yapilan kati yaniltir — once "
-                  f"mesh_onar({ad}) calistir.")
+            print(f"make_solid: {ad} is NOT CLOSED ({_durum_metni(durum)}). "
+                  f"A solid made from an open mesh is misleading — run "
+                  f"repair_mesh({ad}) first.")
         return None
 
     t0 = time.time()
@@ -284,12 +287,12 @@ def kati_yap(nesne=None, azami_facet: int = AZAMI_FACET, yaz: bool = True):
         kati, facet_sonra = _mesh_kati(m, azami_facet)
     except Exception as e:                                       # noqa: BLE001
         if yaz:
-            print(f"kati_yap: donusum basarisiz ({e})")
+            print(f"make_solid: conversion failed ({e})")
         return None
 
     doc = App.ActiveDocument
     yeni = doc.addObject("Part::Feature", ad + "_kati")
-    yeni.Label = (getattr(nesne, "Label", ad) or ad) + " (kati)"
+    yeni.Label = (getattr(nesne, "Label", ad) or ad) + " (solid)"
     yeni.Shape = kati
 
     try:
@@ -303,40 +306,41 @@ def kati_yap(nesne=None, azami_facet: int = AZAMI_FACET, yaz: bool = True):
         try:
             hm = float(m.Volume)
             if hm:
-                sapma = f", hacim sapmasi %{abs(kati.Volume - hm) / hm * 100:.2f}"
+                sapma = f", volume deviation {abs(kati.Volume - hm) / hm * 100:.2f}%"
         except Exception:
             pass
-        print(f"{ad} -> {yeni.Name}: kati, {len(kati.Faces)} yuz, "
-              f"hacim={_sayi(kati.Volume)} mm3{sapma} ({sure:.2f} sn)")
+        print(f"{ad} -> {yeni.Name}: solid, {len(kati.Faces)} faces, "
+              f"volume={_sayi(kati.Volume)} mm3{sapma} ({sure:.2f} s)")
         facet = durum.get("facet") or 0
         if facet_sonra != facet:
-            print(f"    facet {facet} -> {facet_sonra} "
-                  f"(sinir {azami_facet}, decimate uygulandi)")
+            print(f"    facets {facet} -> {facet_sonra} "
+                  f"(limit {azami_facet}, decimate applied)")
         if not kati.isValid():
-            print("    UYARI: kati isValid() False — boolean'lar bunun "
-                  "uzerine kurulursa hata zincirin sonunda cikar")
-        print("    NOT: bu PARAMETRIK bir kati degil, her ucgen bir yuz. "
-              "Duzenlenebilir bir parca isteniyorsa olculeri alip sifirdan "
-              "kurmak gerekir.")
+            print("    WARNING: solid isValid() is False — if booleans are "
+                  "built on it, the error surfaces at the end of the chain")
+        print("    NOTE: this is NOT a PARAMETRIC solid, every triangle is a "
+              "face. If an editable part is wanted, take the dimensions and "
+              "build it from scratch.")
     return yeni
 
 
 def icini_bosalt(nesne=None, kalinlik: float = 2.0, acik_yuz=None,
                  yaz: bool = True):
-    """Kati bir govdenin icini bosaltir (kabuk) — kupa, kutu, muhafaza.
+    """Hollows out a solid body (shell) — cup, box, enclosure.
 
-    TUZAK (olculdu): `makeThickness` yuzu AYNI shape ORNEGINDEN ister.
-    Sekli iki kez kurup yuzu obur ornekten vermek
-    "face does not belong to the shape" hatasi veriyor. Burada yuz her
-    zaman uzerinde calisilan shape'ten seciliyor.
+    TRAP (measured): `makeThickness` wants the face from the SAME shape
+    INSTANCE. Building the shape twice and passing the face from the other
+    instance gives "face does not belong to the shape". Here the face is
+    always picked from the shape being worked on.
 
-    `acik_yuz` verilmezse en USTTEKI yuz acilir (kupa/kutu icin dogrusu).
+    If `acik_yuz` is not given, the TOPMOST face is opened (right for a
+    cup/box).
     """
     nesne = _hedef(nesne)
     s = _sekil_al(nesne)
     if s is None:
         if yaz:
-            print("icini_bosalt: kati nesne gerek (mesh icin once kati_yap)")
+            print("hollow: needs a solid object (for a mesh, make_solid first)")
         return None
 
     ad = getattr(nesne, "Name", "?")
@@ -346,7 +350,7 @@ def icini_bosalt(nesne=None, kalinlik: float = 2.0, acik_yuz=None,
         yuzler = []
     if not yuzler:
         if yaz:
-            print(f"icini_bosalt: {ad} yuzsuz")
+            print(f"hollow: {ad} has no faces")
         return None
 
     if acik_yuz is None:
@@ -354,7 +358,7 @@ def icini_bosalt(nesne=None, kalinlik: float = 2.0, acik_yuz=None,
     elif isinstance(acik_yuz, int):
         if not 0 <= acik_yuz < len(yuzler):
             if yaz:
-                print(f"icini_bosalt: yuz {acik_yuz} yok "
+                print(f"hollow: there is no face {acik_yuz} "
                       f"(0..{len(yuzler) - 1})")
             return None
         yuz = yuzler[acik_yuz]
@@ -366,13 +370,13 @@ def icini_bosalt(nesne=None, kalinlik: float = 2.0, acik_yuz=None,
         kabuk = s.makeThickness([yuz], -abs(kalinlik), 1e-3)
     except Exception as e:                                       # noqa: BLE001
         if yaz:
-            print(f"icini_bosalt: olmadi ({e}). Kalinlik govdeye gore cok "
-                  f"buyuk olabilir; daha kucuk bir deger dene.")
+            print(f"hollow: failed ({e}). The thickness may be too large for "
+                  f"the body; try a smaller value.")
         return None
 
     doc = App.ActiveDocument
     yeni = doc.addObject("Part::Feature", ad + "_kabuk")
-    yeni.Label = (getattr(nesne, "Label", ad) or ad) + f" (kabuk {kalinlik}mm)"
+    yeni.Label = (getattr(nesne, "Label", ad) or ad) + f" (shell {kalinlik}mm)"
     yeni.Shape = kabuk
     try:
         nesne.Visibility = False
@@ -381,50 +385,51 @@ def icini_bosalt(nesne=None, kalinlik: float = 2.0, acik_yuz=None,
 
     if yaz:
         h = float(kabuk.Volume or 0.0)
-        print(f"{ad} -> {yeni.Name}: kabuk {kalinlik} mm, "
-              f"hacim {_sayi(onceki_hacim)} -> {_sayi(h)} mm3")
-        # DOGRULAMA: kabuk hacmi orijinalin bir kismi olmali. Neredeyse
-        # ayniysa islem GORUNMEZ kalmistir.
+        print(f"{ad} -> {yeni.Name}: shell {kalinlik} mm, "
+              f"volume {_sayi(onceki_hacim)} -> {_sayi(h)} mm3")
+        # VERIFICATION: the shell volume should be a fraction of the
+        # original. If it is almost the same, the operation stayed
+        # INVISIBLE.
         if onceki_hacim and h > 0.9 * onceki_hacim:
-            print("    UYARI: hacim neredeyse degismedi — kabuk olusmamis "
-                  "olabilir, acik yuzu kontrol et")
+            print("    WARNING: the volume barely changed — the shell may not "
+                  "have formed, check the open face")
         if not kabuk.isValid():
-            print("    UYARI: sonuc isValid() False")
+            print("    WARNING: result isValid() is False")
     return yeni
 
 
 # ==========================================================================
-# TUR 2 — olculer TABLODA (Spreadsheet + ifade motoru)
+# ROUND 2 — dimensions in a TABLE (Spreadsheet + expression engine)
 # ==========================================================================
 
 TABLO_ADI = "Olculer"
 
 
 def olcu_tablosu(_ad: str = TABLO_ADI, yaz: bool = True, **degerler):
-    """Olculeri bir TABLOYA koyar; ozellikler oraya baglanabilir.
+    """Puts dimensions into a TABLE; properties can be bound to it.
 
-    NEDEN: "Birak duzenlenebilir olsun" kuralinin en guclu hali. Olculer
-    kodun icine gomulu sabitler oldugunda kullanici her degisiklik icin
-    AI'a donmek zorunda. Tabloda olunca tek hucreyi degistirip modeli
-    guncelliyor.
+    WHY: the strongest form of the "leave it editable" rule. When the
+    dimensions are constants buried in the code, the user has to go back to
+    the AI for every change. In a table they change one cell and the model
+    updates.
 
         olcu_tablosu(cap=55.5, yukseklik=95, duvar=2)
         bagla(govde, "Radius", "Olculer.cap / 2")
 
-    Olculdu: setAlias + setExpression calisiyor, Radius = 27.75 mm.
+    Measured: setAlias + setExpression works, Radius = 27.75 mm.
     """
     doc = App.ActiveDocument
     if doc is None:
         if yaz:
-            print("olcu_tablosu: acik belge yok")
+            print("dimension_table: no open document")
         return None
 
     sh = doc.getObject(_ad)
     if sh is None:
         sh = doc.addObject("Spreadsheet::Sheet", _ad)
-        sh.Label = "Ölçüler"
+        sh.Label = "Dimensions"
 
-    # Var olan satirlari bul ki ayni ad iki kez yazilmasin.
+    # Find the existing rows so the same name is not written twice.
     satir = 1
     mevcut = {}
     while satir < 200:
@@ -449,7 +454,7 @@ def olcu_tablosu(_ad: str = TABLO_ADI, yaz: bool = True, **degerler):
             yazilan.append(f"{ad}={deger}")
         except Exception as e:                                   # noqa: BLE001
             if yaz:
-                print(f"    {ad} yazilamadi: {e}")
+                print(f"    could not write {ad}: {e}")
 
     try:
         doc.recompute()
@@ -457,37 +462,39 @@ def olcu_tablosu(_ad: str = TABLO_ADI, yaz: bool = True, **degerler):
         pass
 
     if yaz:
-        print(f"{_ad} tablosu: " + (", ".join(yazilan) or "(bos)"))
-        print(f"    kullanimi: bagla(nesne, \"Radius\", \"{_ad}.<ad> / 2\")")
+        print(f"{_ad} table: " + (", ".join(yazilan) or "(empty)"))
+        print(f"    usage: bind(obj, \"Radius\", \"{_ad}.<name> / 2\")")
     return sh
 
 
 def bagla(nesne, ozellik: str, ifade: str, yaz: bool = True) -> bool:
-    """Bir ozelligi tablodaki degere BAGLAR ve baglandigini DOGRULAR.
+    """BINDS a property to a value in the table and VERIFIES that it is bound.
 
-    `setExpression` sessizce ise yaramayabiliyor (yanlis alias, cozulmeyen
-    ifade). Burada bagladiktan sonra deger gercekten okunuyor.
+    `setExpression` can silently do nothing (a wrong alias, an expression
+    that does not resolve). Here the value is actually read back after
+    binding.
     """
     if nesne is None or not ozellik:
         if yaz:
-            print("bagla: nesne ve ozellik adi gerek")
+            print("bind: needs an object and a property name")
         return False
     try:
         onceki = getattr(nesne, ozellik, None)
     except Exception:
         onceki = None
 
-    # IFADEYI ONCE DENE. OLCULDU: `setExpression` COZULMEYEN bir ifadeyi
-    # de kabul ediyor — istisna atmiyor, ExpressionEngine'e giriyor, ama
-    # deger degismiyor. Yani "kuruldu mu" diye ExpressionEngine'e bakmak
-    # YANLIS cevap veriyor. Tek guvenilir yol ifadeyi degerlendirmek.
+    # TRY THE EXPRESSION FIRST. MEASURED: `setExpression` also accepts an
+    # expression that DOES NOT RESOLVE — it raises no exception, it goes into
+    # the ExpressionEngine, but the value does not change. So checking the
+    # ExpressionEngine for "is it set up" gives the WRONG answer. The only
+    # reliable way is to evaluate the expression.
     try:
         nesne.evalExpression(ifade)
     except Exception as e:                                       # noqa: BLE001
         if yaz:
-            print(f"bagla: ifade COZULMEDI — {ifade}  ({e})")
-            print(f"    {ozellik} {onceki} olarak kaldi. Tablodaki alias "
-                  f"adini kontrol et (olcu_tablosu ciktisinda yaziyor).")
+            print(f"bind: the expression DID NOT RESOLVE — {ifade}  ({e})")
+            print(f"    {ozellik} stayed {onceki}. Check the alias name in "
+                  f"the table (it is printed in the dimension_table output).")
         return False
 
     try:
@@ -495,7 +502,7 @@ def bagla(nesne, ozellik: str, ifade: str, yaz: bool = True) -> bool:
         App.ActiveDocument.recompute()
     except Exception as e:                                       # noqa: BLE001
         if yaz:
-            print(f"bagla: {ozellik} <- {ifade} olmadi ({e})")
+            print(f"bind: {ozellik} <- {ifade} failed ({e})")
         return False
 
     try:
@@ -509,7 +516,7 @@ def bagla(nesne, ozellik: str, ifade: str, yaz: bool = True) -> bool:
 
 
 # ==========================================================================
-# TUR 3 — yazi, vida disi, agirlik
+# ROUND 3 — text, screw thread, weight
 # ==========================================================================
 
 _FONT_ADAYLARI = ("arial.ttf", "segoeui.ttf", "tahoma.ttf", "verdana.ttf",
@@ -531,20 +538,20 @@ def _font_bul(font: str = "") -> str:
 
 def yazi(metin: str, boyut: float = 10.0, kalinlik: float = 1.0,
          font: str = "", yaz: bool = True):
-    """Parca uzerine YAZI — isim, olcu, logo. Gercek geometri uretir.
+    """TEXT on a part — a name, a dimension, a logo. Produces real geometry.
 
-    Olculdu: Draft.make_shapestring 2.14 sn (ilk cagri modul yuklemesi),
-    "CADdy" icin 97 kenarli sekil.
+    Measured: Draft.make_shapestring 2.14 s (first call loads the module),
+    a 97-edge shape for "CADdy".
 
-    `kalinlik` > 0 ise yazi kati hale getirilir (kabartma/oyma icin
-    hazir). Font bulunamazsa SESSIZ KALMAZ.
+    If `kalinlik` > 0 the text is made solid (ready for embossing/engraving).
+    If no font is found it DOES NOT STAY SILENT.
     """
     yol = _font_bul(font)
     if not yol:
         if yaz:
-            print(f"yazi: font bulunamadi (denenenler: "
-                  f"{', '.join(_FONT_ADAYLARI)}). Tam yol ver: "
-                  f"yazi('...', font=r'C:\\Windows\\Fonts\\arial.ttf')")
+            print(f"text3d: no font found (tried: "
+                  f"{', '.join(_FONT_ADAYLARI)}). Give a full path: "
+                  f"text3d('...', font=r'C:\\Windows\\Fonts\\arial.ttf')")
         return None
 
     try:
@@ -552,7 +559,7 @@ def yazi(metin: str, boyut: float = 10.0, kalinlik: float = 1.0,
         import Part
     except Exception as e:                                       # noqa: BLE001
         if yaz:
-            print(f"yazi: Draft yuklenemedi ({e})")
+            print(f"text3d: could not load Draft ({e})")
         return None
 
     doc = App.ActiveDocument
@@ -562,7 +569,7 @@ def yazi(metin: str, boyut: float = 10.0, kalinlik: float = 1.0,
         doc.recompute()
     except Exception as e:                                       # noqa: BLE001
         if yaz:
-            print(f"yazi: olusturulamadi ({e})")
+            print(f"text3d: could not be created ({e})")
         return None
 
     sonuc = ss
@@ -570,14 +577,14 @@ def yazi(metin: str, boyut: float = 10.0, kalinlik: float = 1.0,
         try:
             kati = ss.Shape.extrude(App.Vector(0, 0, float(kalinlik)))
             nesne = doc.addObject("Part::Feature", "Yazi")
-            nesne.Label = f"Yazı: {metin}"
+            nesne.Label = f"Text: {metin}"
             nesne.Shape = kati
             doc.removeObject(ss.Name)
             doc.recompute()
             sonuc = nesne
         except Exception as e:                                   # noqa: BLE001
             if yaz:
-                print(f"    kalinlastirilamadi ({e}); duz sekil birakildi")
+                print(f"    could not be thickened ({e}); left as a flat shape")
 
     if yaz:
         try:
@@ -585,8 +592,8 @@ def yazi(metin: str, boyut: float = 10.0, kalinlik: float = 1.0,
             print(f"{sonuc.Name}: '{metin}' {_sayi(b.XLength)}x"
                   f"{_sayi(b.YLength)}x{_sayi(b.ZLength)} mm "
                   f"(font {os.path.basename(yol)})")
-            print("    XY duzleminde, (0,0)'dan basliyor. Yerlestirmek icin "
-                  "Placement, gomulmek icin boolean kullan.")
+            print("    On the XY plane, starting at (0,0). Use Placement to "
+                  "position it, a boolean to embed it.")
         except Exception:
             pass
     return sonuc
@@ -594,14 +601,14 @@ def yazi(metin: str, boyut: float = 10.0, kalinlik: float = 1.0,
 
 def vida_disi(yaricap: float, hatve: float, boy: float,
               ic_mi: bool = False, yaz: bool = True):
-    """VIDA DISI uretir (helis + ucgen profil).
+    """Produces a SCREW THREAD (helix + triangular profile).
 
-    GUNLUK: b2938bd0 bastan sona bir BANJO CIVATASI oturumuydu ve dis hic
-    acilamadi.
+    LOG: b2938bd0 was a BANJO BOLT session from start to finish and the
+    thread could never be made.
 
-    `yaricap` dis capin YARISI (M8 icin 4). `hatve` bir turdaki ilerleme
-    (M8 kaba dis icin 1.25). `ic_mi=True` somun/delik disi icin profil
-    ice bakar.
+    `yaricap` is HALF the outer diameter (4 for M8). `hatve` is the advance
+    per turn (1.25 for M8 coarse). With `ic_mi=True` (nut/hole thread) the
+    profile points inward.
     """
     import Part
 
@@ -611,24 +618,25 @@ def vida_disi(yaricap: float, hatve: float, boy: float,
         boy = float(boy)
     except Exception:
         if yaz:
-            print("vida_disi: sayisal deger gerek")
+            print("screw_thread: needs numeric values")
         return None
     if min(yaricap, hatve, boy) <= 0:
         if yaz:
-            print("vida_disi: yaricap, hatve ve boy pozitif olmali")
+            print("screw_thread: radius, pitch and length must be positive")
         return None
 
-    # ISO metrik disin teorik derinligi 0.6134 * hatve.
+    # The theoretical depth of an ISO metric thread is 0.6134 * pitch.
     derinlik = 0.6134 * hatve
     yon = -1.0 if ic_mi else 1.0
 
     try:
         helis = Part.makeHelix(hatve, boy, yaricap)
-        # PROFIL TABANI SILINDIRIN ICINDE OLMALI. Olculdu: taban tam
-        # yaricapta iken (silindir yuzeyine TEGET) fuse gecersiz bir kati
-        # uretiyor — isValid() False ve hacim silindirinkinden KUCUK
-        # cikiyor. derinlik/3 kadar iceri alinca isValid() True ve hacim
-        # 1155 (silindir 1005), yani dis gercekten disari cikiyor.
+        # THE PROFILE BASE MUST BE INSIDE THE CYLINDER. Measured: with the
+        # base exactly at the radius (TANGENT to the cylinder surface) fuse
+        # produces an invalid solid — isValid() False and the volume comes
+        # out SMALLER than the cylinder's. Moved in by depth/3, isValid() is
+        # True and the volume is 1155 (cylinder 1005), i.e. the thread
+        # really sticks out.
         taban = App.Vector(yaricap - derinlik / 3.0, 0, 0)
         p1 = taban + App.Vector(0, 0, -hatve / 2.0)
         p2 = taban + App.Vector(0, 0, hatve / 2.0)
@@ -640,40 +648,40 @@ def vida_disi(yaricap: float, hatve: float, boy: float,
         kati = kati.removeSplitter()
     except Exception as e:                                       # noqa: BLE001
         if yaz:
-            print(f"vida_disi: uretilemedi ({e})")
+            print(f"screw_thread: could not be produced ({e})")
         return None
 
     doc = App.ActiveDocument
     nesne = doc.addObject("Part::Feature", "VidaDisi")
-    nesne.Label = f"Vida dişi M{_sayi(2 * yaricap)}x{_sayi(hatve)}"
+    nesne.Label = f"Thread M{_sayi(2 * yaricap)}x{_sayi(hatve)}"
     nesne.Shape = kati
     doc.recompute()
 
     if yaz:
-        print(f"{nesne.Name}: {'ic' if ic_mi else 'dis'} dis, "
-              f"cap={_sayi(2 * yaricap)} hatve={_sayi(hatve)} "
-              f"boy={_sayi(boy)} mm, {int(boy / hatve)} tur, "
-              f"hacim={_sayi(kati.Volume)} mm3")
+        print(f"{nesne.Name}: {'internal' if ic_mi else 'external'} thread, "
+              f"diameter={_sayi(2 * yaricap)} pitch={_sayi(hatve)} "
+              f"length={_sayi(boy)} mm, {int(boy / hatve)} turns, "
+              f"volume={_sayi(kati.Volume)} mm3")
         if not kati.isValid():
-            print("    UYARI: sonuc isValid() False — hatve/derinlik "
-                  "oranini gozden gecir")
+            print("    WARNING: result isValid() is False — review the "
+                  "pitch/depth ratio")
         if len(kati.Solids) != 1:
-            print(f"    UYARI: {len(kati.Solids)} kati ciktiı, 1 bekleniyordu")
+            print(f"    WARNING: {len(kati.Solids)} solids came out, 1 was expected")
     return nesne
 
 
 def agirlik(nesne=None, malzeme: str = "PLA", doluluk: float = 1.0,
             yaz: bool = True) -> dict:
-    """Parcanin AGIRLIGI ve harcanacak filament.
+    """The part's WEIGHT and the filament it will use.
 
-    "Kac gram gelir" sorusunun cevabi ve su ana kadar hic veremiyorduk.
-    `doluluk` 0..1 arasi (0.2 = %20 infill; kabaca — duvarlar ve ust/alt
-    katmanlar bunu yukari ceker, bu yuzden sonuc ALT SINIRDIR).
+    The answer to "how many grams will it be", which we could never give
+    until now. `doluluk` is 0..1 (0.2 = 20% infill; rough — walls and
+    top/bottom layers push it up, so the result is a LOWER BOUND).
     """
     nesne = _hedef(nesne)
     if nesne is None:
         if yaz:
-            print("agirlik: nesne bulunamadi")
+            print("weight: object not found")
         return {}
 
     hacim = None
@@ -691,27 +699,28 @@ def agirlik(nesne=None, malzeme: str = "PLA", doluluk: float = 1.0,
             hacim = None
     if not hacim or hacim <= 0:
         if yaz:
-            print(f"agirlik: {getattr(nesne, 'Name', '?')} hacmi okunamadi "
-                  f"(mesh kapali degilse hacim anlamsizdir)")
+            print(f"weight: could not read the volume of "
+                  f"{getattr(nesne, 'Name', '?')} "
+                  f"(if the mesh is not closed, volume is meaningless)")
         return {}
 
     anahtar = str(malzeme).upper().strip()
     yog = YOGUNLUK.get(anahtar)
     if yog is None:
         if yaz:
-            print(f"agirlik: {malzeme} bilinmiyor. Bilinenler: "
+            print(f"weight: {malzeme} is unknown. Known: "
                   f"{', '.join(sorted(YOGUNLUK))}")
         return {}
 
     cm3 = hacim / 1000.0 * max(0.0, min(1.0, doluluk))
     gram = cm3 * yog
-    # 1.75 mm filament kesiti = pi * 0.875^2 = 2.405 mm2 -> 2.405 cm3/m
+    # 1.75 mm filament cross-section = pi * 0.875^2 = 2.405 mm2 -> 2.405 cm3/m
     metre = cm3 / 2.405 * 10.0 / 10.0 if False else cm3 / 0.2405 / 100.0
 
     d = {"hacim_mm3": hacim, "gram": gram, "malzeme": anahtar,
          "metre": metre}
     if yaz:
-        ek = "" if doluluk >= 1 else f" (%{doluluk * 100:.0f} doluluk, alt sinir)"
+        ek = "" if doluluk >= 1 else f" ({doluluk * 100:.0f}% infill, lower bound)"
         print(f"{getattr(nesne, 'Name', '?')}: {_sayi(hacim / 1000.0)} cm3 "
               f"{anahtar} -> {gram:.1f} g{ek}, ~{metre:.1f} m filament "
               f"(1.75 mm)")
@@ -719,15 +728,15 @@ def agirlik(nesne=None, malzeme: str = "PLA", doluluk: float = 1.0,
 
 
 # ==========================================================================
-# TUR 4 — bolme, dizi, tabla yuzu, birlestirme
+# ROUND 4 — splitting, arrays, bed face, joining
 # ==========================================================================
 
 def baskiya_bol(nesne=None, z=None, yaz: bool = True) -> list:
-    """Parcayi baski icin PARCALARA boler (yatay duzlemle).
+    """Splits a part into PIECES for printing (with a horizontal plane).
 
-    GUNLUK: b2938bd0'da kullanici "gerekirse 2 parca yapariz birbirine
-    gecen" dedi ve elle ugrasildi. BOPTools.SplitAPI tek cagri (olculdu:
-    0.391 sn, 2 kati).
+    LOG: in b2938bd0 the user said "if needed we'll make 2 parts that fit
+    into each other" and it was done by hand. BOPTools.SplitAPI is a single
+    call (measured: 0.391 s, 2 solids).
     """
     from BOPTools import SplitAPI
     import Part
@@ -736,7 +745,8 @@ def baskiya_bol(nesne=None, z=None, yaz: bool = True) -> list:
     s = _sekil_al(nesne)
     if s is None:
         if yaz:
-            print("baskiya_bol: kati nesne gerek (mesh icin once kati_yap)")
+            print("split_for_print: needs a solid object (for a mesh, "
+                  "make_solid first)")
         return []
 
     b = s.BoundBox
@@ -744,7 +754,7 @@ def baskiya_bol(nesne=None, z=None, yaz: bool = True) -> list:
         z = b.ZMin + b.ZLength / 2.0
     if not (b.ZMin < z < b.ZMax):
         if yaz:
-            print(f"baskiya_bol: z={_sayi(z)} govdenin disinda "
+            print(f"split_for_print: z={_sayi(z)} is outside the body "
                   f"({_sayi(b.ZMin)}..{_sayi(b.ZMax)})")
         return []
 
@@ -757,13 +767,13 @@ def baskiya_bol(nesne=None, z=None, yaz: bool = True) -> list:
         katilar = list(bolunmus.Solids)
     except Exception as e:                                       # noqa: BLE001
         if yaz:
-            print(f"baskiya_bol: olmadi ({e})")
+            print(f"split_for_print: failed ({e})")
         return []
 
     if len(katilar) < 2:
         if yaz:
-            print(f"baskiya_bol: z={_sayi(z)} duzlemi govdeyi ayirmadi "
-                  f"({len(katilar)} parca). Baska bir yukseklik dene.")
+            print(f"split_for_print: the z={_sayi(z)} plane did not split the "
+                  f"body ({len(katilar)} piece(s)). Try another height.")
         return []
 
     doc = App.ActiveDocument
@@ -771,7 +781,7 @@ def baskiya_bol(nesne=None, z=None, yaz: bool = True) -> list:
     yeniler = []
     for i, k in enumerate(katilar, start=1):
         o = doc.addObject("Part::Feature", f"{ad}_p{i}")
-        o.Label = f"{getattr(nesne, 'Label', ad)} parça {i}"
+        o.Label = f"{getattr(nesne, 'Label', ad)} part {i}"
         o.Shape = k
         yeniler.append(o)
     try:
@@ -781,21 +791,21 @@ def baskiya_bol(nesne=None, z=None, yaz: bool = True) -> list:
     doc.recompute()
 
     if yaz:
-        print(f"{ad}: z={_sayi(z)} hizasinda {len(yeniler)} parcaya bolundu")
+        print(f"{ad}: split into {len(yeniler)} pieces at z={_sayi(z)}")
         for o in yeniler:
             bb = o.Shape.BoundBox
             print(f"    {o.Name}: {_sayi(bb.XLength)}x{_sayi(bb.YLength)}"
-                  f"x{_sayi(bb.ZLength)} mm  hacim={_sayi(o.Shape.Volume)}")
-        print("    NOT: parcalar duz kesildi; gecme/pim isteniyorsa ayrica "
-              "eklenmeli.")
+                  f"x{_sayi(bb.ZLength)} mm  volume={_sayi(o.Shape.Volume)}")
+        print("    NOTE: the pieces were cut flat; if a joint/pin is wanted "
+              "it has to be added separately.")
     return yeniler
 
 
 def _dizi_dogrula(dizi, beklenen: int, yaz: bool) -> bool:
-    """Dizinin gercekten `beklenen` kopya urettigini olcer.
+    """Measures that the array really produced `beklenen` copies.
 
-    PartDesign desenleri sessizce TEK kopya birakabiliyor (olculdu).
-    Ayni sessiz hatayi Draft dizisinde de kabul etmiyoruz.
+    PartDesign patterns can silently leave a SINGLE copy (measured). We do
+    not accept the same silent failure from a Draft array either.
     """
     try:
         n = len(dizi.Shape.Solids) or len(dizi.Shape.childShapes())
@@ -803,25 +813,26 @@ def _dizi_dogrula(dizi, beklenen: int, yaz: bool) -> bool:
         return True
     if n < beklenen:
         if yaz:
-            print(f"    UYARI: {beklenen} kopya istendi ama sonucta {n} var. "
-                  f"Kopyalar ust uste binmis ya da dizi uygulanmamis olabilir.")
+            print(f"    WARNING: {beklenen} copies were requested but the result "
+                  f"has {n}. The copies may overlap or the array may not have "
+                  f"been applied.")
         return False
     return True
 
 
 def dizi_polar(nesne=None, adet: int = 6, aci: float = 360.0,
                merkez=None, yaz: bool = True):
-    """Nesneyi Z ekseni etrafinda POLAR dizer. Olculdu: 0.030 sn."""
+    """Arrays the object POLARLY around the Z axis. Measured: 0.030 s."""
     import Draft
 
     nesne = _hedef(nesne)
     if nesne is None:
         if yaz:
-            print("dizi_polar: nesne bulunamadi")
+            print("polar_array: object not found")
         return None
     if adet < 2:
         if yaz:
-            print("dizi_polar: adet en az 2 olmali")
+            print("polar_array: count must be at least 2")
         return None
 
     if merkez is None:
@@ -831,12 +842,12 @@ def dizi_polar(nesne=None, adet: int = 6, aci: float = 360.0,
         App.ActiveDocument.recompute()
     except Exception as e:                                       # noqa: BLE001
         if yaz:
-            print(f"dizi_polar: olmadi ({e})")
+            print(f"polar_array: failed ({e})")
         return None
 
     if yaz:
         print(f"{d.Name}: {getattr(nesne, 'Name', '?')} x{adet}, "
-              f"{_sayi(aci)} derecede, merkez=({_sayi(merkez.x)},"
+              f"over {_sayi(aci)} degrees, center=({_sayi(merkez.x)},"
               f"{_sayi(merkez.y)})")
         _dizi_dogrula(d, adet, yaz)
     return d
@@ -844,17 +855,17 @@ def dizi_polar(nesne=None, adet: int = 6, aci: float = 360.0,
 
 def dizi_dogrusal(nesne=None, adet: int = 3, yon=None, aralik: float = 20.0,
                   yaz: bool = True):
-    """Nesneyi bir dogrultuda dizer. Olculdu: 1.93 sn (ilk cagri)."""
+    """Arrays the object along a direction. Measured: 1.93 s (first call)."""
     import Draft
 
     nesne = _hedef(nesne)
     if nesne is None:
         if yaz:
-            print("dizi_dogrusal: nesne bulunamadi")
+            print("linear_array: object not found")
         return None
     if adet < 2:
         if yaz:
-            print("dizi_dogrusal: adet en az 2 olmali")
+            print("linear_array: count must be at least 2")
         return None
 
     if yon is None:
@@ -871,19 +882,19 @@ def dizi_dogrusal(nesne=None, adet: int = 3, yon=None, aralik: float = 20.0,
         App.ActiveDocument.recompute()
     except Exception as e:                                       # noqa: BLE001
         if yaz:
-            print(f"dizi_dogrusal: olmadi ({e})")
+            print(f"linear_array: failed ({e})")
         return None
 
     if yaz:
         print(f"{d.Name}: {getattr(nesne, 'Name', '?')} x{adet}, "
-              f"{_sayi(aralik)} mm arayla ({_sayi(u.x)},{_sayi(u.y)},"
-              f"{_sayi(u.z)}) yonunde")
+              f"{_sayi(aralik)} mm apart along ({_sayi(u.x)},{_sayi(u.y)},"
+              f"{_sayi(u.z)})")
         _dizi_dogrula(d, adet, yaz)
     return d
 
 
 def _en_buyuk_duz_yuz(nesne):
-    """(normal, nokta) — parcanin en genis duz bolgesi. Yoksa None."""
+    """(normal, point) — the widest flat region of the part. None if there is none."""
     m = _mesh_al(nesne)
     if m is not None:
         try:
@@ -899,8 +910,8 @@ def _en_buyuk_duz_yuz(nesne):
             f = m.Facets[en[0]]
             n = App.Vector(*f.Normal)
             p = App.Vector(*f.Points[0])
-            # Alan olarak en buyuk segmenti tercih ettik; facet sayisi
-            # yeterli bir vekil (ucgenler kabaca ayni boyutta).
+            # We preferred the segment largest by area; the facet count is
+            # a good enough proxy (the triangles are roughly the same size).
             return n.normalize(), p
         except Exception:
             return None
@@ -925,25 +936,26 @@ def _en_buyuk_duz_yuz(nesne):
 
 
 def tabana_otur(nesne=None, yaz: bool = True) -> bool:
-    """Parcayi en genis DUZ yuzu asagi bakacak sekilde tablaya oturtur.
+    """Places the part on the bed with its widest FLAT face down.
 
-    Baski hazirliginin ilk sorusu ve su ana kadar goz karariydi.
-    Olculdu: Mesh.getPlanarSegments 0.010 sn.
+    The first question of print preparation, and until now it was done by
+    eye. Measured: Mesh.getPlanarSegments 0.010 s.
 
-    Duz bolge yoksa UYDURMAZ, soyler.
+    If there is no flat region it DOES NOT MAKE ONE UP, it says so.
     """
     nesne = _hedef(nesne)
     if nesne is None:
         if yaz:
-            print("tabana_otur: nesne bulunamadi")
+            print("place_on_bed: object not found")
         return False
 
     bulgu = _en_buyuk_duz_yuz(nesne)
     if bulgu is None:
         if yaz:
-            print(f"tabana_otur: {getattr(nesne, 'Name', '?')} icin duz bir "
-                  f"yuz bulunamadi — bu parcanin tablaya oturacak duz yeri "
-                  f"yok, destek ya da elle yonlendirme gerekiyor")
+            print(f"place_on_bed: no flat face found for "
+                  f"{getattr(nesne, 'Name', '?')} — this part has no flat "
+                  f"place to sit on the bed, it needs supports or manual "
+                  f"orientation")
         return False
 
     normal, _nokta = bulgu
@@ -956,7 +968,7 @@ def tabana_otur(nesne=None, yaz: bool = True) -> bool:
     try:
         if aci > 0.5:
             eksen = normal.cross(hedef)
-            if eksen.Length < 1e-9:               # tam ters yonlu
+            if eksen.Length < 1e-9:               # exactly opposite direction
                 eksen = App.Vector(1, 0, 0)
             donme = App.Rotation(eksen, aci)
             p = nesne.Placement
@@ -971,36 +983,37 @@ def tabana_otur(nesne=None, yaz: bool = True) -> bool:
             App.ActiveDocument.recompute()
     except Exception as e:                                       # noqa: BLE001
         if yaz:
-            print(f"tabana_otur: yerlestirilemedi ({e})")
+            print(f"place_on_bed: could not be placed ({e})")
         return False
 
     if yaz:
         b = olcum._kutu(nesne)
-        print(f"{getattr(nesne, 'Name', '?')}: {_sayi(aci)} derece "
-              f"dondurulup tablaya oturtuldu, z={_sayi(b.ZMin)}.."
+        print(f"{getattr(nesne, 'Name', '?')}: rotated {_sayi(aci)} degrees "
+              f"and placed on the bed, z={_sayi(b.ZMin)}.."
               f"{_sayi(b.ZMax)}")
     return True
 
 
-_KABUK_ONBELLEK = {}          # (belge, nesne) -> (imza, kabuk, duz_zler)
+_KABUK_ONBELLEK = {}          # (document, object) -> (signature, shell, flat_zs)
 
 
 def _yatay_yuz_zleri(m, tol: float = 1e-4) -> list:
-    """Mesh'teki YATAY yuzeylerin z yukseklikleri. Kesitin yalan soyledigi yerler.
+    """The z heights of HORIZONTAL faces in the mesh. The places where a section lies.
 
-    OLCULDU — bir kesit tam yatay bir yuzeye denk gelirse sonuc sessizce
-    bozuluyor, hem OCC hem mesh yolunda:
+    MEASURED — if a section lands exactly on a horizontal face the result
+    silently breaks, on both the OCC and the mesh path:
 
-        silindir r=15 h=40   z=0  -> alan   7.2   (dogrusu 706.9)
-        silindir r=15 h=40   z=40 -> alan   7.2
-        kutu 20x30x10        z=0  -> alan 300.0   (dogrusu 600)
-        kademeli parca       z=10 -> alan 600.0   (asagisi 1600, yukarisi 400)
+        cylinder r=15 h=40   z=0  -> area   7.2   (correct: 706.9)
+        cylinder r=15 h=40   z=40 -> area   7.2
+        box 20x30x10         z=0  -> area 300.0   (correct: 600)
+        stepped part         z=10 -> area 600.0   (below 1600, above 400)
 
-    Sonuncusu en sinsisi: deger ne alttakine ne ustekine esit, ikisinin
-    arasinda uydurma bir sayi. Hicbiri hata vermiyor.
+    The last one is the sneakiest: the value equals neither the one below
+    nor the one above, it is a made-up number between the two. None of them
+    raises an error.
 
-    Tek gecis, facet normali +-Z olanlarin z'si toplaniyor — 4500 facet'te
-    milisaniyeler. Kabukla birlikte onbellege giriyor.
+    A single pass, collecting the z of the facets whose normal is +-Z —
+    milliseconds on 4500 facets. It goes into the cache with the shell.
     """
     zler = set()
     try:
@@ -1011,7 +1024,8 @@ def _yatay_yuz_zleri(m, tol: float = 1e-4) -> list:
                 zler.add(round(p[2], 4))
     except Exception:                                            # noqa: BLE001
         return []
-    # Yakin degerleri tek basliga topla (facet'ler tam ayni z'de olmayabilir).
+    # Collect nearby values under one heading (facets may not be at exactly
+    # the same z).
     sirali = sorted(zler)
     kumeler = []
     for z in sirali:
@@ -1022,37 +1036,40 @@ def _yatay_yuz_zleri(m, tol: float = 1e-4) -> list:
 
 
 def _mesh_on_kontrol(m, yaz: bool) -> str:
-    """Kabuga CEVIRMEDEN once mesh'in sagligi. Bozuksa sebep metni doner.
+    """The mesh's health BEFORE converting it to a shell. Returns the reason text if broken.
 
-    NEDEN VAR — OLCULDU (LOG/2026-09-01_361c792d.txt): indirilen bir ucak
-    mesh'inde (34350 facet) `kesit_konturu(ucak, [3,8,15,25,35,43])`
-    **22.66 saniye** surdu ve alti satir "kontur yok" yazdi. Maliyetin
-    tamami `makeShapeFromMesh` donusumunde; kesitlerin kendisi 0.01 sn.
+    WHY IT EXISTS — MEASURED (LOG/2026-09-01_361c792d.txt): on a downloaded
+    aircraft mesh (34350 facets) `kesit_konturu(plane, [3,8,15,25,35,43])`
+    took **22.66 seconds** and six lines said "no contour". The whole cost
+    is in the `makeShapeFromMesh` conversion; the sections themselves take
+    0.01 s.
 
-    Oysa cevabin bos cikacagi ONCEDEN, 0.05 saniyede biliniyordu:
+    Yet the answer coming out empty was known IN ADVANCE, in 0.05 seconds:
 
-        isSolid              False   0.016 sn
-        hasNonManifolds      True    0.001 sn
-        hasSelfIntersections True    0.016 sn
-        countComponents      494     0.000 sn
+        isSolid              False   0.016 s
+        hasNonManifolds      True    0.001 s
+        hasSelfIntersections True    0.016 s
+        countComponents      494     0.000 s
 
-    Yani 700 kat ucuz bir bakis 22.66 saniyenin bosa gidecegini soyluyordu.
-    Ustelik ayni blokta `kesif()` zaten "baskiya hazir = HAYIR (kapali
-    degil, kendiyle kesisme, non-manifold, cok parca)" yazmisti; teshis
-    vardi, bu fonksiyon ona bakmiyordu.
+    So a look 700 times cheaper was saying the 22.66 seconds would be
+    wasted. What's more, in the same block `kesif()` had already written
+    "ready to print = NO (not closed, self-intersecting, non-manifold, many
+    components)"; the diagnosis was there, this function was not looking at
+    it.
 
-    REDDETMIYORUZ, UYARIYORUZ. Olculdu (dort mesh, ayni gun):
+    WE DON'T REFUSE, WE WARN. Measured (four meshes, the same day):
 
-        temiz kutu      kapali,  tek parca, 12 facet  -> 0.00 sn, 1 kontur
-        ACIK kutu       ACIK,    tek parca, 10 facet  -> 0.01 sn, 1 kontur
-        3 ayrik kure    kapali, 3 PARCA,   912 facet  -> 0.13 sn, 3 kontur
-        indirilen ucak  acik+non-manifold+kesisen, 494 parca, 34350 facet
-                                                    -> 24.87 sn, 0 kontur
+        clean box       closed, one component, 12 facets  -> 0.00 s, 1 contour
+        OPEN box        OPEN,   one component, 10 facets  -> 0.01 s, 1 contour
+        3 disjoint spheres closed, 3 COMPONENTS, 912 facets -> 0.13 s, 3 contours
+        downloaded plane open+non-manifold+self-intersecting, 494 components,
+                        34350 facets                       -> 24.87 s, 0 contours
 
-    Yani "kapali degil" TEK BASINA ret sebebi DEGIL (acik kutu dogru kontur
-    verdi) ve "cok parca" da degil (uc kure uc kontur verdi). Tek ornekten
-    kural yazmak bu projede yasak; o yuzden hukum vermiyoruz, maliyeti
-    ODEMEDEN once ne aldigimizi soyluyoruz ve bos cikarsa SEBEBINI yaziyoruz.
+    So "not closed" ALONE is NOT a reason to refuse (the open box gave the
+    right contour), and neither is "many components" (three spheres gave
+    three contours). Writing a rule from a single example is forbidden in
+    this project; so we give no verdict, we say what we are getting BEFORE
+    paying the cost, and if it comes out empty we write the REASON.
     """
     try:
         facet = int(m.CountFacets)
@@ -1079,13 +1096,14 @@ def _mesh_on_kontrol(m, yaz: bool) -> str:
 
 
 def _kabuk_ve_duzler(hedef, m):
-    """Mesh -> (kabuk, yatay yuz z'leri). Ayni nesne icin BIR KEZ hesaplanir.
+    """Mesh -> (shell, z of horizontal faces). Computed ONCE for the same object.
 
-    OLCULDU: `makeShapeFromMesh` 4512 facet'te 1.84 sn, `slice` ise cagri
-    basina 2.76 sn. Gunlukte model alti farkli yukseklikte kesit istedi ve
-    donusum ALTI KEZ odendi: 27.8 sn yerine 18.6 sn olmaliydi (1.5 kat).
-    Asil maliyet slice'ta ve o OCC'nin isi, ama donusumu tekrar tekrar
-    odemek bedava bir kayipti.
+    MEASURED: `makeShapeFromMesh` 1.84 s on 4512 facets, `slice` 2.76 s per
+    call. In the log the model asked for sections at six different heights
+    and the conversion was paid SIX TIMES: it should have been 18.6 s
+    instead of 27.8 s (1.5x). The real cost is in slice and that is OCC's
+    business, but paying for the conversion again and again was a free
+    loss.
     """
     import Part
 
@@ -1100,7 +1118,8 @@ def _kabuk_ve_duzler(hedef, m):
     kabuk.makeShapeFromMesh(m.Topology, 0.1)
     duzler = _yatay_yuz_zleri(m)
     _KABUK_ONBELLEK[anahtar] = (imza, kabuk, duzler)
-    # Onbellek sinirsiz buyumesin; bu bir oturum icinde birkac nesne olur.
+    # Don't let the cache grow without limit; within a session this is a few
+    # objects.
     if len(_KABUK_ONBELLEK) > 8:
         for k in list(_KABUK_ONBELLEK)[:-8]:
             _KABUK_ONBELLEK.pop(k, None)
@@ -1108,40 +1127,46 @@ def _kabuk_ve_duzler(hedef, m):
 
 
 def kesit_konturu(nesne=None, z=None, sik: float = 0.8, yaz: bool = True):
-    """Bir yukseklikteki KESIT KONTURLARINI nokta listesi olarak verir.
+    """Gives the SECTION CONTOURS at a height as point lists.
 
-    Doner: konturlarin listesi, en uzundan kisaya sirali. Her kontur bir
-    [(x, y), ...] listesi. Hicbir sey bulunamazsa BOS LISTE.
+    Returns: the list of contours, sorted longest to shortest. Each contour
+    is a [(x, y), ...] list. EMPTY LIST if nothing is found.
 
-    NEDEN VAR — iki ayri oturumda iki ayri model ayni on satiri elle yazdi:
+    WHY IT EXISTS — in two separate sessions two separate models hand-wrote
+    the same ten lines:
 
-      LOG/2026-08-24_67cd3efb (Sonnet): `sekil.slice` dongusuyle genislik
-        profili -> 68.9 sn; ayrica 49.0 sn'lik bir isInside nokta taramasi.
-      LOG/2026-08-24_3ad4cef1 (Opus): `makeShapeFromMesh -> slice -> sort ->
-        discretize` kalibini BES ayri blokta bastan yazdi. Her tekrar, hem
-        token hem de "bu sefer yanlis yazarsam" riski demek.
+      LOG/2026-08-24_67cd3efb (Sonnet): a width profile with a `shape.slice`
+        loop -> 68.9 s; plus a 49.0 s isInside point scan.
+      LOG/2026-08-24_3ad4cef1 (Opus): rewrote the `makeShapeFromMesh ->
+        slice -> sort -> discretize` pattern from scratch in FIVE separate
+        blocks. Every repeat means both tokens and the risk of "what if I
+        get it wrong this time".
 
-    Mesh de kati da kabul eder; mesh ise once kabuga cevrilir (kati_yap'in
-    aksine BELGEYE HICBIR NESNE EKLEMEZ, sadece okur). `z` verilmezse
-    parcanin tam ortasindan keser. `z` bir LISTE de olabilir — o zaman
-    {z: konturlar} doner ve donusum bir kez odenir.
+    Accepts both a mesh and a solid; a mesh is first converted to a shell
+    (unlike kati_yap it ADDS NO OBJECT TO THE DOCUMENT, it only reads). If
+    `z` is not given it cuts right through the middle of the part. `z` can
+    also be a LIST — then it returns {z: contours} and the conversion is
+    paid once.
 
-    KONTUR SIRASI onemli: [0] her zaman en uzun (dis hat), sonrakiler
-    delikler/ayrik adalar. Opus'un "kesit tel sayisi: 2" ciktisinda ikinci
-    tel tavsanin gozuydu.
+    CONTOUR ORDER matters: [0] is always the longest (the outer outline),
+    the rest are holes/separate islands. In Opus's "section wire count: 2"
+    output, the second wire was the rabbit's eye.
 
-    YATAY YUZEYE DENK GELEN KESIT SESSIZCE YANLIS CIKAR — bu yardimcinin ilk
-    surumunde acik bir hataydi, olculdu: silindir r=15 h=40, z=0'da kesit
-    alani 7.2 mm2 (dogrusu 706.9), kutu z=0'da 300 (dogrusu 600), kademeli
-    parcada omuz hizasinda 600 (asagisi 1600, yukarisi 400). Hicbiri hata
-    vermiyordu. Artik:
-      * ucta (bbox sinirinda) istenen z ICERI kaydiriliyor ve soyleniyor,
-      * ic bir yatay yuzeye denk gelirse UYARI veriliyor ve guvenli iki
-        komsu z yaziliyor — hangisinin istendigi cagirana ait bir karar.
+    A SECTION THAT LANDS ON A HORIZONTAL FACE COMES OUT SILENTLY WRONG — this
+    was a plain bug in the first version of this helper, measured: cylinder
+    r=15 h=40, section area at z=0 7.2 mm2 (correct: 706.9), box at z=0 300
+    (correct: 600), stepped part at shoulder height 600 (below 1600, above
+    400). None of them raised an error. Now:
+      * a z requested at the end (at the bbox boundary) is moved INWARD and
+        this is said,
+      * if it lands on an internal horizontal face a WARNING is given and
+        the two safe neighbouring z values are printed — which one is
+        wanted is the caller's decision.
 
-    Mesh.crossSections REDDEDILDI: 673 kat hizli ama kure ekvatorunda yolu
-    iki kez dolasip alani sifirliyor, kutu z=0'da yine 300 veriyor. Hizin
-    dogruluk pahasina alinmasi bu projede yasak.
+    Mesh.crossSections was REJECTED: 673x faster, but on a sphere's equator
+    it traverses the path twice and zeroes the area, and on a box at z=0 it
+    still gives 300. Buying speed at the cost of correctness is forbidden in
+    this project.
     """
     import Part
 
@@ -1153,7 +1178,7 @@ def kesit_konturu(nesne=None, z=None, sik: float = 0.8, yaz: bool = True):
 
     coklu = isinstance(z, (list, tuple))
     duz_zler = []
-    mesh_kusuru = ""          # bos kesitin SEBEBI, mesh bozuksa
+    mesh_kusuru = ""          # the REASON for an empty section, if the mesh is broken
     sekil = _sekil_al(hedef)
     if sekil is None:
         m = _mesh_al(hedef)
@@ -1161,7 +1186,7 @@ def kesit_konturu(nesne=None, z=None, sik: float = 0.8, yaz: bool = True):
             if yaz:
                 print("section_contour: the object has neither a shape nor a mesh")
             return {} if coklu else []
-        # Pahali donusumden ONCE 0.05 saniyelik bakis (bkz. _mesh_on_kontrol).
+        # A 0.05-second look BEFORE the expensive conversion (see _mesh_on_kontrol).
         mesh_kusuru = _mesh_on_kontrol(m, yaz)
         sekil, duz_zler = _kabuk_ve_duzler(hedef, m)
 
@@ -1179,14 +1204,16 @@ def kesit_konturu(nesne=None, z=None, sik: float = 0.8, yaz: bool = True):
     else:
         istenen = [float(z)]
 
-    # Ucta kesmek her zaman bozuk cikiyor (olculdu). Icerinin kalinligina
-    # gore kucuk ama anlamli bir pay: cok ince parcada 0.001 yetmiyordu.
+    # Cutting at the end always comes out broken (measured). A small but
+    # meaningful margin relative to the thickness: 0.001 was not enough on a
+    # very thin part.
     pay = max(bb.ZLength * 1e-4, 1e-4)
     sonuc = {}
     for ham_z in istenen:
-        # UCTA olmak ile DISARIDA olmak ayri seyler. Ucta kaydiriyoruz
-        # (istenen kesit odur, sadece tam sinirda OCC bozuluyor); disarida
-        # KAYDIRMIYORUZ — sorulmayan soruyu cevaplamak olurdu.
+        # Being AT THE END and being OUTSIDE are different things. At the end
+        # we shift (it is the requested section, OCC just breaks exactly at
+        # the boundary); outside we DO NOT SHIFT — that would be answering a
+        # question that was not asked.
         if ham_z < bb.ZMin - pay or ham_z > bb.ZMax + pay:
             if yaz:
                 print(f"section_contour: z={_sayi(ham_z)} is outside the part "
@@ -1215,11 +1242,11 @@ def kesit_konturu(nesne=None, z=None, sik: float = 0.8, yaz: bool = True):
         if yaz:
             _kesit_yaz(kz, konturlar, teller)
 
-    # HICBIRINDEN kontur cikmadiysa ve mesh bozuksa, sebebi SOYLE. Gunlukte
-    # alti ozdes "kontur yok" satiri vardi ve hicbiri neden oldugunu
-    # anlatmiyordu; model dogru sonuca kendi akil yurutmesiyle vardi.
-    # §35.2'nin dersi: genel ogut tetiklenmez, ADI KONMUS emir tetiklenir —
-    # o yuzden "dikkat et" degil, "bu yolu birak, baska olcum kullan".
+    # If NONE of them gave a contour and the mesh is broken, SAY WHY. The log
+    # had six identical "no contour" lines and none of them explained why;
+    # the model reached the right conclusion by its own reasoning. The
+    # lesson of §35.2: general advice does not fire, a NAMED order does —
+    # so not "be careful" but "drop this path, use another measurement".
     if yaz and mesh_kusuru and not any(sonuc.values()):
         print(f"section_contour: no contour at any of the {len(sonuc)} heights — "
               f"the cause is NOT the height choice but the mesh ({mesh_kusuru}); "
@@ -1232,7 +1259,7 @@ def kesit_konturu(nesne=None, z=None, sik: float = 0.8, yaz: bool = True):
 
 
 def _bir_kesit(sekil, z: float, sik: float):
-    """Tek yukseklikte kesit. (konturlar, teller) doner."""
+    """A section at a single height. Returns (contours, wires)."""
     try:
         teller = sekil.slice(App.Vector(0, 0, 1), float(z))
     except Exception:                                            # noqa: BLE001
@@ -1245,8 +1272,9 @@ def _bir_kesit(sekil, z: float, sik: float):
             noktalar = [(v.x, v.y) for v in tel.discretize(Distance=sik)]
         except Exception:                                        # noqa: BLE001
             continue
-        # Kapali telde ilk ve son nokta ayni gelir; tekrari atiyoruz ki
-        # cagiran "n nokta" derken gercek sayiyi kullansin.
+        # On a closed wire the first and last points are the same; we drop
+        # the repeat so that when the caller says "n points" it uses the
+        # real count.
         if len(noktalar) > 1 and _yakin(noktalar[0], noktalar[-1]):
             noktalar = noktalar[:-1]
         if len(noktalar) >= 3:
@@ -1275,11 +1303,11 @@ def _yakin(p, q, tol: float = 1e-7) -> bool:
 
 
 def _bbox_ortusme(ma, mb):
-    """Iki mesh'in bbox'lari ic ice mi. (ortusuyor_mu, en_kucuk_ortusme).
+    """Do two meshes' bboxes overlap. (overlapping, smallest_overlap).
 
-    Ortusmuyorsa ikinci deger NEGATIF: eksenler arasindaki en buyuk bosluk,
-    yani gercek mesafenin ALT SINIRI. Alt sinir oldugunu soylemek, uydurma
-    bir mesafe vermekten iyi.
+    If they don't overlap, the second value is NEGATIVE: the largest gap
+    between the axes, i.e. a LOWER BOUND on the real distance. Saying it is
+    a lower bound is better than giving a made-up distance.
     """
     try:
         ba, bb = ma.BoundBox, mb.BoundBox
@@ -1295,21 +1323,24 @@ def _bbox_ortusme(ma, mb):
 
 
 def _mesh_birlestir(a, b, ma, mb, azami_facet: int, yaz: bool):
-    """birlestir()'in MESH yolu — katiya cevir, fuse et, mesh'e geri don.
+    """The MESH path of birlestir() — convert to solid, fuse, back to mesh.
 
-    NEDEN `Mesh.Mesh.unite()` DEGIL: olculdu, FreeCAD 1.1.1'de unite hizli
-    (0.003-0.05 sn) ve hacmi dogru hesapliyor (iki kutu: tam 15000 mm3) ama
-    HICBIR yapilandirmada KAPALI mesh uretmedi:
-        iki kutu       -> kapali=False              onarim sonrasi hala False
-        iki kure       -> kapali=False, kesisme     onarim parcayi 1->3 yapti
-        silindir+torus -> kapali=False, kesisme     onarim parcayi 1->7 yapti
-    Yani unite uzerine kurulmus bir yardimci "birlestirdim" derken acik mesh
-    birakirdi. Kati yolu ayni olcumde temiz sonuc verdi (bkz. _mesh_kati).
+    WHY NOT `Mesh.Mesh.unite()`: measured, in FreeCAD 1.1.1 unite is fast
+    (0.003-0.05 s) and computes the volume correctly (two boxes: exactly
+    15000 mm3) but in NO configuration did it produce a CLOSED mesh:
+        two boxes        -> closed=False                     still False after repair
+        two spheres      -> closed=False, self-intersecting  repair made 1->3 components
+        cylinder+torus   -> closed=False, self-intersecting  repair made 1->7 components
+    So a helper built on unite would say "joined" while leaving an open
+    mesh. The solid path gave a clean result in the same measurement (see
+    _mesh_kati).
 
-    TUTMAZSA UYDURMAZ: yarim nesneleri siler ve baski icin DOGRU olan cevabi
-    verir — ic ice gecmis iki KAPALI parcayi dilimleyici zaten tek parca
-    basar. Bu teselli degil, gunlukte modelin 16 dakika sonra kendi buldugu
-    ve kullanicinin kabul ettigi cozum; fark, ilk cagride soylenmesi.
+    IF IT DOES NOT HOLD IT DOES NOT MAKE THINGS UP: it deletes the
+    half-made objects and gives the answer that is RIGHT for printing — a
+    slicer prints two interpenetrating CLOSED parts as one piece anyway.
+    This is not a consolation, it is the solution the model found by itself
+    16 minutes later in the log and the user accepted; the difference is
+    that it is said on the first call.
     """
     import MeshPart
 
@@ -1317,23 +1348,23 @@ def _mesh_birlestir(a, b, ma, mb, azami_facet: int, yaz: bool):
     ad_b = getattr(b, "Name", "B")
     da, db = _mesh_durumu(ma), _mesh_durumu(mb)
 
-    # 1) Ikisi de kapali olmali. Acik mesh'ten kati cikmaz.
+    # 1) Both must be closed. No solid comes out of an open mesh.
     acik = [ad for ad, d in ((ad_a, da), (ad_b, db)) if not d.get("kapali")]
     if acik:
         if yaz:
-            print(f"birlestir: {', '.join(acik)} KAPALI DEGIL "
+            print(f"join: {', '.join(acik)} NOT CLOSED "
                   f"({_durum_metni(da)} / {_durum_metni(db)}). "
-                  f"Once mesh_onar calistir.")
+                  f"Run repair_mesh first.")
         return None
 
-    # 2) Gercekten degiyorlar mi. 7 saniyelik islemi bosuna baslatma.
+    # 2) Do they actually touch. Don't start a 7-second operation for nothing.
     ortusuyor, olcu = _bbox_ortusme(ma, mb)
     if ortusuyor is False:
         if yaz:
-            print(f"birlestir: {ad_a} ile {ad_b} DEGMIYOR — bbox'lar "
-                  f"arasinda en az {_sayi(abs(olcu))} mm bosluk var. "
-                  f"Birlestirmeden once parcalari ust uste getir "
-                  f"(kesin mesafe icin mesafe({ad_a}, {ad_b})).")
+            print(f"join: {ad_a} and {ad_b} DO NOT TOUCH — there is at least "
+                  f"{_sayi(abs(olcu))} mm of gap between their bboxes. "
+                  f"Bring the parts together before joining "
+                  f"(for the exact distance: distance({ad_a}, {ad_b})).")
         return None
 
     t0 = time.time()
@@ -1343,8 +1374,9 @@ def _mesh_birlestir(a, b, ma, mb, azami_facet: int, yaz: bool):
     except Exception:
         pass
 
-    # 3+4) Katiya cevir -> fuse -> mesh'e geri don. Facet butcesi IKISINE
-    # birden: olcumde sinir toplam facet uzerinden anlam kazaniyor.
+    # 3+4) Convert to solid -> fuse -> back to mesh. The facet budget is for
+    # BOTH together: in the measurement the limit makes sense over the total
+    # facets.
     pay = max(1, int(azami_facet / 2))
     sorun = ""
     yeni_mesh = None
@@ -1353,32 +1385,32 @@ def _mesh_birlestir(a, b, ma, mb, azami_facet: int, yaz: bool):
         kb, _ = _mesh_kati(mb, pay)
         kaynak = ka.fuse(kb)
         if len(kaynak.Solids) != 1:
-            sorun = f"fuse {len(kaynak.Solids)} ayri kati birakti"
+            sorun = f"fuse left {len(kaynak.Solids)} separate solids"
         elif hacim_ayri and kaynak.Volume >= hacim_ayri - 1e-9:
-            sorun = "hacim toplamdan kuculmedi (gercekten kaynasmadilar)"
+            sorun = "the volume did not shrink below the sum (they did not really fuse)"
         else:
             yeni_mesh = MeshPart.meshFromShape(
                 Shape=kaynak, LinearDeflection=0.1,
                 AngularDeflection=0.3, Relative=False)
             ds = _mesh_durumu(yeni_mesh)
             if not ds.get("kapali"):
-                sorun = "sonuc mesh KAPALI degil"
+                sorun = "the result mesh is NOT closed"
             elif ds.get("parca") not in (None, 1):
-                sorun = f"sonuc {ds['parca']} parca"
+                sorun = f"the result has {ds['parca']} components"
     except Exception as e:                                       # noqa: BLE001
         sorun = str(e)[:120]
 
     sure = time.time() - t0
 
-    # 5) Tutmadiysa: hicbir sey birakma, dogrusunu soyle.
+    # 5) If it did not hold: leave nothing behind, say what is right.
     if sorun or yeni_mesh is None:
         if yaz:
-            print(f"birlestir: tek parcaya kaynastirilamadi ({sorun}) "
-                  f"[{sure:.1f} sn]")
-            print(f"    AMA BASKI ICIN SORUN DEGIL: {ad_a} ve {ad_b} "
-                  f"ikisi de KAPALI ve bbox'lari {_sayi(olcu)} mm ic ice. "
-                  f"Dilimleyici ust uste binen kapali parcalari tek parca "
-                  f"basar — birlestirmeye gerek yok, oldugu gibi birak.")
+            print(f"join: could not be fused into one piece ({sorun}) "
+                  f"[{sure:.1f} s]")
+            print(f"    BUT IT IS NOT A PROBLEM FOR PRINTING: {ad_a} and {ad_b} "
+                  f"are both CLOSED and their bboxes overlap by {_sayi(olcu)} mm. "
+                  f"A slicer prints overlapping closed parts as one piece "
+                  f"— no need to join, leave them as they are.")
         return None
 
     doc = App.ActiveDocument
@@ -1394,24 +1426,26 @@ def _mesh_birlestir(a, b, ma, mb, azami_facet: int, yaz: bool):
     if yaz:
         ds = _mesh_durumu(yeni_mesh)
         print(f"{nesne.Name}: {ad_a} + {ad_b} -> mesh, "
-              f"{_durum_metni(ds)}, hacim={_sayi(yeni_mesh.Volume)} mm3 "
-              f"(ayri toplam {_sayi(hacim_ayri)}) [{sure:.1f} sn]")
+              f"{_durum_metni(ds)}, volume={_sayi(yeni_mesh.Volume)} mm3 "
+              f"(separate total {_sayi(hacim_ayri)}) [{sure:.1f} s]")
         if ds.get("kesisme"):
-            print("    UYARI: sonucta kendiyle kesisme var — "
-                  f"mesh_onar({nesne.Name}) dene.")
+            print("    WARNING: the result self-intersects — "
+                  f"try repair_mesh({nesne.Name}).")
     return nesne
 
 
 def birlestir(a, b, azami_facet: int = AZAMI_FACET, yaz: bool = True):
-    """Iki parcayi TEMIZ birlestirir.
+    """Joins two parts CLEANLY.
 
-    IKI KATI ise: `BOPTools.JoinAPI.connect`. Duz `fuse` kesisen govdelerde
-    ic yuzey artigi birakabiliyor; connect bunu temizliyor. Olculdu 0.134 sn.
+    If TWO SOLIDS: `BOPTools.JoinAPI.connect`. A plain `fuse` can leave
+    internal face leftovers on intersecting bodies; connect cleans that up.
+    Measured 0.134 s.
 
-    IKI MESH ise: katiya cevir -> fuse -> mesh'e geri don (~7 sn, bkz.
-    `_mesh_birlestir`). Eskiden bu durumda "iki KATI nesne gerek" deyip
-    duruyordu; gunlukte model bunu mesh birlestirici sanip 13 calistirma /
-    16 dakika cikmazda dondu. Cagrinin kendisi dogruydu, calismasi gerekiyordu.
+    If TWO MESHES: convert to solid -> fuse -> back to mesh (~7 s, see
+    `_mesh_birlestir`). It used to stop in this case saying "needs two SOLID
+    objects"; in the log the model took it for a mesh joiner and went round
+    a dead end for 13 runs / 16 minutes. The call itself was right, it
+    needed to work.
     """
     from BOPTools import JoinAPI
 
@@ -1421,15 +1455,17 @@ def birlestir(a, b, azami_facet: int = AZAMI_FACET, yaz: bool = True):
         if ma is not None and mb is not None:
             return _mesh_birlestir(a, b, ma, mb, azami_facet, yaz)
         if yaz:
-            print("birlestir: iki KATI ya da iki MESH nesne gerek "
-                  "(biri kati biri mesh ise once kati_yap ile esitle)")
+            print("join: needs two SOLID or two MESH objects "
+                  "(if one is a solid and one a mesh, match them with "
+                  "make_solid first)")
         return None
 
-    # IKI KADEME. connect tercih edilir (ic yuzey artigi birakmaz) ama
-    # OLCULDU: mesh kokenli katilarda "There is more than one largest piece!"
-    # diye patlayabiliyor — 1740 yuzlu bir kure katisi + kutu denendi,
-    # connect patladi, duz fuse ayni isi yapti. Eskiden bu durumda None
-    # donuyorduk, yani calisan bir yol dururken model cikmaza giriyordu.
+    # TWO STAGES. connect is preferred (it leaves no internal face leftovers)
+    # but MEASURED: on mesh-derived solids it can blow up with "There is more
+    # than one largest piece!" — a 1740-face sphere solid + a box were tried,
+    # connect blew up, a plain fuse did the same job. We used to return None
+    # in this case, i.e. the model hit a dead end while a working path was
+    # right there.
     yol = "connect"
     try:
         sonuc = JoinAPI.connect([sa, sb]).removeSplitter()
@@ -1438,10 +1474,10 @@ def birlestir(a, b, azami_facet: int = AZAMI_FACET, yaz: bool = True):
             sonuc = sa.fuse(sb).removeSplitter()
             yol = "fuse"
             if yaz:
-                print(f"birlestir: connect olmadi ({e}); duz fuse ile devam")
+                print(f"join: connect failed ({e}); continuing with a plain fuse")
         except Exception as e2:                                  # noqa: BLE001
             if yaz:
-                print(f"birlestir: olmadi (connect: {e} | fuse: {e2})")
+                print(f"join: failed (connect: {e} | fuse: {e2})")
             return None
 
     doc = App.ActiveDocument
@@ -1455,34 +1491,34 @@ def birlestir(a, b, azami_facet: int = AZAMI_FACET, yaz: bool = True):
             pass
     doc.recompute()
 
-    # BASKI GERCEGI. "1 kati + isValid()" yeterli kanit degil — olculdu,
-    # bkz. _kati_baski_gercegi. Sonuc yaz=False iken de hesaplanmiyor:
-    # cagiran ciktiyi istemiyorsa maliyeti de odemesin.
+    # PRINT REALITY. "1 solid + isValid()" is not enough proof — measured,
+    # see _kati_baski_gercegi. It is not computed when yaz=False: if the
+    # caller does not want the output, it should not pay the cost either.
     if yaz:
         n = len(sonuc.Solids)
         print(f"{nesne.Name}: {getattr(a, 'Name', '?')} + "
-              f"{getattr(b, 'Name', '?')} -> hacim={_sayi(sonuc.Volume)} mm3, "
-              f"{n} kati ({yol})")
+              f"{getattr(b, 'Name', '?')} -> volume={_sayi(sonuc.Volume)} mm3, "
+              f"{n} solid(s) ({yol})")
         if n != 1:
-            print(f"    UYARI: {n} ayri kati kaldi — parcalar birbirine "
-                  f"DEGMIYOR olabilir. mesafe(a, b) ile bak.")
+            print(f"    WARNING: {n} separate solids remain — the parts may "
+                  f"NOT BE TOUCHING. Check with distance(a, b).")
         if not sonuc.isValid():
-            print("    UYARI: sonuc isValid() False")
+            print("    WARNING: result isValid() is False")
 
         durum, sure = _kati_baski_gercegi(sonuc)
         if durum is None:
-            print(f"    baski kontrolu KOSAMADI ({sure:.1f} sn) — sonucun "
-                  f"basilabilir oldugu DOGRULANMADI")
+            print(f"    the print check COULD NOT RUN ({sure:.1f} s) — it was "
+                  f"NOT VERIFIED that the result is printable")
         else:
             sorunlar = _baski_verdikti(durum)
             if sorunlar:
-                print(f"    BASKIYA HAZIR DEGIL ({sure:.1f} sn, "
-                      f"{durum.get('facet')} facet):")
+                print(f"    NOT READY TO PRINT ({sure:.1f} s, "
+                      f"{durum.get('facet')} facets):")
                 for s in sorunlar:
                     print(f"      - {s}")
-                print("      Sekil KATI olarak gecerli ama dilimleyiciye "
-                      "giden mesh bozuk. Once bunu duzeltmeden disa aktarma.")
+                print("      The shape is valid as a SOLID but the mesh going "
+                      "to the slicer is broken. Do not export before fixing this.")
             else:
-                print(f"    baskiya hazir: kapali, kesismesiz, tek parca "
-                      f"({sure:.1f} sn, {durum.get('facet')} facet)")
+                print(f"    ready to print: closed, not self-intersecting, one "
+                      f"component ({sure:.1f} s, {durum.get('facet')} facets)")
     return nesne

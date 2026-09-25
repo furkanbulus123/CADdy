@@ -671,7 +671,7 @@ try:
         _dock.genisligi_ayarla(mw, d2)
         for _ in range(3): app.processEvents()
         kontrol("hedefe ULASILAMAZSA hala UYARI veriyor",
-                any("hedefe ulasamadi" in m for m in _sesler["uyari"]),
+                any("did not reach its target" in m for m in _sesler["uyari"]),
                 _sesler["uyari"])
     finally:
         _log.bilgi, _log.uyari, _log.ayik = _yedek
@@ -754,7 +754,7 @@ try:
         _yaz("       icerikten genis komsu: %d px, uyari: %s"
              % (d4.width(), _sesler["uyari"]))
         kontrol("icerikten genis komsuda UYARI veriyor",
-                any("hedefe ulasamadi" in m for m in _sesler["uyari"]),
+                any("did not reach its target" in m for m in _sesler["uyari"]),
                 _sesler["uyari"])
         kontrol("uyari engelleyen dock'u ADIYLA soyluyor",
                 any("Model" in m for m in _sesler["uyari"]),

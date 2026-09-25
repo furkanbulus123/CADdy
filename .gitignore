@@ -1,27 +1,27 @@
 __pycache__/
 *.pyc
 
-# CLI'in calisma dizini — oturum artiklari, gecici dosyalar
+# The CLI's working directory — session leftovers, temporary files
 workspace/.claude/
 workspace/*.log
 
-# Sohbet kayitlari - calisma ciktisi, surekli buyur, kisisel icerik tasir.
-# Kullanici bunlari klasorden okuyor (panelde sag tik -> LOG klasoru).
-# Acik depoda HICBIRI yok: MANTIK.md'deki LOG/... atiflari gelistiricinin
-# kendi kayitlarina isaret eder.
+# Chat logs - run output, they keep growing and carry personal content.
+# The user reads them from the folder (right-click in the panel -> LOG folder).
+# NONE of them are in the public repo: the LOG/... references in MANTIK.md
+# point to the developer's own logs.
 LOG/
 
-# Kisisel gelistirme notlari — acik depoya girmez.
+# Personal development notes — not for the public repo.
 log_incelemesi*.txt
 report.txt
 caddy_gelisim.txt
 caddy-atlas.html
 /uzay_asansoru_*.png
 
-# Test raporlari (freecadcmd icinde print kayboldugu icin dosyaya yaziliyor).
+# Test reports (written to a file because print is lost inside freecadcmd).
 **/tests/_son_*.txt
 
-# Eklenti gunlukleri
+# Addon logs
 *.log
 
 # FreeCAD
@@ -33,6 +33,6 @@ caddy-atlas.html
 Thumbs.db
 desktop.ini
 
-# Test gunlukleri: suite artik gercek LOG/ yerine buraya yaziyor
-# (bkz. sohbet_log, CADDY_LOG_DIR). Calisma ciktisi, depoda yeri yok.
+# Test logs: the suite now writes here instead of the real LOG/
+# (see sohbet_log, CADDY_LOG_DIR). Run output, it does not belong in the repo.
 tests/_gunlukler/
