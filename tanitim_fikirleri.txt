@@ -1,0 +1,85 @@
+CADdy - TANITIM FIKIRLERI
+=========================
+
+Ilk hafta: Reddit'te 2 gonderi (r/FreeCAD, r/3Dprinting), HN yeni hesap
+kisitlamasi yuzunden acilamadi. Ilgi dusuk - acik kaynakta ilk hafta
+genelde boyle. Asagidakiler getirisine gore sirali.
+
+
+1. r/ClaudeAI ve r/ClaudeCode
+   Su ana kadar FreeCAD kitlesine paylasildi; asil ilgilenecek kitle Claude
+   Code kullananlar. "Claude Code'u FreeCAD'in icine gomdum" hikayesi orada
+   daha cok dikkat ceker. Basliga video, metinde olcum/dogrulama kismi.
+
+2. FreeCAD forumu (forum.freecad.org)
+   Eklentiler geleneksel olarak burada duyurulur, Reddit'ten daha etkili.
+   Alt bolum: "Python scripting and macros" ya da "Open discussion".
+   Ekim'deki Addon Manager basvurusunda "kullanici testi kaniti" olarak da
+   ise yarar.
+
+3. YouTube
+   69 saniyelik demo hazir: Shorts ya da normal video olarak yukle.
+   FreeCAD icerik ureticilerine kisa mesaj at (MangoJelly Solutions,
+   Adventures in Creation gibi). Biri gosterirse tek basina Reddit'ten
+   fazlasini getirir.
+
+4. "Awesome" listeleri
+   awesome-claude-code ve FreeCAD eklenti listelerine PR / basvuru.
+   Tek seferlik is, uzun sure ziyaretci getirir.
+
+5. Yazi: "AI 'cakisma yok' dedi, yanildi"
+   Dev.to / Medium / LinkedIn. Modelin goruntuye bakip yanildigi ve
+   bu yuzden olcmeyi ogrettigin hikaye. Teknik hikaye reklamdan iyi yayilir;
+   HN acilinca bu yaziyi da paylas.
+
+
+HACKER NEWS
+-----------
+- Once birkac gun baska konulara gercek yorumlar yazip karma topla.
+- Baskasindan paylasmasini isteyebilirsin ama OY ISTEMEK YASAK - yakalanirsa
+  gonderi gomulur.
+- Zaman: hafta ici, Turkiye saatiyle 16:00-18:00.
+- Baslik: Show HN: CADdy - An AI assistant inside FreeCAD that measures its own work
+- URL alanina repo linki; ilk yorumu kendin yaz (metin asagida).
+
+Ilk yorum:
+
+  Hi HN, I made CADdy because I kept asking chat models for FreeCAD
+  scripts, pasting them in and getting parts that looked right but
+  weren't: faces turned inside out, an open shell, two pieces that
+  overlapped by a few mm3 where you can't see it.
+
+  CADdy is a panel inside FreeCAD 1.1. You describe what you want, it
+  writes FreeCAD Python and runs it on the document you have open. Your
+  own features and the AI's end up in the same tree. It then checks the
+  result with actual measurements instead of trusting a screenshot:
+
+  - topology validity, the volume sign of each solid (catches inside-out
+    solids that isValid() accepts), open shells
+  - mesh printability (closed, self-intersections, components)
+  - part-to-part overlap using boolean common + section + distance.
+    Early on the model looked at renders and said "no overlap" twice;
+    both times it was wrong.
+  - anything it could not check is reported as NOT RUN, never silently
+    skipped
+
+  Every AI turn is one transaction, so a single Ctrl+Z undoes all of it,
+  and the panel's undo never touches your own edits.
+
+  It runs on the Claude Code CLI with your Claude subscription; there is
+  no API key to set up. Windows only for now; macOS/Linux mostly needs
+  the installer and the CLI lookup ported (open issue).
+
+  Most of what I use it for is 3D-printing parts and quick concept
+  models. I'd really like to hear from people who use FreeCAD daily:
+  where does it break, and what would you want it to check that it
+  doesn't?
+
+
+UZUN VADE
+---------
+Asil engel urunun kendisinde: sadece Windows + Claude aboneligi sart.
+Mac/Linux destegi (issue #1) kitleyi kabaca ikiye katlar - FreeCAD
+kullananlarin buyuk kismi Linux'ta.
+
+Takvim: 2026-10-22 -> FreeCAD Addon Manager basvurusu (MANTIK §55).
