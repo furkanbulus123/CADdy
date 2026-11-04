@@ -2,8 +2,6 @@
 
 **An AI assistant that lives inside FreeCAD — and measures its work instead of guessing.**
 
-*Formerly CADdy — renamed because another CAD program already uses that name.*
-
 https://github.com/user-attachments/assets/2cfa3f8e-b67b-40ed-ae7c-c576d6d24644
 
 You draw. You ask. KediCAD continues on the same live document. You keep going.
