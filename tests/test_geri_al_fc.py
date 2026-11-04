@@ -31,7 +31,7 @@ sys.path.insert(0, KOK)
 # Testler GERCEK LOG/ klasorune yazmasin (bkz. sohbet_log modul basligi):
 # olculdu, suite her kosusta oraya ~10 dosya birakiyordu ve kullanicinin
 # gercek oturum gunlukleriyle karisiyordu.
-os.environ["CADDY_LOG_DIR"] = os.path.join(
+os.environ["KEDICAD_LOG_DIR"] = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "_gunlukler")
 
 RAPOR = os.path.join(KOK, "tests", "_son_geri_al.txt")
@@ -68,12 +68,12 @@ def bolum(ad):
 import FreeCAD as App
 from PySide import QtCore
 
-from caddy import conversation as cv
-from caddy.conversation import ConversationController
-from caddy.transport.transport import TurSonucu
+from kedicad import conversation as cv
+from kedicad.conversation import ConversationController
+from kedicad.transport.transport import TurSonucu
 
 _yaz("=" * 70)
-_yaz("CADdy geri alma testleri")
+_yaz("KediCAD geri alma testleri")
 _yaz("=" * 70)
 
 app = QtCore.QCoreApplication.instance() or QtCore.QCoreApplication(sys.argv[:1])
@@ -232,7 +232,7 @@ kontrol("isaretsiz yanitta geri alma yok",
 
 # ------------------------------------------------------------ baglamda
 bolum("baglamda undo yigini gorunuyor")
-from caddy.context import serializer as sz
+from kedicad.context import serializer as sz
 
 metin = sz.belge_metni(doc)
 _yaz("       %s" % next((s for s in metin.splitlines()
@@ -338,14 +338,14 @@ kontrol("GUNLUKTEKI KAYIP GERI GELIYOR: is ileri alinabildi",
 bolum("ILERI AL — panel dugmesi bagli mi")
 import inspect
 
-from caddy.ui import dock as _dock
+from kedicad.ui import dock as _dock
 
-kaynak = inspect.getsource(_dock.CaddyPanel._arac_cubugu)
+kaynak = inspect.getsource(_dock.KediCADPanel._arac_cubugu)
 kontrol("arac cubugunda 'İleri al' dugmesi var", "Redo" in kaynak, kaynak[:200])
 kontrol("dugme ileri_al'a bagli", "self.ileri_al" in kaynak, kaynak[:400])
-kontrol("panelde ileri_al metodu var", hasattr(_dock.CaddyPanel, "ileri_al"))
+kontrol("panelde ileri_al metodu var", hasattr(_dock.KediCADPanel, "ileri_al"))
 kontrol("panel metodu controller'i cagiriyor",
-        "ctl.ileri_al" in inspect.getsource(_dock.CaddyPanel.ileri_al))
+        "ctl.ileri_al" in inspect.getsource(_dock.KediCADPanel.ileri_al))
 kontrol("ipucu ileri gecmisinin silinebilecegini soyluyor",
         "clears the redo" in kaynak, kaynak[:600])
 

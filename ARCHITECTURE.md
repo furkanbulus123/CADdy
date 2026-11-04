@@ -1,16 +1,16 @@
 # Architecture
 
-CADdy is a pure-Python FreeCAD 1.1 addon. The panel talks to the Claude Code
+KediCAD is a pure-Python FreeCAD 1.1 addon. The panel talks to the Claude Code
 CLI; code the model writes runs inside the live FreeCAD document.
 
 ```
-InitGui.py  ->  caddy/ui/dock.py  ->  caddy/conversation.py
-                                         |-> caddy/transport/   (claude.exe, stream-json)
-                                         |-> caddy/execution/   (run, verify, measure)
-                                         '-> caddy/context/     (document -> text)
+InitGui.py  ->  kedicad/ui/dock.py  ->  kedicad/conversation.py
+                                         |-> kedicad/transport/   (claude.exe, stream-json)
+                                         |-> kedicad/execution/   (run, verify, measure)
+                                         '-> kedicad/context/     (document -> text)
 ```
 
-**Layer rule:** only `caddy/ui/` imports QtWidgets. `execution/` and
+**Layer rule:** only `kedicad/ui/` imports QtWidgets. `execution/` and
 `context/` use only the FreeCAD API, so they are tested headless with
 `freecadcmd`.
 
@@ -33,7 +33,7 @@ InitGui.py  ->  caddy/ui/dock.py  ->  caddy/conversation.py
 - **Your own edits are safe.** The panel's Undo refuses to undo a change that
   is not the AI's.
 - **Backups.** Before the first AI change in a document a copy is saved to
-  `.caddy-backups/`.
+  `.kedicad-backups/`.
 
 ## Tests
 

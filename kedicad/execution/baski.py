@@ -10,7 +10,7 @@ rule: "if it already exists, merge it"):
 SOURCE. The method and the limit table come from earthtojake/text-to-cad
 (skills/dfam-check, MIT): measure facts first, compare them with a CITED
 process limit, report PASS / FAIL / REVIEW / NOT MEASURED, and give every
-FAIL a location and a target number. The same discipline CADdy already took
+FAIL a location and a target number. The same discipline KediCAD already took
 from that repository for verification (MANTIK 17): a limit with no
 measurement behind it is not a finding, it is "NOT MEASURED".
 

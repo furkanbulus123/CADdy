@@ -14,7 +14,7 @@ MEASURED (freecadcmd 1.1, a 60x40x20 block with a 10 mm hole):
     gives 10.0;
   * HardHidden=True turns on hidden lines (front: 4 visible, 6 hidden);
   * writeDXFPage works headless; PDF/SVG need TechDrawGui, which only
-    loads inside the FreeCAD GUI (that is where CADdy runs).
+    loads inside the FreeCAD GUI (that is where KediCAD runs).
 
 What it does NOT do, and says so: tolerances beyond the general note,
 GD&T, section views, thread callouts, surface finish.

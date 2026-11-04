@@ -1,12 +1,12 @@
 name: Bug report
-description: Something in CADdy did not work as expected
+description: Something in KediCAD did not work as expected
 labels: ["bug"]
 body:
   - type: textarea
     id: what
     attributes:
       label: What happened?
-      description: What you asked CADdy, what it did, and what you expected instead.
+      description: What you asked KediCAD, what it did, and what you expected instead.
     validations:
       required: true
   - type: textarea

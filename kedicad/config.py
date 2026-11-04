@@ -25,7 +25,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-YOL = "User parameter:BaseApp/Preferences/Mod/CADdy"
+YOL = "User parameter:BaseApp/Preferences/Mod/KediCAD"
 
 VARSAYILAN = {
     "Model": "opus",
@@ -44,23 +44,68 @@ VARSAYILAN = {
     "Debug": False,
     "ClaudeExe": "",
     "MaxBudgetUsd": 0.0,
-    # How much room the panel takes on first open. User feedback: "caddy
+    # How much room the panel takes on first open. User feedback: "kedicad
     # covers 60% of the screen, make it 40% so 60% shows the model".
     # Measured: the panel was as wide as Qt gave it because its MINIMUM
     # width was 888 px (long button labels in the top row) and it could not
     # get narrower. That floor was lowered first, then this ratio could apply.
     "PanelYuzde": 40,
-    # The permanent cat button outside the CADdy workbench. OFF by default:
+    # The permanent cat button outside the KediCAD workbench. OFF by default:
     # the Addon Index rule is that an addon keeps its toolbars to its own
-    # workbench. Turned on from the CADdy menu (commands.HerYerdeGoster).
+    # workbench. Turned on from the KediCAD menu (commands.HerYerdeGoster).
     "ShowEverywhere": False,
 }
+
+
+ESKI_AD = "CADdy"  # the name until v0.3.0, see eski_ayarlari_tasi
+
+_tasima_denendi = False
 
 
 def _p():
     import FreeCAD as App
 
-    return App.ParamGet(YOL)
+    global _tasima_denendi
+    p = App.ParamGet(YOL)
+    if not _tasima_denendi:
+        _tasima_denendi = True
+        try:
+            eski_ayarlari_tasi(App, p)
+        except Exception:
+            pass  # a failed copy must never stop the addon; defaults apply
+    return p
+
+
+def eski_ayarlari_tasi(App, yeni, eski_ad: str = ESKI_AD) -> int:
+    """Copy settings from the old name, once. Returns how many were copied.
+
+    Until v0.3.0 the addon was called CADdy and stored its settings under
+    Mod/CADdy. It was renamed (another CAD program already uses that name),
+    so an existing user would otherwise lose their model, effort and panel
+    choices. Copies only when the new group is still EMPTY — after that the
+    new group wins. The old group is left in place (it is tiny, and removing
+    user data is not ours to do). Measured: GetContents() returns
+    [(type, name, value), ...] or None for an empty group.
+    """
+    if yeni.GetContents():
+        return 0
+    mod = App.ParamGet("User parameter:BaseApp/Preferences/Mod")
+    if not mod.HasGroup(eski_ad):
+        return 0  # do not create an empty old group just by looking
+    yaz_fn = {
+        "Boolean": yeni.SetBool,
+        "Integer": yeni.SetInt,
+        "Float": yeni.SetFloat,
+        "String": yeni.SetString,
+        "Unsigned Long": yeni.SetUnsigned,
+    }
+    n = 0
+    for tur, ad, deger in mod.GetGroup(eski_ad).GetContents() or []:
+        f = yaz_fn.get(tur)
+        if f:
+            f(ad, deger)
+            n += 1
+    return n
 
 
 def metin(anahtar: str) -> str:
@@ -107,7 +152,7 @@ def yaz(anahtar: str, deger) -> None:
 
 # Models selectable in the panel: (value, label, tooltip)
 #
-# Measured (same prompt, with CADdy's real argv):
+# Measured (same prompt, with KediCAD's real argv):
 #
 #   model   request  total time          thinking  code block
 #   opus    simple    8.1 s                     0   yes
@@ -284,6 +329,6 @@ def yedek_dizini() -> Path:
     Ctrl+Z stack may not reach back far enough; the copy in this folder is
     the last resort.
     """
-    d = eklenti_dizini() / ".caddy-backups"
+    d = eklenti_dizini() / ".kedicad-backups"
     d.mkdir(parents=True, exist_ok=True)
     return d

@@ -8,7 +8,7 @@ FreeCAD (plain python) — headless tests rely on that.
 
 from __future__ import annotations
 
-ONEK = "[CADdy] "
+ONEK = "[KediCAD] "
 
 try:
     import FreeCAD as _App

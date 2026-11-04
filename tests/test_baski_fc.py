@@ -19,7 +19,7 @@ import sys
 
 KOK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, KOK)
-os.environ["CADDY_LOG_DIR"] = os.path.join(
+os.environ["KEDICAD_LOG_DIR"] = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "_gunlukler")
 
 RAPOR = os.path.join(KOK, "tests", "_son_baski.txt")
@@ -56,10 +56,10 @@ def bolum(ad):
 import FreeCAD as App
 import Part
 
-from caddy.execution.executor import CodeExecutor
+from kedicad.execution.executor import CodeExecutor
 
 _yaz("=" * 70)
-_yaz("CADdy baski analizi / tarama / teknik resim")
+_yaz("KediCAD baski analizi / tarama / teknik resim")
 _yaz("=" * 70)
 
 doc = App.newDocument("BaskiTest")

@@ -1,19 +1,21 @@
-# CADdy
+# KediCAD
 
 **An AI assistant that lives inside FreeCAD — and measures its work instead of guessing.**
 
+*Formerly CADdy — renamed because another CAD program already uses that name.*
+
 https://github.com/user-attachments/assets/2cfa3f8e-b67b-40ed-ae7c-c576d6d24644
 
-You draw. You ask. CADdy continues on the same live document. You keep going.
+You draw. You ask. KediCAD continues on the same live document. You keep going.
 Nothing is exported, nothing is lost, and every AI step is one `Ctrl+Z` away.
 
 ---
 
-## Why CADdy
+## Why KediCAD
 
-- **Verified, not eyeballed.** After every change CADdy checks the geometry:
+- **Verified, not eyeballed.** After every change KediCAD checks the geometry:
   overlapping parts, open shells, invalid solids, volumes. An AI looking at a
-  screenshot says "looks fine" — CADdy measures.
+  screenshot says "looks fine" — KediCAD measures.
 - **One live document.** Hand-made and AI-made features sit in the same model
   tree and stay parametric. Edit either one, any time.
 - **One step, one undo.** However many objects an AI turn creates, a single
@@ -25,12 +27,12 @@ Nothing is exported, nothing is lost, and every AI step is one `Ctrl+Z` away.
 
 | | |
 |---|---|
-| ![Toy pickup truck built step by step with CADdy](docs/truck.png) | ![Sailing ship: CADdy measures the hull and checks every part](docs/ship.png) |
+| ![Toy pickup truck built step by step with KediCAD](docs/truck.png) | ![Sailing ship: KediCAD measures the hull and checks every part](docs/ship.png) |
 | *A toy pickup truck, built step by step in one live document.* | *A sailing ship: measured part by part, not eyeballed.* |
-| ![Alien figurine split into printable parts, overlap-checked](docs/alien.png) | ![A space elevator concept built with CADdy](docs/space.png) |
+| ![Alien figurine split into printable parts, overlap-checked](docs/alien.png) | ![A space elevator concept built with KediCAD](docs/space.png) |
 | *A 3-part printable figurine, checked for overlaps and fit.* | *A space elevator concept (below).* |
 
-*Not only parts — ideas too. A visual concept of a space elevator: a cable anchored on Earth's north pole, a climber cabin on its way up, a station in geostationary orbit and a counterweight beyond it, with the Moon, planets and a starfield around them. Asked "what is this", CADdy reads the scene back from the document itself — every part, its size and where it sits.*
+*Not only parts — ideas too. A visual concept of a space elevator: a cable anchored on Earth's north pole, a climber cabin on its way up, a station in geostationary orbit and a counterweight beyond it, with the Moon, planets and a starfield around them. Asked "what is this", KediCAD reads the scene back from the document itself — every part, its size and where it sits.*
 
 ## Requirements
 
@@ -44,25 +46,25 @@ Nothing is exported, nothing is lost, and every AI step is one `Ctrl+Z` away.
 ## Install
 
 ```powershell
-git clone https://github.com/furkanbulus123/CADdy.git
-cd CADdy
+git clone https://github.com/furkanbulus123/KediCAD.git
+cd KediCAD
 .\install.ps1
 ```
 
 The script finds FreeCAD, checks the `claude` command and links the folder into
 FreeCAD's `Mod` directory. No admin rights needed. Restart FreeCAD and pick
-**CADdy** from the workbench list.
+**KediCAD** from the workbench list.
 
 ## Usage
 
-Pick **CADdy** from the workbench list and the panel opens. Click the cat
+Pick **KediCAD** from the workbench list and the panel opens. Click the cat
 icon in the toolbar to open it again later.
 
-Want the cat in every workbench, so you can call CADdy while sketching or in
-Part Design? Turn on **CADdy → Show CADdy button in every workbench** once
+Want the cat in every workbench, so you can call KediCAD while sketching or in
+Part Design? Turn on **KediCAD → Show KediCAD button in every workbench** once
 (it is off by default):
 
-![Where to find CADdy: the cat icon in the FreeCAD toolbar](docs/where_to_find.png)
+![Where to find KediCAD: the cat icon in the FreeCAD toolbar](docs/where_to_find.png)
 
 Then describe what you want:
 
@@ -78,7 +80,7 @@ Then describe what you want:
 
 ## Privacy
 
-CADdy itself makes no network connections and collects no telemetry. The only
+KediCAD itself makes no network connections and collects no telemetry. The only
 external service is the Claude Code CLI, which sends to Anthropic:
 
 - your messages,
@@ -90,7 +92,7 @@ Anthropic's [privacy policy](https://www.anthropic.com/legal/privacy) applies to
 that data. Everything else stays on your machine, inside the addon folder:
 
 - `LOG/` — plain-text chat logs (open them from the panel's right-click menu)
-- `.caddy-backups/` — a copy of your document saved before the first AI change
+- `.kedicad-backups/` — a copy of your document saved before the first AI change
 
 Delete either folder at any time.
 
@@ -99,10 +101,10 @@ Delete either folder at any time.
 - **"claude command not found"** — install the CLI
   (`npm install -g @anthropic-ai/claude-code`), run `claude` once to sign in,
   then restart FreeCAD.
-- **No CADdy in the workbench list** — run `.\install.ps1` again and check the
+- **No KediCAD in the workbench list** — run `.\install.ps1` again and check the
   `[x]` lines; restart FreeCAD.
 - **Unexpected API charges** — `ANTHROPIC_API_KEY` is set; see Requirements.
-- **Something else** — [open an issue](https://github.com/furkanbulus123/CADdy/issues)
+- **Something else** — [open an issue](https://github.com/furkanbulus123/KediCAD/issues)
   with the relevant part of the chat log from `LOG/`.
 
 ## Tests & architecture

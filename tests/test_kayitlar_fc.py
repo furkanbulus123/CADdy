@@ -17,7 +17,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 KOK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, KOK)
-os.environ["CADDY_LOG_DIR"] = os.path.join(
+os.environ["KEDICAD_LOG_DIR"] = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "_gunlukler")
 
 RAPOR = os.path.join(KOK, "tests", "_son_kayitlar.txt")
@@ -50,13 +50,13 @@ def bolum(ad):
     _yaz("--- %s %s" % (ad, "-" * max(0, 60 - len(ad))))
 
 
-from caddy import kayitlar, sohbet_log                          # noqa: E402
+from kedicad import kayitlar, sohbet_log                          # noqa: E402
 
-GECICI = Path(tempfile.mkdtemp(prefix="caddy_kayit_"))
+GECICI = Path(tempfile.mkdtemp(prefix="kedicad_kayit_"))
 
 ORNEK = """\
 ========================================================================
-CADdy chat log
+KediCAD chat log
 session : 9564dc71-071d-4ca3-9c21-483cf5766739
 model   : claude-opus-5
 effort  : Fast (thinks less)
@@ -137,8 +137,8 @@ kontrol("yeni dosya ACILMADI", len(list(GECICI.glob("*.txt"))) == 2,
         [p.name for p in GECICI.glob("*.txt")])
 kontrol("dosya buyudu", hedef.stat().st_size > onceki_boyut)
 kontrol("DEVAM ayraci yazildi", "RESUMED" in metin)
-kontrol("baslik TEKRARLANMADI", metin.count("CADdy chat log") == 1,
-        metin.count("CADdy chat log"))
+kontrol("baslik TEKRARLANMADI", metin.count("KediCAD chat log") == 1,
+        metin.count("KediCAD chat log"))
 kontrol("devam mesaji dosyada", "devam eden mesaj" in metin)
 
 # Ayni oturum icin oturum_ac cagrilirsa (her tur cagriliyor) dosyayi
@@ -171,7 +171,7 @@ _yeniden = App.openDocument(_BELGE_YOLU)
 
 # Adin DOSYA ADINDAN turedigini gostermek icin ikisinin AYRILDIGI bir
 # ornek gerekiyor: ad ile dosya adi ayni oldugunda esitlik hicbir sey
-# kanitlamaz. Ilk olcum de boyle yakalanmisti (ProbeAc -> caddy_probe_ac).
+# kanitlamaz. Ilk olcum de boyle yakalanmisti (ProbeAc -> kedicad_probe_ac).
 _ayrik = App.newDocument("IcAdiBaska")
 _ayrik.saveAs(str(GECICI / "DosyaAdiBaska.FCStd"))
 App.closeDocument(_ayrik.Name)
@@ -297,7 +297,7 @@ try:
     from PySide import QtWidgets                                # noqa: E402
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-    from caddy.transport import transport as T                  # noqa: E402
+    from kedicad.transport import transport as T                  # noqa: E402
 
     t = T.KaliciTransport()
     kontrol("ON KABUL: yeni oturum ILK TUR modunda", t._ilk_tur is True)

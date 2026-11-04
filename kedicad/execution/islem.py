@@ -720,7 +720,7 @@ def yazi(metin: str, boyut: float = 10.0, kalinlik: float = 1.0,
     """TEXT on a part — a name, a dimension, a logo. Produces real geometry.
 
     Measured: Draft.make_shapestring 2.14 s (first call loads the module),
-    a 97-edge shape for "CADdy".
+    a 97-edge shape for "KediCAD".
 
     If `kalinlik` > 0 the text is made solid (ready for embossing/engraving).
     If no font is found it DOES NOT STAY SILENT.

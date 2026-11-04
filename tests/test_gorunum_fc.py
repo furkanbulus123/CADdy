@@ -25,7 +25,7 @@ sys.path.insert(0, KOK)
 # Testler GERCEK LOG/ klasorune yazmasin (bkz. sohbet_log modul basligi):
 # olculdu, suite her kosusta oraya ~10 dosya birakiyordu ve kullanicinin
 # gercek oturum gunlukleriyle karisiyordu.
-os.environ["CADDY_LOG_DIR"] = os.path.join(
+os.environ["KEDICAD_LOG_DIR"] = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "_gunlukler")
 
 RAPOR = os.path.join(KOK, "tests", "_son_gorunum.txt")
@@ -60,7 +60,7 @@ def bolum(ad):
 
 
 _yaz("=" * 70)
-_yaz("CADdy 3B gorunum yakalama testleri")
+_yaz("KediCAD 3B gorunum yakalama testleri")
 _yaz("=" * 70)
 
 
@@ -152,13 +152,13 @@ class SahteGui:
 
 def _kos(patlat: str = ""):
     """Sahte GUI ile yakala_cok'u calistirir; (gorunum, kareler) doner."""
-    for ad in ("caddy.gorunum", "caddy.log", "caddy", "caddy.config"):
+    for ad in ("kedicad.gorunum", "kedicad.log", "kedicad", "kedicad.config"):
         sys.modules.pop(ad, None)
     g = SahteGorunum(patlat)
     eski = sys.modules.get("FreeCADGui")
     sys.modules["FreeCADGui"] = SahteGui(g)
     try:
-        from caddy import gorunum as gm
+        from kedicad import gorunum as gm
         kareler = gm.yakala_cok(100, 80)
     finally:
         if eski is None:
@@ -172,7 +172,7 @@ def _kos_yakin(adlar, patlat: str = "", cok_aci: bool = False):
     """Sahte GUI + GERCEK belge ile yakala_yakin. (gorunum, gui, kareler)."""
     import FreeCAD as App
 
-    for ad in ("caddy.gorunum", "caddy.log", "caddy", "caddy.config"):
+    for ad in ("kedicad.gorunum", "kedicad.log", "kedicad", "kedicad.config"):
         sys.modules.pop(ad, None)
     doc = App.ActiveDocument or App.newDocument("YakinTest")
     if doc.getObject("Kutu1") is None:
@@ -184,7 +184,7 @@ def _kos_yakin(adlar, patlat: str = "", cok_aci: bool = False):
     eski = sys.modules.get("FreeCADGui")
     sys.modules["FreeCADGui"] = gui
     try:
-        from caddy import gorunum as gm
+        from kedicad import gorunum as gm
         kareler = gm.yakala_yakin(adlar, 100, 80, cok_aci=cok_aci)
     finally:
         if eski is None:

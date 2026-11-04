@@ -25,7 +25,7 @@ sys.path.insert(0, KOK)
 # Testler GERCEK LOG/ klasorune yazmasin (bkz. sohbet_log modul basligi):
 # olculdu, suite her kosusta oraya ~10 dosya birakiyordu ve kullanicinin
 # gercek oturum gunlukleriyle karisiyordu.
-os.environ["CADDY_LOG_DIR"] = os.path.join(
+os.environ["KEDICAD_LOG_DIR"] = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "_gunlukler")
 
 RAPOR = os.path.join(KOK, "tests", "_son_koruma.txt")
@@ -62,13 +62,13 @@ def bolum(ad):
 import FreeCAD as App
 from PySide import QtCore
 
-from caddy import config
-from caddy.conversation import ConversationController
-from caddy import conversation as cv
-from caddy.execution.executor import CodeExecutor
+from kedicad import config
+from kedicad.conversation import ConversationController
+from kedicad import conversation as cv
+from kedicad.execution.executor import CodeExecutor
 
 _yaz("=" * 70)
-_yaz("CADdy koruma testleri")
+_yaz("KediCAD koruma testleri")
 _yaz("=" * 70)
 
 app = QtCore.QCoreApplication.instance() or QtCore.QCoreApplication(sys.argv[:1])
@@ -277,14 +277,14 @@ kontrol("config.otomatik_calistir YOK",
 kontrol("AutoRun varsayilanlarda YOK", "AutoRun" not in config.VARSAYILAN,
         list(config.VARSAYILAN))
 
-from caddy.transport.process import ClaudeProcess
+from kedicad.transport.process import ClaudeProcess
 
 kontrol("ClaudeProcess.girdiyi_kapat YOK",
         not hasattr(ClaudeProcess, "girdiyi_kapat"))
 kontrol("ClaudeProcess.stderr_metin sinyali YOK",
         not hasattr(ClaudeProcess, "stderr_metin"))
 
-from caddy import gorunum
+from kedicad import gorunum
 
 import inspect
 
@@ -295,7 +295,7 @@ kontrol("gorunum iskele artigi silindi",
 
 # =========================================================== 5) GUNLUK
 bolum("gunluk artik dogrulamayi da kaydediyor")
-from caddy.sohbet_log import SohbetGunlugu
+from kedicad.sohbet_log import SohbetGunlugu
 
 kontrol("otomatik() basligi var", hasattr(SohbetGunlugu, "otomatik"))
 
@@ -332,8 +332,8 @@ kontrol("ilk kayitla dosya DOGDU", g2.dosya.exists(), g2.dosya)
 _ic2 = g2.dosya.read_text(encoding="utf-8")
 kontrol("baslik kaybolmadi, en tepede", _ic2.startswith("=" * 72), _ic2[:40])
 kontrol("oturum kimligi baslikta", "session : bosoturum" in _ic2, _ic2[:200])
-kontrol("baslik BIR KEZ yazildi", _ic2.count("CADdy chat log") == 1,
-        _ic2.count("CADdy chat log"))
+kontrol("baslik BIR KEZ yazildi", _ic2.count("KediCAD chat log") == 1,
+        _ic2.count("KediCAD chat log"))
 kontrol("mesaj da yazildi", "ilk gercek mesaj" in _ic2, _ic2[-200:])
 
 # Model, baslik daha diskte yokken de basliga islemeli — eskiden bu yol
@@ -347,8 +347,8 @@ kontrol("model basliga yazildi (dosya sonradan dogsa da)",
 kontrol("'(unknown)' kalmadi", "(unknown)" not in _ic3, _ic3[:200])
 
 # Ortam degiskeni: testler gercek LOG/'a yazmasin diye eklendi.
-kontrol("CADDY_LOG_DIR kok dizini belirliyor",
-        SohbetGunlugu()._kok == Path(os.environ["CADDY_LOG_DIR"]),
+kontrol("KEDICAD_LOG_DIR kok dizini belirliyor",
+        SohbetGunlugu()._kok == Path(os.environ["KEDICAD_LOG_DIR"]),
         SohbetGunlugu()._kok)
 
 # ================================================ KESIF ONCELIGI (MANTIK 39)
@@ -358,7 +358,7 @@ bolum("kesif butcesi ISKELEYE degil ISE harcaniyor")
 # ustelik sure butcesinin 3.0 sn'sinden yalnizca 0.48 sn kullanilmisti.
 import time
 
-from caddy.execution import kesif as _kesif
+from kedicad.execution import kesif as _kesif
 
 _kd = App.newDocument("KesifOncelik")
 for _i in range(12):

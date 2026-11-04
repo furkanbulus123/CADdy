@@ -1,4 +1,4 @@
-# CADdy - FreeCAD workbench registration.
+# KediCAD - FreeCAD workbench registration.
 #
 # ================== READ THIS BEFORE TOUCHING THIS FILE ==================
 #
@@ -29,7 +29,7 @@
 # self.__class__.Icon = ... for the same reason.
 #
 # No logic here - only the icon path, the workbench class and command
-# registration. The real work is in the caddy/ package.
+# registration. The real work is in the kedicad/ package.
 # =========================================================================
 
 import os
@@ -51,47 +51,47 @@ def _eklenti_dizini():
 
 
 EKLENTI_DIZINI = _eklenti_dizini()
-# sys.path is NOT touched: FreeCAD itself puts Mod/CADdy on sys.path before
-# running this file (measured in 1.1: both "Mod\CADdy" and "Mod\CADdy\."
-# are there, and `import caddy` works). The Addon Index forbids addons from
+# sys.path is NOT touched: FreeCAD itself puts Mod/KediCAD on sys.path before
+# running this file (measured in 1.1: both "Mod\KediCAD" and "Mod\KediCAD\."
+# are there, and `import kedicad` works). The Addon Index forbids addons from
 # editing sys.path, and an earlier insert here was redundant anyway.
 
-IKON = os.path.join(EKLENTI_DIZINI, "resources", "icons", "caddy.svg")
+IKON = os.path.join(EKLENTI_DIZINI, "resources", "icons", "kedicad.svg")
 
 
-class CADdyWorkbench(Workbench):  # noqa: F821  (injected by FreeCAD)
+class KediCADWorkbench(Workbench):  # noqa: F821  (injected by FreeCAD)
     # CAREFUL: only CONSTANT values here. Do not refer to an outside name
     # (like IKON) - the class body cannot see it. Icon is assigned below.
-    MenuText = "CADdy"
+    MenuText = "KediCAD"
     ToolTip = "AI assistant inside FreeCAD"
 
     def Initialize(self):
         try:
-            from caddy import commands
+            from kedicad import commands
         except Exception:
             import traceback
 
             import FreeCAD
             FreeCAD.Console.PrintError(
-                "[CADdy] failed to load:\n" + traceback.format_exc() + "\n")
+                "[KediCAD] failed to load:\n" + traceback.format_exc() + "\n")
             return
 
         commands.kaydet()
-        self.appendToolbar("CADdy", list(commands.ARAC_CUBUGU))
-        self.appendMenu("CADdy", list(commands.ARAC_CUBUGU)
-                        + ["Separator", "CADdy_ShowEverywhere"])
+        self.appendToolbar("KediCAD", list(commands.ARAC_CUBUGU))
+        self.appendMenu("KediCAD", list(commands.ARAC_CUBUGU)
+                        + ["Separator", "KediCAD_ShowEverywhere"])
 
     def Activated(self):
         # Open the panel automatically the first time the workbench is selected.
         try:
-            from caddy.ui.dock import paneli_goster
+            from kedicad.ui.dock import paneli_goster
             paneli_goster()
         except Exception:
             import traceback
 
             import FreeCAD
             FreeCAD.Console.PrintError(
-                "[CADdy] could not open the panel:\n" + traceback.format_exc() + "\n")
+                "[KediCAD] could not open the panel:\n" + traceback.format_exc() + "\n")
 
     def GetClassName(self):
         # REQUIRED constant for pure-Python workbenches
@@ -99,28 +99,28 @@ class CADdyWorkbench(Workbench):  # noqa: F821  (injected by FreeCAD)
 
 
 # Outside the class body: this is module level, IKON is visible.
-CADdyWorkbench.Icon = IKON
+KediCADWorkbench.Icon = IKON
 
-Gui.addWorkbench(CADdyWorkbench())  # noqa: F821
+Gui.addWorkbench(KediCADWorkbench())  # noqa: F821
 
 
 # --- Optional: the cat button in every workbench ---------------------------
 # The workbench's own appendToolbar/appendMenu are visible ONLY while that
-# workbench is active. The user wanted CADdy reachable from anywhere, so a
-# permanent toolbar exists (caddy/ui/ust_menu.py) — but the Addon Index rule
+# workbench is active. The user wanted KediCAD reachable from anywhere, so a
+# permanent toolbar exists (kedicad/ui/ust_menu.py) — but the Addon Index rule
 # is that an addon keeps its toolbars to its OWN workbench. So it is OFF by
-# default and the user turns it on from the CADdy menu ("Show CADdy button
+# default and the user turns it on from the KediCAD menu ("Show KediCAD button
 # in every workbench"); the choice is stored in user.cfg.
 #
 # With it off, NOTHING runs here at startup — not even a PySide import.
 # Commands are registered here only when needed: Initialize() runs the first
 # time the workbench is selected, but the top bar has to exist from startup.
 try:
-    from caddy import config as _ayar
+    from kedicad import config as _ayar
     if _ayar.bayrak("ShowEverywhere"):
-        from caddy import commands as _komutlar
+        from kedicad import commands as _komutlar
         _komutlar.kaydet()
-        from caddy.ui import ust_menu as _ust
+        from kedicad.ui import ust_menu as _ust
         _ust.yerlestir()
 except Exception:
     # CAREFUL: this block must not fail ITSELF. The first version had
@@ -133,8 +133,8 @@ except Exception:
     try:
         import FreeCAD as _App
         _App.Console.PrintWarning(
-            "[CADdy] could not add the top bar (the workbench still works):\n"
+            "[KediCAD] could not add the top bar (the workbench still works):\n"
             + _iz + "\n")
     except Exception:
         import sys as _sys
-        _sys.stderr.write("[CADdy] could not add the top bar:\n" + _iz + "\n")
+        _sys.stderr.write("[KediCAD] could not add the top bar:\n" + _iz + "\n")

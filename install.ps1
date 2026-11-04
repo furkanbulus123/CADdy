@@ -1,4 +1,4 @@
-# CADdy installer - links this folder into FreeCAD's Mod directory.
+# KediCAD installer - links this folder into FreeCAD's Mod directory.
 #
 # No admin rights needed: a junction (/J) does not require elevation,
 # a symbolic link (/D) would. That is why a junction is used.
@@ -31,16 +31,16 @@ function Fail($m)   { Write-Host "  [x] $m" -ForegroundColor Red
 function Header($m) { Write-Host ""; Write-Host $m -ForegroundColor Cyan }
 
 Write-Host ""
-Write-Host "CADdy installer" -ForegroundColor White
+Write-Host "KediCAD installer" -ForegroundColor White
 Write-Host "source: $source"
 
-# --- 1. Is this really the CADdy folder ---------------------------------
+# --- 1. Is this really the KediCAD folder ---------------------------------
 Header "1) Repository"
 if ((Test-Path (Join-Path $source "InitGui.py")) -and
-    (Test-Path (Join-Path $source "caddy\conversation.py"))) {
+    (Test-Path (Join-Path $source "kedicad\conversation.py"))) {
     Ok "repository files found"
 } else {
-    Fail "this folder is not the CADdy repository (InitGui.py / caddy\ missing)"
+    Fail "this folder is not the KediCAD repository (InitGui.py / kedicad\ missing)"
     Write-Host ""
     exit 1
 }
@@ -69,7 +69,7 @@ if ($fc) {
     if ($v -and $v -match "^1\.1") {
         Ok "version $v"
     } elseif ($v) {
-        Warn "version $v - CADdy is written for 1.1.x"
+        Warn "version $v - KediCAD is written for 1.1.x"
     } else {
         Warn "could not read the version (continuing anyway)"
     }
@@ -109,7 +109,7 @@ if ($env:ANTHROPIC_API_KEY) {
 # --- 5. Junction --------------------------------------------------------
 Header "5) Link into FreeCAD"
 $mod  = Join-Path $env:APPDATA "FreeCAD\v1-1\Mod"
-$link = Join-Path $mod "CADdy"
+$link = Join-Path $mod "KediCAD"
 
 if (-not (Test-Path $mod)) {
     New-Item -ItemType Directory -Force -Path $mod | Out-Null
@@ -148,14 +148,26 @@ function Set-Link($link, $target, $name) {
     }
 }
 
-Set-Link $link $source "CADdy"
+Set-Link $link $source "KediCAD"
+
+# Until v0.3.0 the addon was called CADdy and linked as Mod\CADdy. If that
+# old link still points HERE, FreeCAD would load the workbench twice - remove
+# it. Only a link to this very folder is touched; a real folder never is.
+$old = Get-Item (Join-Path $mod "CADdy") -ErrorAction SilentlyContinue
+if ($old -and $old.LinkType) {
+    $oldTarget = ($old.Target | Select-Object -First 1)
+    if ($oldTarget -and ($oldTarget.TrimEnd('\') -ieq $source.TrimEnd('\'))) {
+        cmd /c rmdir "$($old.FullName)" | Out-Null
+        Ok "removed the old CADdy link (the addon is now called KediCAD)"
+    }
+}
 
 
 # --- Result -------------------------------------------------------------
 Write-Host ""
 if ($script:problems -eq 0) {
     Write-Host "Installation complete." -ForegroundColor Green
-    Write-Host "Start FreeCAD; CADdy will appear in the workbench list."
+    Write-Host "Start FreeCAD; KediCAD will appear in the workbench list."
     if ($fc) {
         Write-Host ""
         Write-Host "To verify:"

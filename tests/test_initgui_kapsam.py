@@ -104,7 +104,7 @@ kontrol("addWorkbench cagrildi", len(gui.kayitli) == 1, len(gui.kayitli))
 
 if gui.kayitli:
     wb = gui.kayitli[0]
-    kontrol("MenuText CADdy", getattr(wb, "MenuText", None) == "CADdy",
+    kontrol("MenuText KediCAD", getattr(wb, "MenuText", None) == "KediCAD",
             getattr(wb, "MenuText", None))
     kontrol("GetClassName Gui::PythonWorkbench",
             wb.GetClassName() == "Gui::PythonWorkbench", wb.GetClassName())
@@ -113,7 +113,7 @@ if gui.kayitli:
     kontrol("Icon atandi", bool(ikon), ikon)
     kontrol("Icon dosyasi gercekten var", ikon and os.path.isfile(ikon), ikon)
 
-# Addon Index kurali: eklenti sys.path'e DOKUNMAZ. FreeCAD Mod/CADdy'yi
+# Addon Index kurali: eklenti sys.path'e DOKUNMAZ. FreeCAD Mod/KediCAD'yi
 # zaten kendisi ekliyor (1.1'de olculdu) — eski ekleme gereksizdi.
 kontrol("InitGui sys.path'e dokunmuyor", sys.path == onceki_yol,
         [p for p in sys.path if p not in onceki_yol])
@@ -123,7 +123,7 @@ kontrol("InitGui sys.path'e dokunmuyor", sys.path == onceki_yol,
 # duruyor ve orada patlarsa sessizce kayboluyordu — ustelik hata
 # yakalayicinin KENDISI (import FreeCAD) bu ortamda patliyordu ve butun
 # InitGui'yi dusuruyordu. Ikisi de burada sinaniyor.
-# Bu ortamda caddy.commands "import FreeCAD" yaptigi icin blok zaten
+# Bu ortamda kedicad.commands "import FreeCAD" yaptigi icin blok zaten
 # patlar — beklenen. Sinanacak sey blogun patlamasi degil, patlarken
 # BUTUN InitGui'yi goturmemesi: workbench yine kayitli kalmali.
 # (Komutlarin gercekten kaydedildigi FreeCAD'li testte sinaniyor.)

@@ -1,7 +1,7 @@
 """MEASUREMENT helpers the model can call from its code.
 
 WHY THEY EXIST. The user's words: "measuring is very critical, the user
-cannot keep measuring" and "it would be better if caddy measured directly".
+cannot keep measuring" and "it would be better if kedicad measured directly".
 A log review had separated two different problems:
 
   1. READING BACK — the model already computed a dimension but could not

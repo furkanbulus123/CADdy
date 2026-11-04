@@ -19,7 +19,7 @@ the header right away; a session opened with no message written left a
 exactly that. The header now waits for the FIRST REAL ENTRY — a session with
 no conversation produces no file.
 
-TEST ROOT. The root directory can be changed with the `CADDY_LOG_DIR`
+TEST ROOT. The root directory can be changed with the `KEDICAD_LOG_DIR`
 environment variable. The reason was measured: tests were writing into the
 real LOG/ folder (the small files contained test data such as "SilenKutu",
 "patlayan", "birinci hata") and every suite run left ~10 files behind.
@@ -66,7 +66,7 @@ class SohbetGunlugu:
     def __init__(self, kok: Path | None = None) -> None:
         from . import config
 
-        cevre = os.environ.get("CADDY_LOG_DIR", "").strip()
+        cevre = os.environ.get("KEDICAD_LOG_DIR", "").strip()
         self._kok = Path(kok) if kok else Path(
             cevre or (config.eklenti_dizini() / "LOG"))
         self._dosya: Path | None = None
@@ -147,7 +147,7 @@ class SohbetGunlugu:
 
         self._baslik = [
             "=" * 72,
-            "CADdy chat log",
+            "KediCAD chat log",
             f"session : {self._oturum}",
             f"model   : {model or '(unknown)'}",
             f"effort  : {efor_metni}",
@@ -239,7 +239,7 @@ class SohbetGunlugu:
 
         THE IDENTITY IS THE FILE PATH, NOT THE NAME. Measured (freecadcmd):
         a document opened as `ProbeAc`, saved, closed and reopened became
-        `caddy_probe_ac` — the internal name is RE-derived from the file
+        `kedicad_probe_ac` — the internal name is RE-derived from the file
         name. So `doc.Name` is not stable across sessions; comparison is by
         path, the name is only shown to humans.
 

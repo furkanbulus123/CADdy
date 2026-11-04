@@ -73,7 +73,7 @@ from .process import ClaudeProcess
 # it from cwd by itself and it goes into the cache); only the format rule
 # that must never be missed is here.
 SISTEM_SOZLESMESI = (
-    "You are embedded in FreeCAD as the CADdy assistant. "
+    "You are embedded in FreeCAD as the KediCAD assistant. "
     "When the user asks for a geometry change, reply with a short sentence of "
     "explanation and then a fenced code block tagged "
     "`freecad-python` containing complete, runnable FreeCAD Python. "
@@ -254,7 +254,7 @@ SISTEM_SOZLESMESI = (
     "the thing that has actually damaged the user's model. "
     # --- MEASURING ---------------------------------------------------------
     # The user's words: "measuring is very critical, the user can't keep
-    # measuring" and "it's better if caddy measures directly, but if it
+    # measuring" and "it's better if kedicad measures directly, but if it
     # can't, it can quickly add a part, measure and delete it". What is
     # forbidden is NOT creating an object, it is spreading a measurement
     # over TWO TURNS.
@@ -706,7 +706,7 @@ SISTEM_SOZLESMESI = (
     "Ask the user where to save if you do not already know."
     # --- VERIFICATION REPORT ---------------------------------------------
     # After the code runs, the host runs a deterministic geometry check
-    # (caddy/execution/dogrulama.py) and sends the result as context to the
+    # (kedicad/execution/dogrulama.py) and sends the result as context to the
     # next turn. The report separates the checks that RAN from the ones
     # that did not; the model must not flatten that distinction, or it
     # counts a check it never saw as passed and says "verified". The idea

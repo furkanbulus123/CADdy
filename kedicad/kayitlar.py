@@ -95,7 +95,7 @@ def kok(kok_dizin: Path | None = None) -> Path:
     """Finds the log root — SAME rule as `sohbet_log` (including the test root)."""
     if kok_dizin is not None:
         return Path(kok_dizin)
-    cevre = os.environ.get("CADDY_LOG_DIR", "").strip()
+    cevre = os.environ.get("KEDICAD_LOG_DIR", "").strip()
     if cevre:
         return Path(cevre)
     from . import config
@@ -185,7 +185,7 @@ def bugun() -> str:
 # the code silently changes the wrong model.
 #
 # THE IDENTITY IS THE FILE PATH. Measured (freecadcmd 1.1.3): a document
-# opened as `ProbeAc`, saved, closed and reopened became `caddy_probe_ac` —
+# opened as `ProbeAc`, saved, closed and reopened became `kedicad_probe_ac` —
 # the internal name is RE-derived from the FILE NAME, it is not stable
 # across sessions. The name is only shown to humans; comparison is by path.
 # Same measurement: opening an already open file with `openDocument` does

@@ -1,4 +1,4 @@
-CADdy - TANITIM FIKIRLERI
+KediCAD - TANITIM FIKIRLERI
 =========================
 
 Ilk hafta: Reddit'te 2 gonderi (r/FreeCAD, r/3Dprinting), HN yeni hesap
@@ -39,17 +39,17 @@ HACKER NEWS
 - Baskasindan paylasmasini isteyebilirsin ama OY ISTEMEK YASAK - yakalanirsa
   gonderi gomulur.
 - Zaman: hafta ici, Turkiye saatiyle 16:00-18:00.
-- Baslik: Show HN: CADdy - An AI assistant inside FreeCAD that measures its own work
+- Baslik: Show HN: KediCAD - An AI assistant inside FreeCAD that measures its own work
 - URL alanina repo linki; ilk yorumu kendin yaz (metin asagida).
 
 Ilk yorum:
 
-  Hi HN, I made CADdy because I kept asking chat models for FreeCAD
+  Hi HN, I made KediCAD because I kept asking chat models for FreeCAD
   scripts, pasting them in and getting parts that looked right but
   weren't: faces turned inside out, an open shell, two pieces that
   overlapped by a few mm3 where you can't see it.
 
-  CADdy is a panel inside FreeCAD 1.1. You describe what you want, it
+  KediCAD is a panel inside FreeCAD 1.1. You describe what you want, it
   writes FreeCAD Python and runs it on the document you have open. Your
   own features and the AI's end up in the same tree. It then checks the
   result with actual measurements instead of trusting a screenshot:

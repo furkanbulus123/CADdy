@@ -27,7 +27,7 @@ sys.path.insert(0, KOK)
 # Testler GERCEK LOG/ klasorune yazmasin (bkz. sohbet_log modul basligi):
 # olculdu, suite her kosusta oraya ~10 dosya birakiyordu ve kullanicinin
 # gercek oturum gunlukleriyle karisiyordu.
-os.environ["CADDY_LOG_DIR"] = os.path.join(
+os.environ["KEDICAD_LOG_DIR"] = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "_gunlukler")
 
 RAPOR = os.path.join(KOK, "tests", "_son_panel.txt")
@@ -36,7 +36,7 @@ with open(RAPOR, "w", encoding="utf-8") as _f:
 
 gecti = basarisiz = atlandi = 0
 
-UZUN_YOL = (r"C:\Users\USER-1\Desktop\CADdy\caddy\execution\executor.py")
+UZUN_YOL = (r"C:\Users\USER-1\Desktop\KediCAD\kedicad\execution\executor.py")
 UZUN_HATA = (
     'Traceback (most recent call last):\n'
     '  File "' + UZUN_YOL + '", line 328, in calistir\n'
@@ -80,7 +80,7 @@ def bolum(ad):
 
 
 _yaz("=" * 70)
-_yaz("CADdy panel yerlesim testleri")
+_yaz("KediCAD panel yerlesim testleri")
 _yaz("=" * 70)
 
 from PySide import QtCore, QtGui, QtWidgets
@@ -89,10 +89,10 @@ app = (QtWidgets.QApplication.instance()
        or QtWidgets.QApplication(sys.argv[:1]))
 _yaz("QApplication: %s" % type(app).__name__)
 
-from caddy import config
-from caddy import log as _log
-from caddy.ui.code_card import CodeCard
-from caddy.ui.dock import SaranEtiket
+from kedicad import config
+from kedicad import log as _log
+from kedicad.ui.code_card import CodeCard
+from kedicad.ui.dock import SaranEtiket
 
 # ------------------------------------------------------------- SaranEtiket
 bolum("SaranEtiket — tek uzun yol paneli genisletmemeli")
@@ -177,8 +177,8 @@ kontrol("widget yuksekligi icerigi kapsiyor",
 # ------------------------------------------------------------------- panel
 bolum("panel — yatay kaydirma kapali")
 try:
-    from caddy.ui import dock as _dock
-    panel = _dock.CaddyPanel()
+    from kedicad.ui import dock as _dock
+    panel = _dock.KediCADPanel()
     panel.resize(320, 600)
     kontrol("panel olusturuldu", panel is not None)
     kontrol("yatay kaydirma KAPALI",
@@ -204,7 +204,7 @@ except Exception as e:                                       # noqa: BLE001
 # --------------------------------------------------------- panel genisligi
 bolum("panel ASGARI genisligi — %40 hedefi fiziksel olarak mumkun mu")
 
-# Kullanicinin sikayeti: "caddy ekranin yuzde 60'ini kapsiyor, %40 olsun".
+# Kullanicinin sikayeti: "kedicad ekranin yuzde 60'ini kapsiyor, %40 olsun".
 # Sebep olculdu ve ayar degildi: panelin ASGARI genisligi 888 px'di ve panel
 # 400 px'e zorlandiginda bile 888'de kaliyordu — yani hicbir genislik ayari
 # (resizeDocks dahil) bu tabani asamazdi. Taban tamamen ust satirdan
@@ -399,7 +399,7 @@ bolum("HICBIR YAZI KIRPILMIYOR — panel + kod karti, uctan uca")
 if panel is None:
     atla("kirpma", "panel olusmadi")
 else:
-    _uzun = "C:\\Users\\USER-1\\Desktop\\CADdy\\caddy\\execution\\executor.py"
+    _uzun = "C:\\Users\\USER-1\\Desktop\\KediCAD\\kedicad\\execution\\executor.py"
     panel.mesaj_ekle("user", "10 mm kenarli bir kup yap")
     panel.mesaj_ekle("ai", "Tamam. Once " + _uzun + " dosyasina bakiyorum, "
                      "sonra kupu olusturuyorum. " + "uzunbolunemezkelime" * 4)
@@ -604,7 +604,7 @@ try:
     mw.setCentralWidget(orta)
     d2 = QtWidgets.QDockWidget(mw)
     d2.setObjectName(_dock.NESNE_ADI)
-    d2.setWidget(_dock.CaddyPanel(d2))
+    d2.setWidget(_dock.KediCADPanel(d2))
     mw.addDockWidget(QtCore.Qt.RightDockWidgetArea, d2)
     mw.show()
     for _ in range(3): app.processEvents()
@@ -643,7 +643,7 @@ try:
             abs(100.0 * d2.width() / mw.width() - 40) <= 6,
             d2.width())
 
-    # ACILISTA SESSIZ. Kullanicinin sikayeti: "en basta caddy panel piksel
+    # ACILISTA SESSIZ. Kullanicinin sikayeti: "en basta kedicad panel piksel
     # uyarisi geliyor, gelmesin". O satir her aciliste Rapor penceresine
     # dusuyordu. Olcum kaybolmadi (ayikla acikken yaziliyor) ama isler
     # yolundayken konusmuyor. Hedefe ULASILAMADIGI hal hala uyari — orada
@@ -685,7 +685,7 @@ except Exception as e:                                           # noqa: BLE001
 # ------------------------------------------------- komsu dock sutunu genisletiyor
 bolum("komsu dock — sutunu hedeften genis tutan panel")
 
-# Kullanicinin bildirdigi hata: "CADdy 651 px, 514 px olmasi gerekirken".
+# Kullanicinin bildirdigi hata: "KediCAD 651 px, 514 px olmasi gerekirken".
 # Sebep olculdu: Qt'de bir kenardaki dock'lar TEK SUTUNU paylasir; sutun,
 # icindeki dock'larin EN BUYUK asgarisinden dar olamaz. Bizim asgarimiz
 # 346 px olsa bile, yanimizdaki FreeCAD paneli 650 px istiyorsa biz de
@@ -703,7 +703,7 @@ def _komsulu_pencere(kardes_ic):
     m.addDockWidget(QtCore.Qt.RightDockWidgetArea, k)
     d = QtWidgets.QDockWidget(m)
     d.setObjectName(_dock.NESNE_ADI)
-    d.setWidget(_dock.CaddyPanel(d))
+    d.setWidget(_dock.KediCADPanel(d))
     m.addDockWidget(QtCore.Qt.RightDockWidgetArea, d)
     m.show()
     for _ in range(3):
@@ -775,14 +775,14 @@ if panel is None:
     atla("kutuphane", "panel olusmadi")
 else:
     try:
-        from caddy import kayitlar as _kayitlar
+        from kedicad import kayitlar as _kayitlar
         import tempfile as _tf
         from pathlib import Path as _P
 
-        _gec = _P(_tf.mkdtemp(prefix="caddy_panel_kayit_"))
+        _gec = _P(_tf.mkdtemp(prefix="kedicad_panel_kayit_"))
         _dosya = _gec / "2026-08-27_9564dc71.txt"
         _dosya.write_text(
-            "=" * 72 + "\nCADdy chat log\n"
+            "=" * 72 + "\nKediCAD chat log\n"
             "session : 9564dc71-071d-4ca3-9c21-483cf5766739\n"
             "model   : claude-opus-5\n"
             "started : 2026-08-27T13:39:39\n" + "=" * 72 + "\n\n"
@@ -836,7 +836,7 @@ try:
     _m5.setCentralWidget(QtWidgets.QTextEdit())
     _d5 = QtWidgets.QDockWidget(_m5)
     _d5.setObjectName(_dock.NESNE_ADI)
-    _d5.setWidget(_dock.CaddyPanel(_d5))
+    _d5.setWidget(_dock.KediCADPanel(_d5))
     _m5.addDockWidget(QtCore.Qt.RightDockWidgetArea, _d5)
     _m5.show()
     for _ in range(3):
@@ -873,7 +873,7 @@ bolum("karsilama — kisa olmali")
 # ekranin yarisini yiyordu.
 try:
     _msj = []
-    _p6 = _dock.CaddyPanel()
+    _p6 = _dock.KediCADPanel()
     _p6.mesaj_ekle = lambda rol, metin: _msj.append((rol, metin))
     _p6._karsilama()
     _metin = _msj[0][1] if _msj else ""
@@ -915,7 +915,7 @@ try:
             _ciplak.minimumWidth() > 60, _ciplak.minimumWidth())
     _ciplak.close()
 
-    _p7 = _dock.CaddyPanel()
+    _p7 = _dock.KediCADPanel()
     _p7.show()
     for _ in range(3):
         app.processEvents()

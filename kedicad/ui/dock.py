@@ -1,4 +1,4 @@
-"""The CADdy panel — a QDockWidget that sits in FreeCAD's main window.
+"""The KediCAD panel — a QDockWidget that sits in FreeCAD's main window.
 
 Why NOT a Task panel (Gui.Control.showDialog): the Task panel occupies a
 single slot, clashes with tools like Sketcher/PartDesign and closes itself
@@ -20,7 +20,7 @@ from .. import config, kayitlar, locate, log
 from ..conversation import ConversationController, _short_num
 from .code_card import CodeCard
 
-NESNE_ADI = "CaddyPanel"
+NESNE_ADI = "KediCADPanel"
 
 # Icon edge of the icon button. The width of a text button was set by Qt's
 # 80 px FLOOR (see _arac_cubugu); the icon button is not bound to that floor,
@@ -234,7 +234,7 @@ class SaranEtiket(QtWidgets.QTextEdit):
         olay.ignore()
 
 
-class CaddyPanel(QtWidgets.QWidget):
+class KediCADPanel(QtWidgets.QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.ctl = ConversationController(self)
@@ -385,8 +385,8 @@ class CaddyPanel(QtWidgets.QWidget):
 
         A 136 px gain, because the text button sat on Qt's 80 px FLOOR; the
         icon button's width is set by us (30 px, see IKON_PX). The icons
-        are the same as on the toolbar (resources/icons/caddy-undo.svg and
-        its mirror caddy-redo.svg), so the user sees the same shape for the
+        are the same as on the toolbar (resources/icons/kedicad-undo.svg and
+        its mirror kedicad-redo.svg), so the user sees the same shape for the
         same function in two places. The loss of the label was made up for:
         the FIRST LINE of the tooltip is now the button's name.
 
@@ -413,7 +413,7 @@ class CaddyPanel(QtWidgets.QWidget):
         the same function.
         """
         c = QtWidgets.QHBoxLayout()
-        b = _ikon_dugmesi("caddy-yeni.svg", "New")
+        b = _ikon_dugmesi("kedicad-yeni.svg", "New")
         b.setToolTip("New chat\n"
                      "Forgets the context and starts fresh.\n"
                      "Does NOT touch the document — only the conversation is reset.")
@@ -421,7 +421,7 @@ class CaddyPanel(QtWidgets.QWidget):
         self.yeni_dugmesi = b
         c.addWidget(b)
 
-        g = _ikon_dugmesi("caddy-undo.svg", "Undo")
+        g = _ikon_dugmesi("kedicad-undo.svg", "Undo")
         g.setToolTip("Undo\n"
                      "Undoes the last AI change.\n"
                      "Never touches your own manual edits — if yours is on "
@@ -430,7 +430,7 @@ class CaddyPanel(QtWidgets.QWidget):
         self.geri_dugmesi = g
         c.addWidget(g)
 
-        i = _ikon_dugmesi("caddy-redo.svg", "Redo")
+        i = _ikon_dugmesi("kedicad-redo.svg", "Redo")
         i.setToolTip("Redo\n"
                      "Re-applies a change you undid.\n"
                      "Brings your work back if you undid it by mistake.\n"
@@ -451,7 +451,7 @@ class CaddyPanel(QtWidgets.QWidget):
         # space. The user's words: "a cabinet/library-like symbol instead of
         # logs". The same function in the right-click menu stays — the user
         # COULD NOT FIND it, a visible button was needed.
-        k = _ikon_dugmesi("caddy-kayitlar.svg", "History")
+        k = _ikon_dugmesi("kedicad-kayitlar.svg", "History")
         k.setToolTip("History\n"
                      "Lists past chats. Pick one and press Resume to "
                      "continue it where it left off, with its context; "
@@ -612,7 +612,7 @@ class CaddyPanel(QtWidgets.QWidget):
         # the welcome was eating half of the chat's first screen.
         self.mesaj_ekle(
             "sistem",
-            f"CADdy ready · {config.model()} · claude {s}\n"
+            f"KediCAD ready · {config.model()} · claude {s}\n"
             "Describe what you want — e.g. “make a 10 mm cube”.")
 
     # -- events ------------------------------------------------------------
@@ -1193,7 +1193,7 @@ def genisligi_ayarla(mw, dock) -> None:
     panel's sizeHint GROWS with its content. Measured — the long button
     labels in the top row pushed the panel's minimum width to 888 px; even
     when the panel was forced to 400 px it stayed at 888. First that floor
-    was lowered (see CaddyPanel._arac_cubugu), this call sits on top of it.
+    was lowered (see KediCADPanel._arac_cubugu), this call sits on top of it.
 
     It is only called when the panel is FIRST CREATED: afterwards the user
     can drag the edge and choose their own width. Since the dock is rebuilt
@@ -1317,8 +1317,8 @@ def paneli_goster():
     if yeni:
         dock = QtWidgets.QDockWidget(mw)
         dock.setObjectName(NESNE_ADI)
-        dock.setWindowTitle("CADdy")
-        dock.setWidget(CaddyPanel(dock))
+        dock.setWindowTitle("KediCAD")
+        dock.setWidget(KediCADPanel(dock))
         mw.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
         log.bilgi("panel created")
     dock.show()

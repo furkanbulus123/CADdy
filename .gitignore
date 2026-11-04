@@ -27,6 +27,7 @@ caddy-atlas.html
 # FreeCAD
 *.FCStd1
 .copilot-backups/
+.kedicad-backups/
 .caddy-backups/
 
 # Windows
@@ -34,5 +35,5 @@ Thumbs.db
 desktop.ini
 
 # Test logs: the suite now writes here instead of the real LOG/
-# (see sohbet_log, CADDY_LOG_DIR). Run output, it does not belong in the repo.
+# (see sohbet_log, KEDICAD_LOG_DIR). Run output, it does not belong in the repo.
 tests/_gunlukler/

@@ -28,7 +28,7 @@ sys.path.insert(0, KOK)
 # Testler GERCEK LOG/ klasorune yazmasin (bkz. sohbet_log modul basligi):
 # olculdu, suite her kosusta oraya ~10 dosya birakiyordu ve kullanicinin
 # gercek oturum gunlukleriyle karisiyordu.
-os.environ["CADDY_LOG_DIR"] = os.path.join(
+os.environ["KEDICAD_LOG_DIR"] = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "_gunlukler")
 
 RAPOR = os.path.join(KOK, "tests", "_son_islem.txt")
@@ -67,12 +67,12 @@ import Mesh
 import MeshPart
 import Part
 
-from caddy.execution import dogrulama as dg
-from caddy.execution import islem
-from caddy.execution.executor import CodeExecutor
+from kedicad.execution import dogrulama as dg
+from kedicad.execution import islem
+from kedicad.execution.executor import CodeExecutor
 
 _yaz("=" * 70)
-_yaz("CADdy islem yardimcilari")
+_yaz("KediCAD islem yardimcilari")
 _yaz("=" * 70)
 
 doc = App.newDocument("IslemTest")
@@ -247,9 +247,9 @@ kontrol("eski deger korundu", abs(float(bagli.Radius) - 20.0) < 0.01,
 # ===================================================== 5. YAZI
 bolum("yazi — parca uzerine metin")
 
-s = kos("y = yazi('CADdy', boyut=10, kalinlik=2)", "yazi")
+s = kos("y = yazi('KediCAD', boyut=10, kalinlik=2)", "yazi")
 _yaz("       " + s.cikti.strip().replace("\n", "\n       "))
-kontrol("yazi uretildi", s.basarili and "CADdy" in s.cikti, s.cikti)
+kontrol("yazi uretildi", s.basarili and "KediCAD" in s.cikti, s.cikti)
 kontrol("olculeri yazildi", "mm" in s.cikti, s.cikti)
 kontrol("nereye kondugu soylendi", "XY plane" in s.cikti, s.cikti)
 

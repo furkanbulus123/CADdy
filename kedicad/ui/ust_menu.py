@@ -1,11 +1,11 @@
-"""Places CADdy PERMANENTLY in FreeCAD's top bar — when the user asks for it.
+"""Places KediCAD PERMANENTLY in FreeCAD's top bar — when the user asks for it.
 
 OPT-IN. The Addon Index rule is that an addon keeps its toolbars to its own
 workbench, so this is off by default (config "ShowEverywhere") and turned on
-from the CADdy menu. Every refresh checks the setting: when it is off the
+from the KediCAD menu. Every refresh checks the setting: when it is off the
 button is removed and never re-added.
 
-Problem: CADdy is a *workbench*, so it does not exist unless picked from the
+Problem: KediCAD is a *workbench*, so it does not exist unless picked from the
 drop-down at the top. The user asked "can we add it directly as a tab at
 the top".
 
@@ -14,8 +14,8 @@ only visible while that workbench is active.
 
 WHAT IS SHOWN — narrowed on the user's request
 ----------------------------------------------
-The first version had a "CADdy" MENU (text) and a two-command toolbar in
-the top bar. The user: *"CADdy looks bad in FreeCAD, only show the logo"*
+The first version had a "KediCAD" MENU (text) and a two-command toolbar in
+the top bar. The user: *"KediCAD looks bad in FreeCAD, only show the logo"*
 and *"don't show the AI undo and such."*
 
 So the top bar now holds ONE THING: the logo button that opens the panel.
@@ -54,11 +54,11 @@ from PySide import QtCore, QtGui, QtWidgets
 
 from .. import config, log
 
-ARAC_CUBUGU_ADI = "CADdy"
-_ARAC_NESNE = "CADdyUstAracCubugu"
+ARAC_CUBUGU_ADI = "KediCAD"
+_ARAC_NESNE = "KediCADUstAracCubugu"
 
 # ONLY the command that opens the panel goes in the top bar. See the module header.
-_KOMUT_ADLARI = ("CADdy_ShowPanel",)
+_KOMUT_ADLARI = ("KediCAD_ShowPanel",)
 
 _ILK_DENEME_MS = 1200
 _EN_FAZLA_DENEME = 10
@@ -104,14 +104,14 @@ def _ana_pencere():
 
 
 def _logo():
-    """The CADdy logo as a QIcon; None if it cannot be loaded.
+    """The KediCAD logo as a QIcon; None if it cannot be loaded.
 
     If None comes back the caller falls back to TEXT — a button with neither
     icon nor text would be an unclickable gap.
     """
     kok = os.path.dirname(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))))
-    yol = os.path.join(kok, "resources", "icons", "caddy.svg")
+    yol = os.path.join(kok, "resources", "icons", "kedicad.svg")
     if not os.path.exists(yol):
         return None
     ikon = QtGui.QIcon(yol)
@@ -236,14 +236,14 @@ def _eylemler(ebeveyn) -> list:
 
 def _kendi_eylemimiz(komut_adi: str, ebeveyn, logo):
     baslik = {
-        "CADdy_ShowPanel": "Open CADdy panel",
+        "KediCAD_ShowPanel": "Open KediCAD panel",
     }.get(komut_adi, komut_adi)
 
     e = QAction(baslik, ebeveyn)
     e.setObjectName(komut_adi + "_yedek")
     if logo is not None:
         e.setIcon(logo)
-    if komut_adi == "CADdy_ShowPanel":
+    if komut_adi == "KediCAD_ShowPanel":
         e.setShortcut("Ctrl+Shift+A")
     # Even with the text hidden, hovering should say what it is.
     e.setToolTip(baslik)
@@ -254,7 +254,7 @@ def _kendi_eylemimiz(komut_adi: str, ebeveyn, logo):
             Gui.runCommand(komut_adi, 0)
         except Exception:
             # If the command is not registered, open the panel directly.
-            if komut_adi == "CADdy_ShowPanel":
+            if komut_adi == "KediCAD_ShowPanel":
                 from .dock import paneli_goster
                 paneli_goster()
 
@@ -294,12 +294,12 @@ def _arac_cubugunu_ekle(mw) -> None:
 # --------------------------------------------------------------------------
 
 def _eski_menuyu_kaldir(mw) -> None:
-    """Removes the "CADdy" MENU left behind by the previous version.
+    """Removes the "KediCAD" MENU left behind by the previous version.
 
     Why: the menu bar entry is not stored in FreeCAD's user.cfg, it is built
     at runtime — so once the new version stops adding it, it disappears on
     its own. BUT if the old version ran in the same session the menu stays
-    on screen. This prevents "two CADdys on screen after upgrading".
+    on screen. This prevents "two KediCADs on screen after upgrading".
     """
     try:
         cubuk = mw.menuBar()
@@ -307,6 +307,6 @@ def _eski_menuyu_kaldir(mw) -> None:
         return
     for eylem in list(cubuk.actions()):
         m = eylem.menu()
-        if m is not None and m.objectName() == "CADdyUstMenu":
+        if m is not None and m.objectName() == "KediCADUstMenu":
             cubuk.removeAction(eylem)
             log.ayik("old top menu removed")

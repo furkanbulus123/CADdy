@@ -26,7 +26,7 @@ sys.path.insert(0, KOK)
 # Testler GERCEK LOG/ klasorune yazmasin (bkz. sohbet_log modul basligi):
 # olculdu, suite her kosusta oraya ~10 dosya birakiyordu ve kullanicinin
 # gercek oturum gunlukleriyle karisiyordu.
-os.environ["CADDY_LOG_DIR"] = os.path.join(
+os.environ["KEDICAD_LOG_DIR"] = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "_gunlukler")
 
 import FreeCAD as App
@@ -66,12 +66,12 @@ yaz("2) package.xml - FreeCAD'in kendi ayristiricisi")
 try:
     m = App.Metadata(os.path.join(KOK, "package.xml"))
     kontrol("ayristi", True)
-    kontrol("ad CADdy", m.Name == "CADdy", m.Name)
+    kontrol("ad KediCAD", m.Name == "KediCAD", m.Name)
     kontrol("surum var", str(m.Version) != "", m.Version)
     icerik = m.Content
     kontrol("workbench icerigi var", "workbench" in icerik, list(icerik.keys()))
     wb = icerik["workbench"][0]
-    kontrol("classname dogru", wb.Classname == "CADdyWorkbench", wb.Classname)
+    kontrol("classname dogru", wb.Classname == "KediCADWorkbench", wb.Classname)
     kontrol("subdirectory kok", wb.Subdirectory in ("./", ".", "./\\", ".\\"),
             repr(wb.Subdirectory))
     kontrol("bu FreeCAD surumunu destekliyor", m.supportsCurrentFreeCAD())
@@ -80,15 +80,15 @@ except Exception:
 
 yaz("3) Mod klasorundeki junction")
 mod = os.path.join(App.getUserAppDataDir(), "Mod")
-hedef = os.path.join(mod, "CADdy")
+hedef = os.path.join(mod, "KediCAD")
 kontrol("user Mod dizini var", os.path.isdir(mod), mod)
-kontrol("CADdy gorunuyor", os.path.isdir(hedef), hedef)
+kontrol("KediCAD gorunuyor", os.path.isdir(hedef), hedef)
 kontrol("InitGui.py erisilebilir", os.path.isfile(os.path.join(hedef, "InitGui.py")))
 
 yaz("4) arayuz disi modul importlari")
-for ad in ("caddy", "caddy.log", "caddy.config", "caddy.locate",
-           "caddy.execution.blocks", "caddy.execution.executor",
-           "caddy.context.serializer", "caddy.transport.framing"):
+for ad in ("kedicad", "kedicad.log", "kedicad.config", "kedicad.locate",
+           "kedicad.execution.blocks", "kedicad.execution.executor",
+           "kedicad.context.serializer", "kedicad.transport.framing"):
     try:
         __import__(ad)
         kontrol(ad, True)
@@ -99,16 +99,16 @@ yaz("5) PySide (QtCore) FreeCAD icinde")
 try:
     from PySide import QtCore  # noqa: F401
     kontrol("PySide shim calisiyor", True)
-    import caddy.transport.process  # noqa: F401
-    import caddy.transport.transport  # noqa: F401
+    import kedicad.transport.process  # noqa: F401
+    import kedicad.transport.transport  # noqa: F401
     kontrol("transport modulleri import edildi", True)
 except Exception:
     kontrol("PySide/transport", False, traceback.format_exc(limit=3))
 
 yaz("5b) ust serit modulu (kullanici 'ust menu yok' dedi)")
 try:
-    from caddy import commands as _kmd
-    from caddy.ui import ust_menu as _ust
+    from kedicad import commands as _kmd
+    from kedicad.ui import ust_menu as _ust
     kontrol("ust_menu import edildi", True)
     kontrol("QAction bulundu (PySide6'da QtGui'ye tasindi)",
             _ust.QAction is not None)
@@ -122,15 +122,15 @@ try:
             set(_ust._KOMUT_ADLARI) <= kayitli,
             (_ust._KOMUT_ADLARI, sorted(kayitli)))
     kontrol("ust seritte YALNIZCA paneli acan komut var",
-            tuple(_ust._KOMUT_ADLARI) == ("CADdy_ShowPanel",),
+            tuple(_ust._KOMUT_ADLARI) == ("KediCAD_ShowPanel",),
             _ust._KOMUT_ADLARI)
     # Geri al komutu KAYBOLMADI - workbench'in kendi menusunde duruyor.
     kontrol("geri al komutu hala kayitli (workbench menusunde)",
-            "CADdy_UndoLastAIChange" in kayitli, sorted(kayitli))
+            "KediCAD_UndoLastAIChange" in kayitli, sorted(kayitli))
     # Metin degil logo gosterilecek: ikon dosyasi gercekten bulunmali,
     # yoksa ikon-only cubukta tiklanamaz bir bosluk olur.
     import os as _os
-    _ikon_yolu = _os.path.join(KOK, "resources", "icons", "caddy.svg")
+    _ikon_yolu = _os.path.join(KOK, "resources", "icons", "kedicad.svg")
     kontrol("logo dosyasi var (ikon-only cubugun tek anlatimi)",
             _os.path.exists(_ikon_yolu), _ikon_yolu)
     # GUI yok: yerlestir() PATLAMADAN sessizce ertelemeli.
@@ -140,16 +140,16 @@ try:
             callable(getattr(_ust, "_tazele", None)))
     # Addon Index: eklentinin araç cubugu kendi workbench'inde kalmali.
     # Her yerdeki kedi dugmesi artik ISTEGE BAGLI, varsayilan KAPALI.
-    from caddy import config as _ayar
+    from kedicad import config as _ayar
     kontrol("ShowEverywhere varsayilani KAPALI",
             _ayar.VARSAYILAN.get("ShowEverywhere") is False,
             _ayar.VARSAYILAN.get("ShowEverywhere"))
-    kontrol("ayar komutu kayitli (CADdy menusunde)",
-            "CADdy_ShowEverywhere" in kayitli, sorted(kayitli))
+    kontrol("ayar komutu kayitli (KediCAD menusunde)",
+            "KediCAD_ShowEverywhere" in kayitli, sorted(kayitli))
     kontrol("ayar komutu workbench arac cubugunda DEGIL",
-            "CADdy_ShowEverywhere" not in _kmd.ARAC_CUBUGU, _kmd.ARAC_CUBUGU)
+            "KediCAD_ShowEverywhere" not in _kmd.ARAC_CUBUGU, _kmd.ARAC_CUBUGU)
     kontrol("ayar komutu isaretlenebilir (Checkable)",
-            "Checkable" in dict(_kmd.KOMUTLAR)["CADdy_ShowEverywhere"]
+            "Checkable" in dict(_kmd.KOMUTLAR)["KediCAD_ShowEverywhere"]
             .GetResources())
     _ust.kaldir()
     _ust._tazele()
@@ -163,9 +163,40 @@ try:
 except Exception:
     kontrol("ust serit modulu", False, traceback.format_exc(limit=3))
 
+# Ad degisikligi (v0.3.0, CADdy -> KediCAD): eski ayarlar bir kez tasinir.
+# Gercek kullanici ayarlarina DOKUNMAMAK icin gecici gruplarla sinanir.
+yaz("5c) eski ad altindaki ayarlar tasiniyor mu")
+try:
+    from kedicad import config as _ayar
+    _mod = App.ParamGet("User parameter:BaseApp/Preferences/Mod")
+    for _g in ("KediCADTestEski", "KediCADTestYeni", "KediCADTestYeni2"):
+        _mod.RemGroup(_g)
+    _eski = _mod.GetGroup("KediCADTestEski")
+    _eski.SetString("Model", "sonnet")
+    _eski.SetBool("ShowEverywhere", True)
+    _eski.SetInt("PanelYuzde", 33)
+    _yeni = _mod.GetGroup("KediCADTestYeni")
+    _n = _ayar.eski_ayarlari_tasi(App, _yeni, "KediCADTestEski")
+    kontrol("uc ayar tasindi", _n == 3, _n)
+    kontrol("degerler ayni", _yeni.GetString("Model") == "sonnet"
+            and _yeni.GetBool("ShowEverywhere") is True
+            and _yeni.GetInt("PanelYuzde") == 33, _yeni.GetContents())
+    _yeni.SetString("Model", "opus")
+    kontrol("yeni grup doluyken tekrar tasimiyor",
+            _ayar.eski_ayarlari_tasi(App, _yeni, "KediCADTestEski") == 0
+            and _yeni.GetString("Model") == "opus")
+    _bos = _mod.GetGroup("KediCADTestYeni2")
+    kontrol("eski grup yoksa olusturmuyor",
+            _ayar.eski_ayarlari_tasi(App, _bos, "KediCADTestYok") == 0
+            and not _mod.HasGroup("KediCADTestYok"))
+    for _g in ("KediCADTestEski", "KediCADTestYeni", "KediCADTestYeni2"):
+        _mod.RemGroup(_g)
+except Exception:
+    kontrol("ayar tasima", False, traceback.format_exc(limit=3))
+
 yaz("6) claude.exe bulunabiliyor mu")
 try:
-    from caddy import locate
+    from kedicad import locate
     yol = locate.claude_exe()
     kontrol("bulundu", os.path.isfile(str(yol)), yol)
     yaz("     %s" % yol)
@@ -174,7 +205,7 @@ except Exception as e:
 
 yaz("7) belge serilestirici")
 try:
-    from caddy.context import serializer
+    from kedicad.context import serializer
     doc = App.newDocument("SerTest")
     k = doc.addObject("Part::Box", "Kutu")
     k.Length = 12

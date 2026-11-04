@@ -1,11 +1,11 @@
 name: Feature request
-description: An idea for CADdy
+description: An idea for KediCAD
 labels: ["enhancement"]
 body:
   - type: textarea
     id: idea
     attributes:
-      label: What would you like CADdy to do?
+      label: What would you like KediCAD to do?
     validations:
       required: true
   - type: textarea

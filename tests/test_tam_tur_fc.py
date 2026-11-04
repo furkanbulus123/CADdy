@@ -29,13 +29,13 @@ sys.path.insert(0, KOK)
 # Testler GERCEK LOG/ klasorune yazmasin (bkz. sohbet_log modul basligi):
 # olculdu, suite her kosusta oraya ~10 dosya birakiyordu ve kullanicinin
 # gercek oturum gunlukleriyle karisiyordu.
-os.environ["CADDY_LOG_DIR"] = os.path.join(
+os.environ["KEDICAD_LOG_DIR"] = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "_gunlukler")
 
 import FreeCAD as App
 from PySide import QtCore
 
-from caddy.conversation import ConversationController
+from kedicad.conversation import ConversationController
 
 RAPOR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_son_tur.txt")
 _satirlar = []
@@ -116,8 +116,8 @@ gorulen_nabiz[:] = []
 gorulen["asama"][:] = []
 
 yaz("0b) HIZ AYARLARI")
-from caddy import config as _cfg
-from caddy.transport.transport import SISTEM_SOZLESMESI as _sz
+from kedicad import config as _cfg
+from kedicad.transport.transport import SISTEM_SOZLESMESI as _sz
 
 kontrol("model listesi opus+sonnet",
         [m[0] for m in _cfg.MODELLER] == ["opus", "sonnet"], _cfg.MODELLER)
@@ -143,7 +143,7 @@ kontrol("eski model geri kondu", _cfg.model() == _eski, _cfg.model())
 # OLCULEN HATA: gunlukte baglam 86953 -> 179116 -> 92600 diye sicradi.
 # Sebep: `result.usage` TURUN TAMAMINI topluyor; tur iki API cagrisi
 # yaptiysa ayni baglam iki kez sayiliyordu ve panelde bu sayi yaziyordu.
-from caddy.transport.transport import TurSonucu as _TS
+from kedicad.transport.transport import TurSonucu as _TS
 
 _iki_cagri = _TS(tk_girdi=1200, tk_cikti=800, tk_onbellek_okuma=85000,
                  tk_onbellek_yazma=6000, api_cagrisi=2, tk_son_istem=92000)
@@ -194,7 +194,7 @@ for _ad, _parca in [
     ("reddedilirse varsayma", "NEVER assume the undo happened"),
     # MANTIK 32/33: sozlesme baskiya gomulmustu; kullanici "belki
     # basmayacagim, en basta sorsun" dedi. Amac sorusu ve amaca gore
-    # kurallar kazayla silinirse CADdy yine herkesi 3B yaziciya sokar.
+    # kurallar kazayla silinirse KediCAD yine herkesi 3B yaziciya sokar.
     ("amac sorusu maddesi", "WHAT IS THIS DESIGN FOR"),
     ("amac sorusu bir kez sorulur", "Ask this ONCE per session"),
     ("secenekler harfli", "(f) visual"),
@@ -297,8 +297,8 @@ kontrol("gozlemci cozuldu (sizinti yok)",
 doc.undo(); doc.undo(); doc.recompute()
 
 yaz("0c) GORSEL KONTROL — isaret ayristirma ve emniyet (ag yok)")
-from caddy import conversation as _cv
-from caddy import gorunum as _gor
+from kedicad import conversation as _cv
+from kedicad import gorunum as _gor
 
 _isaret = _cv._VISUAL_MARKER
 kontrol("kendi satirinda tetikler",
@@ -310,7 +310,7 @@ kontrol("cumle icinde TETIKLEMEZ",
 # SOZLESMENIN TAVANI — Windows'un komut satiri siniri (~32 767 karakter).
 # Sozlesme `--append-system-prompt` ile ARGUMAN olarak gidiyor; olculdu
 # (MANTIK 35): 32 000 karakter calisiyor, 40 000 karakterde CLI hic
-# baslamiyor ("Argument list too long") ve CADdy sessizce cevapsiz kalir.
+# baslamiyor ("Argument list too long") ve KediCAD sessizce cevapsiz kalir.
 # 28 000 tavani, diger argumanlara ve gelecekteki eklemelere pay birakiyor.
 # Daha fazlasi gerekiyorsa yer workspace/CLAUDE.md (dosya, siniri yok).
 kontrol("sozlesme Windows arguman sinirinin altinda",
@@ -648,9 +648,9 @@ yaz("0f) GUNLUK BASLIGI — 'model : (bilinmiyor)' duzeliyor mu")
 import tempfile
 from pathlib import Path
 
-from caddy.sohbet_log import SohbetGunlugu
+from kedicad.sohbet_log import SohbetGunlugu
 
-_gecici = Path(tempfile.mkdtemp(prefix="caddy_log_"))
+_gecici = Path(tempfile.mkdtemp(prefix="kedicad_log_"))
 _g = SohbetGunlugu(_gecici)
 _g.oturum_ac("abcdef1234")
 # BASLIK TEMBEL: oturum acmak diske DOKUNMUYOR (MANTIK 37 — konusulmayan
@@ -743,12 +743,12 @@ if dosya and os.path.isfile(str(dosya)):
     kontrol("kullanici mesaji yazildi", "USER" in icerik and ISTEK in icerik)
     kontrol("AI yaniti yazildi", "AI" in icerik)
     kontrol("oturum kimligi basligi var", s.oturum[:8] in icerik)
-    # Kok dizin CADDY_LOG_DIR ile degistirilebiliyor (MANTIK 37: testler
+    # Kok dizin KEDICAD_LOG_DIR ile degistirilebiliyor (MANTIK 37: testler
     # kullanicinin gercek LOG/ klasorunu kirletmesin). Testte o degisken
     # tests/_gunlukler'i gosteriyor; sinanan sey gunlugun DOGRU KOKE
     # yazdigi.
     kontrol("gunluk yapilandirilan koke yaziyor",
-            os.path.dirname(str(dosya)) == os.environ["CADDY_LOG_DIR"],
+            os.path.dirname(str(dosya)) == os.environ["KEDICAD_LOG_DIR"],
             str(dosya))
     yaz("     %s  (%d bayt)" % (dosya, len(icerik)))
 

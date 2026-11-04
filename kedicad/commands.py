@@ -21,8 +21,8 @@ def _ikon(ad: str) -> str:
 class PaneliGoster:
     def GetResources(self):
         return {
-            "Pixmap": _ikon("caddy.svg"),
-            "MenuText": "Open CADdy panel",
+            "Pixmap": _ikon("kedicad.svg"),
+            "MenuText": "Open KediCAD panel",
             "ToolTip": "Opens the AI assistant panel",
             "Accel": "Ctrl+Shift+A",
         }
@@ -39,7 +39,7 @@ class PaneliGoster:
 class SonAiDegisikliginiGeriAl:
     def GetResources(self):
         return {
-            "Pixmap": _ikon("caddy-undo.svg"),
+            "Pixmap": _ikon("kedicad-undo.svg"),
             "MenuText": "Undo last AI change",
             "ToolTip": "Undoes the AI's last operation in one step",
         }
@@ -95,9 +95,9 @@ class HerYerdeGoster:
         from . import config
 
         return {
-            "Pixmap": _ikon("caddy.svg"),
-            "MenuText": "Show CADdy button in every workbench",
-            "ToolTip": "Keeps the CADdy cat button in the toolbar whatever "
+            "Pixmap": _ikon("kedicad.svg"),
+            "MenuText": "Show KediCAD button in every workbench",
+            "ToolTip": "Keeps the KediCAD cat button in the toolbar whatever "
                        "workbench is active",
             "Checkable": config.bayrak("ShowEverywhere"),
         }
@@ -120,13 +120,13 @@ class HerYerdeGoster:
 
 
 KOMUTLAR = (
-    ("CADdy_ShowPanel", PaneliGoster()),
-    ("CADdy_UndoLastAIChange", SonAiDegisikliginiGeriAl()),
-    ("CADdy_ShowEverywhere", HerYerdeGoster()),
+    ("KediCAD_ShowPanel", PaneliGoster()),
+    ("KediCAD_UndoLastAIChange", SonAiDegisikliginiGeriAl()),
+    ("KediCAD_ShowEverywhere", HerYerdeGoster()),
 )
 
 # What goes on the workbench's own toolbar (the setting lives in the menu).
-ARAC_CUBUGU = ("CADdy_ShowPanel", "CADdy_UndoLastAIChange")
+ARAC_CUBUGU = ("KediCAD_ShowPanel", "KediCAD_UndoLastAIChange")
 
 
 def kaydet() -> list[str]:

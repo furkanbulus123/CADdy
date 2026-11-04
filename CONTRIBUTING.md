@@ -1,4 +1,4 @@
-# Contributing to CADdy
+# Contributing to KediCAD
 
 Thanks for your interest! Bug reports, ideas and pull requests are all welcome.
 
@@ -6,7 +6,7 @@ Thanks for your interest! Bug reports, ideas and pull requests are all welcome.
 
 - For anything bigger than a small fix, open an issue first so we can agree on
   the approach.
-- Issues labelled [`good first issue`](https://github.com/furkanbulus123/CADdy/labels/good%20first%20issue)
+- Issues labelled [`good first issue`](https://github.com/furkanbulus123/KediCAD/labels/good%20first%20issue)
   are a good place to begin.
 - [ARCHITECTURE.md](ARCHITECTURE.md) explains how the pieces fit together.
 
@@ -26,7 +26,7 @@ Please make sure every suite reports 0 failures before opening a pull request.
 
 ## A few rules
 
-- **Only `caddy/ui/` imports `QtWidgets`.** Everything else must run headless,
+- **Only `kedicad/ui/` imports `QtWidgets`.** Everything else must run headless,
   so it can be tested with `freecadcmd`.
 - **Keep the model honest.** A check that did not run is reported as
   `NOT RUN`, never silently skipped; a value that could not be measured is

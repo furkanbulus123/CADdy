@@ -28,7 +28,7 @@ sys.path.insert(0, KOK)
 # Testler GERCEK LOG/ klasorune yazmasin (bkz. sohbet_log modul basligi):
 # olculdu, suite her kosusta oraya ~10 dosya birakiyordu ve kullanicinin
 # gercek oturum gunlukleriyle karisiyordu.
-os.environ["CADDY_LOG_DIR"] = os.path.join(
+os.environ["KEDICAD_LOG_DIR"] = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "_gunlukler")
 
 RAPOR = os.path.join(KOK, "tests", "_son_dogrulama.txt")
@@ -62,11 +62,11 @@ def bolum(ad):
 import FreeCAD as App
 import Part
 
-from caddy.execution import dogrulama as dg
-from caddy.execution.executor import CodeExecutor
+from kedicad.execution import dogrulama as dg
+from kedicad.execution.executor import CodeExecutor
 
 _yaz("=" * 70)
-_yaz("CADdy dogrulama testleri")
+_yaz("KediCAD dogrulama testleri")
 _yaz("=" * 70)
 
 doc = App.newDocument("DogrulamaTest")
@@ -233,7 +233,7 @@ kontrol("hatali turda dogrulama yok", s4.dogrulama is None)
 bolum("cakisma_kontrol — sekil turune gore DOGRU hukum")
 
 import Part as _Part
-from caddy.execution import olcum as _olcum
+from kedicad.execution import olcum as _olcum
 
 _V = App.Vector
 _cd = App.newDocument("CakismaTest")
@@ -394,7 +394,7 @@ _yaz("       cakisma taramasi dahil dogrulama: %.3f sn (%d nesnelik belge)"
 kontrol("tarama turu yavaslatmiyor (< 0.3 sn)", _sure < 0.3, _sure)
 
 bolum("katman kurali — dogrulama.py Qt gormemeli")
-_kaynak = os.path.join(KOK, "caddy", "execution", "dogrulama.py")
+_kaynak = os.path.join(KOK, "kedicad", "execution", "dogrulama.py")
 with open(_kaynak, encoding="utf-8") as f:
     _satirlar = [x.strip() for x in f
                  if x.strip().startswith(("import ", "from "))]
@@ -407,8 +407,8 @@ bolum("tuketilmis nesne — kesme tabani bulgu degildir")
 # satirinin 627'si (%77) boyle nesnelerdi. Kesme tabani sonucuyla elbette
 # cakisir; bunu kusur diye raporlamak MANTIK 32'deki yanlis alarmi geri
 # getiriyordu.
-from caddy.execution import kesif as _ks
-from caddy.execution import olcum as _ol
+from kedicad.execution import kesif as _ks
+from kedicad.execution import olcum as _ol
 
 _td = App.newDocument("TuketilmisNS")
 _dis = _td.addObject("Part::Box", "Dis")
@@ -581,7 +581,7 @@ _sd.recompute()
 # Kesif tarafi: datum tipleri hic listeye girmemeli. Gercek App::Point
 # nesnesi bassiz ortamda uretilemiyor, tip suzgeci ise yalnizca TypeId'ye
 # bakiyor — sinanan sey tam olarak o suzgec.
-from caddy.execution import kesif as _kesif                      # noqa: E402
+from kedicad.execution import kesif as _kesif                      # noqa: E402
 
 
 class _SahteTip:

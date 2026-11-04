@@ -26,7 +26,7 @@ sys.path.insert(0, KOK)
 # Testler GERCEK LOG/ klasorune yazmasin (bkz. sohbet_log modul basligi):
 # olculdu, suite her kosusta oraya ~10 dosya birakiyordu ve kullanicinin
 # gercek oturum gunlukleriyle karisiyordu.
-os.environ["CADDY_LOG_DIR"] = os.path.join(
+os.environ["KEDICAD_LOG_DIR"] = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "_gunlukler")
 
 RAPOR = os.path.join(KOK, "tests", "_son_baglam.txt")
@@ -60,10 +60,10 @@ def bolum(ad):
 import FreeCAD as App
 import Part
 
-from caddy.context import serializer as sz
+from kedicad.context import serializer as sz
 
 _yaz("=" * 70)
-_yaz("CADdy baglam testleri")
+_yaz("KediCAD baglam testleri")
 _yaz("=" * 70)
 
 doc = App.newDocument("BaglamTest")

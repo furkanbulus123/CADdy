@@ -1,6 +1,6 @@
 """DETERMINISTIC geometry check after code runs.
 
-WHY IT EXISTS. CADdy needed two verification layers and had one. The visual
+WHY IT EXISTS. KediCAD needed two verification layers and had one. The visual
 check catches SEMANTIC mistakes — "the ear went to the wrong place", "the
 parts do not touch". What it cannot catch is broken topology that looks
 normal to the eye. A deterministic check catches that, and that layer was

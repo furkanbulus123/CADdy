@@ -14,7 +14,7 @@ The heart of the design. Three things are non-negotiable:
 
 3. **The traceback must show the source line.** Unless we put the source
    into linecache by hand after `compile()`, the traceback says
-   "File "<caddy:...>", line 12" and DOES NOT SHOW THE LINE; the model has
+   "File "<kedicad:...>", line 12" and DOES NOT SHOW THE LINE; the model has
    to guess what to fix. That one-line record directly raises the success
    rate of automatic repair.
 
@@ -696,7 +696,7 @@ class CodeExecutor:
         if engel:
             return CalismaSonucu(hata_izi=engel, engellendi=True,
                                  islem_adi=islem_adi)
-        dosya_adi = f"<caddy:{self._oturum}:tur{self._sayac}>"
+        dosya_adi = f"<kedicad:{self._oturum}:tur{self._sayac}>"
 
         # A COMPILE ERROR must be caught without opening a transaction —
         # there is no point leaving an empty undo entry.
@@ -844,7 +844,7 @@ class CodeExecutor:
 
         ns = self._ns
         ns.update({
-            "__name__": "__caddy__",
+            "__name__": "__kedicad__",
             "App": App,
             "FreeCAD": App,
             "Part": Part,
@@ -873,7 +873,7 @@ class CodeExecutor:
         import math
         ns.setdefault("math", math)
         # Measurement helpers. The user's words: "it would be better if
-        # caddy measured directly". A mesh has no faces/edges, so dimensions
+        # kedicad measured directly". A mesh has no faces/edges, so dimensions
         # must be computed; these reduce that to a single call. See olcum.py.
         ns["baski_kontrol"] = _baski_kontrol_yap
         ns["olc"] = olcum.olc

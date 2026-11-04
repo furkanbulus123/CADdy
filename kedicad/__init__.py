@@ -1,4 +1,4 @@
-"""CADdy — an AI assistant for FreeCAD.
+"""KediCAD — an AI assistant for FreeCAD.
 
 Layer rule (breaking it loses headless testing):
 

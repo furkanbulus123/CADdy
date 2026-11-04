@@ -120,7 +120,7 @@ _MESAJ = (
     "claude.exe not found.\n"
     "  Is Claude Code installed?  In a terminal:  claude --version\n"
     "  If it is installed but not found, set the full path in:\n"
-    "  Edit > Preferences > CADdy > claude.exe path"
+    "  Edit > Preferences > KediCAD > claude.exe path"
 )
 
 

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- caddy-undo.svg'nin yatay AYNASI (x -> 64-x, yay yonu ters). Ikisi ayni
+<!-- kedicad-undo.svg'nin yatay AYNASI (x -> 64-x, yay yonu ters). Ikisi ayni
      kalemle cizilmis gorunsun diye olculer birebir ayni tutuldu. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
   <path d="M50 26 A20 20 0 1 0 50 40" fill="none" stroke="#2b6cb0"

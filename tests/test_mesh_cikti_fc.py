@@ -26,7 +26,7 @@ sys.path.insert(0, KOK)
 # Testler GERCEK LOG/ klasorune yazmasin (bkz. sohbet_log modul basligi):
 # olculdu, suite her kosusta oraya ~10 dosya birakiyordu ve kullanicinin
 # gercek oturum gunlukleriyle karisiyordu.
-os.environ["CADDY_LOG_DIR"] = os.path.join(
+os.environ["KEDICAD_LOG_DIR"] = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "_gunlukler")
 
 RAPOR = os.path.join(KOK, "tests", "_son_mesh_cikti.txt")
@@ -66,13 +66,13 @@ import FreeCAD as App
 import Mesh
 import Part
 
-from caddy.context import serializer
-from caddy.execution import dogrulama as dg
-from caddy.execution import executor as ex
-from caddy.execution.executor import CodeExecutor
+from kedicad.context import serializer
+from kedicad.execution import dogrulama as dg
+from kedicad.execution import executor as ex
+from kedicad.execution.executor import CodeExecutor
 
 _yaz("=" * 70)
-_yaz("CADdy mesh dogrulamasi + cikti kanali + tekrar korumasi")
+_yaz("KediCAD mesh dogrulamasi + cikti kanali + tekrar korumasi")
 _yaz("=" * 70)
 
 doc = App.newDocument("MeshCiktiTest")
@@ -353,7 +353,7 @@ kontrol("Origin/duzlemler kesfe girmiyor",
 
 # Bos belgede dogru sey soylenmeli
 s = yurutucu.calistir(
-    "from caddy.execution import kesif as _k\n"
+    "from kedicad.execution import kesif as _k\n"
     "import FreeCAD\n"
     "b = FreeCAD.newDocument('BosBelge')\n"
     "print(_k.kesif_metni(b) or 'BOS')\n"
@@ -504,7 +504,7 @@ kontrol("kayit defteri sinirli", len(yurutucu._son_kosan) <= 45,
 # ===================================================== 8. GUNLUK
 bolum("gunluk engellenen kosuyu hatadan ayiriyor mu")
 
-from caddy import sohbet_log
+from kedicad import sohbet_log
 
 g = sohbet_log.SohbetGunlugu()
 g._kapali = True                      # dosyaya yazmasin, cagri patlamasin

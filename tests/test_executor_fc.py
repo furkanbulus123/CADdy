@@ -20,12 +20,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Testler GERCEK LOG/ klasorune yazmasin (bkz. sohbet_log modul basligi):
 # olculdu, suite her kosusta oraya ~10 dosya birakiyordu ve kullanicinin
 # gercek oturum gunlukleriyle karisiyordu.
-os.environ["CADDY_LOG_DIR"] = os.path.join(
+os.environ["KEDICAD_LOG_DIR"] = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "_gunlukler")
 
 import FreeCAD as App
 
-from caddy.execution.executor import CodeExecutor
+from kedicad.execution.executor import CodeExecutor
 
 gecti = basarisiz = 0
 _SATIRLAR = []
@@ -47,7 +47,7 @@ def kontrol(ad, kosul, ek=""):
         print("  HATA %s   %s" % (ad, ek))
 
 
-doc = App.newDocument("CaddyTest")
+doc = App.newDocument("KediCADTest")
 # Konsol modunda geri alma varsayilan olarak kapali olabilir; GUI'de aciktir.
 doc.UndoMode = 1
 ex = CodeExecutor()
@@ -118,7 +118,7 @@ print("7) mesajsiz istisnada ozet BOS KALMIYOR")
 # OLCULEN SENARYO: gunlukteki tek hatanin ozeti kelimenin tam anlamiyla
 # "HATA — No error" yaziyordu (OCC istisnalari mesajsiz gelebiliyor).
 # Model dogru teshisi ancak kendi print'lerinden cikarabildi.
-from caddy.execution.executor import _hata_ozeti
+from kedicad.execution.executor import _hata_ozeti
 
 _iz_bos = ('Traceback (most recent call last):\n'
            '  File "<string>", line 3, in <module>\n'
@@ -162,7 +162,7 @@ print("8) baski_kontrol KATI nesnede de cevap veriyor")
 import io
 from contextlib import redirect_stdout
 
-from caddy.execution.executor import _baski_kontrol_yap
+from kedicad.execution.executor import _baski_kontrol_yap
 
 doc3 = App.newDocument("BaskiKati")
 App.setActiveDocument(doc3.Name)
@@ -198,9 +198,9 @@ App.closeDocument(doc3.Name)
 print("N) asama dokumu — 17.1 saniyenin nereye gittigini soyleyen sey")
 # Olculdu (LOG/2026-08-25_dc91d6d7.txt, 10:05:15): tek bir Part::Box uretmek
 # 17.1 sn surdu, gunlukte yalnizca TOPLAM sure vardi ve sebep bulunamadi.
-from caddy.execution.executor import YAVAS_ESIGI, isit          # noqa: E402
+from kedicad.execution.executor import YAVAS_ESIGI, isit          # noqa: E402
 
-doc4 = App.newDocument("CaddyAsama")
+doc4 = App.newDocument("KediCADAsama")
 doc4.UndoMode = 1
 ex4 = CodeExecutor()
 ex4.oturumu_ayarla("asama")
@@ -218,7 +218,7 @@ kontrol("hizli turda dokum bos", s_h.asama_metni() == "",
         s_h.asama_metni())
 # Yavas tur nasil gorunuyor: gunlukteki 17.1 saniyelik tur uydurulup
 # dokumun gercekten sucluyu ONE yazdigi sinaniyor.
-from caddy.execution.executor import CalismaSonucu               # noqa: E402
+from kedicad.execution.executor import CalismaSonucu               # noqa: E402
 
 _yavas = CalismaSonucu(basarili=True, sure_sn=17.1, asamalar={
     "open transaction": 0.01, "attach observers": 0.00, "prepare": 0.30,
