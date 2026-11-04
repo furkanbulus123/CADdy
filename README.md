@@ -55,8 +55,12 @@ FreeCAD's `Mod` directory. No admin rights needed. Restart FreeCAD and pick
 
 ## Usage
 
-Click the cat icon in the toolbar to open the CADdy panel. It stays in the
-toolbar in every workbench:
+Pick **CADdy** from the workbench list and the panel opens. Click the cat
+icon in the toolbar to open it again later.
+
+Want the cat in every workbench, so you can call CADdy while sketching or in
+Part Design? Turn on **CADdy → Show CADdy button in every workbench** once
+(it is off by default):
 
 ![Where to find CADdy: the cat icon in the FreeCAD toolbar](docs/where_to_find.png)
 

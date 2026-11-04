@@ -89,6 +89,10 @@ def freecad_gibi_calistir(dosya, gui):
 
 print("InitGui.py - FreeCAD'in kapsam kosullarinda")
 gui = SahteGui()
+# FreeCAD ilk import edildiginde Mod dizinlerini KENDISI sys.path'e
+# ekliyor; o ekleme InitGui'nin degil. Olcumu ondan SONRA al.
+import FreeCAD  # noqa: E402,F401
+onceki_yol = list(sys.path)
 hata = None
 try:
     freecad_gibi_calistir(os.path.join(KOK, "InitGui.py"), gui)
@@ -109,8 +113,10 @@ if gui.kayitli:
     kontrol("Icon atandi", bool(ikon), ikon)
     kontrol("Icon dosyasi gercekten var", ikon and os.path.isfile(ikon), ikon)
 
-kontrol("eklenti dizini sys.path'e eklendi",
-        any(os.path.normcase(KOK) == os.path.normcase(p) for p in sys.path))
+# Addon Index kurali: eklenti sys.path'e DOKUNMAZ. FreeCAD Mod/CADdy'yi
+# zaten kendisi ekliyor (1.1'de olculdu) — eski ekleme gereksizdi.
+kontrol("InitGui sys.path'e dokunmuyor", sys.path == onceki_yol,
+        [p for p in sys.path if p not in onceki_yol])
 
 # --- ust serit blogu -------------------------------------------------------
 # Kullanici "ust menu yok" dedi. Ilk saptama: bu blok InitGui'nin SONUNDA

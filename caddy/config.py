@@ -10,6 +10,8 @@ user.cfg; we do not invent a separate settings file. Keys:
     ClaudeExe        claude.exe path set by hand (empty = find automatically)
     MaxBudgetUsd     0 = unlimited; >0 is passed as --max-budget-usd
     PanelYuzde       panel width on first open, as % of the main window (see below)
+    ShowEverywhere   the cat button in every workbench (off by default — the
+                     Addon Index wants an addon's toolbars in its own workbench)
 
 REMOVED — `AutoRun`. Its description was "run without confirmation if the
 guard is clean", and the GUARD IT RELIED ON WAS NEVER WRITTEN. So turning
@@ -48,6 +50,10 @@ VARSAYILAN = {
     # width was 888 px (long button labels in the top row) and it could not
     # get narrower. That floor was lowered first, then this ratio could apply.
     "PanelYuzde": 40,
+    # The permanent cat button outside the CADdy workbench. OFF by default:
+    # the Addon Index rule is that an addon keeps its toolbars to its own
+    # workbench. Turned on from the CADdy menu (commands.HerYerdeGoster).
+    "ShowEverywhere": False,
 }
 
 

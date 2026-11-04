@@ -138,6 +138,28 @@ try:
     kontrol("GUI yokken yerlestir() patlamiyor", True)
     kontrol("tazeleme fonksiyonu var (menu cubugu yeniden kuruluyor)",
             callable(getattr(_ust, "_tazele", None)))
+    # Addon Index: eklentinin araç cubugu kendi workbench'inde kalmali.
+    # Her yerdeki kedi dugmesi artik ISTEGE BAGLI, varsayilan KAPALI.
+    from caddy import config as _ayar
+    kontrol("ShowEverywhere varsayilani KAPALI",
+            _ayar.VARSAYILAN.get("ShowEverywhere") is False,
+            _ayar.VARSAYILAN.get("ShowEverywhere"))
+    kontrol("ayar komutu kayitli (CADdy menusunde)",
+            "CADdy_ShowEverywhere" in kayitli, sorted(kayitli))
+    kontrol("ayar komutu workbench arac cubugunda DEGIL",
+            "CADdy_ShowEverywhere" not in _kmd.ARAC_CUBUGU, _kmd.ARAC_CUBUGU)
+    kontrol("ayar komutu isaretlenebilir (Checkable)",
+            "Checkable" in dict(_kmd.KOMUTLAR)["CADdy_ShowEverywhere"]
+            .GetResources())
+    _ust.kaldir()
+    _ust._tazele()
+    kontrol("GUI yokken kaldir()/_tazele() patlamiyor", True)
+    _initgui = open(_os.path.join(KOK, "InitGui.py"), encoding="utf-8").read()
+    kontrol("InitGui sys.path'e eklemiyor (Addon Index kurali)",
+            "sys.path.insert" not in _initgui
+            and "sys.path.append" not in _initgui)
+    kontrol("InitGui ust seridi ayara bagli kuruyor",
+            'bayrak("ShowEverywhere")' in _initgui)
 except Exception:
     kontrol("ust serit modulu", False, traceback.format_exc(limit=3))
 

@@ -28,7 +28,7 @@
 # FreeCAD's own OpenSCAD/InitGui.py sets its icon in __init__ as
 # self.__class__.Icon = ... for the same reason.
 #
-# No logic here - only path setup, the workbench class and command
+# No logic here - only the icon path, the workbench class and command
 # registration. The real work is in the caddy/ package.
 # =========================================================================
 
@@ -51,8 +51,10 @@ def _eklenti_dizini():
 
 
 EKLENTI_DIZINI = _eklenti_dizini()
-if EKLENTI_DIZINI not in sys.path:
-    sys.path.insert(0, EKLENTI_DIZINI)
+# sys.path is NOT touched: FreeCAD itself puts Mod/CADdy on sys.path before
+# running this file (measured in 1.1: both "Mod\CADdy" and "Mod\CADdy\."
+# are there, and `import caddy` works). The Addon Index forbids addons from
+# editing sys.path, and an earlier insert here was redundant anyway.
 
 IKON = os.path.join(EKLENTI_DIZINI, "resources", "icons", "caddy.svg")
 
@@ -74,9 +76,10 @@ class CADdyWorkbench(Workbench):  # noqa: F821  (injected by FreeCAD)
                 "[CADdy] failed to load:\n" + traceback.format_exc() + "\n")
             return
 
-        adlar = list(commands.kaydet())
-        self.appendToolbar("CADdy", adlar)
-        self.appendMenu("CADdy", adlar)
+        commands.kaydet()
+        self.appendToolbar("CADdy", list(commands.ARAC_CUBUGU))
+        self.appendMenu("CADdy", list(commands.ARAC_CUBUGU)
+                        + ["Separator", "CADdy_ShowEverywhere"])
 
     def Activated(self):
         # Open the panel automatically the first time the workbench is selected.
@@ -101,18 +104,24 @@ CADdyWorkbench.Icon = IKON
 Gui.addWorkbench(CADdyWorkbench())  # noqa: F821
 
 
-# --- Permanent place in the top bar ----------------------------------------
+# --- Optional: the cat button in every workbench ---------------------------
 # The workbench's own appendToolbar/appendMenu are visible ONLY while that
-# workbench is active. The user wanted CADdy always at the top, so we also
-# add it to the menu bar and a permanent toolbar.
+# workbench is active. The user wanted CADdy reachable from anywhere, so a
+# permanent toolbar exists (caddy/ui/ust_menu.py) — but the Addon Index rule
+# is that an addon keeps its toolbars to its OWN workbench. So it is OFF by
+# default and the user turns it on from the CADdy menu ("Show CADdy button
+# in every workbench"); the choice is stored in user.cfg.
 #
-# Commands are registered here: Initialize() only runs the first time the
-# workbench is selected, but the top menu has to be populated from startup.
+# With it off, NOTHING runs here at startup — not even a PySide import.
+# Commands are registered here only when needed: Initialize() runs the first
+# time the workbench is selected, but the top bar has to exist from startup.
 try:
-    from caddy import commands as _komutlar
-    _komutlar.kaydet()
-    from caddy.ui import ust_menu as _ust
-    _ust.yerlestir()
+    from caddy import config as _ayar
+    if _ayar.bayrak("ShowEverywhere"):
+        from caddy import commands as _komutlar
+        _komutlar.kaydet()
+        from caddy.ui import ust_menu as _ust
+        _ust.yerlestir()
 except Exception:
     # CAREFUL: this block must not fail ITSELF. The first version had
     # `import FreeCAD` here, and in an environment without FreeCAD (the

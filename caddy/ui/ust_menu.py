@@ -1,4 +1,9 @@
-"""Places CADdy PERMANENTLY in FreeCAD's top bar.
+"""Places CADdy PERMANENTLY in FreeCAD's top bar — when the user asks for it.
+
+OPT-IN. The Addon Index rule is that an addon keeps its toolbars to its own
+workbench, so this is off by default (config "ShowEverywhere") and turned on
+from the CADdy menu. Every refresh checks the setting: when it is off the
+button is removed and never re-added.
 
 Problem: CADdy is a *workbench*, so it does not exist unless picked from the
 drop-down at the top. The user asked "can we add it directly as a tab at
@@ -47,7 +52,7 @@ import os
 
 from PySide import QtCore, QtGui, QtWidgets
 
-from .. import log
+from .. import config, log
 
 ARAC_CUBUGU_ADI = "CADdy"
 _ARAC_NESNE = "CADdyUstAracCubugu"
@@ -68,7 +73,22 @@ _durum = {"kuruldu": False, "tazeleme": 0, "zamanlayici": None}
 
 def yerlestir() -> None:
     """Adds the logo button to the top bar and keeps it there."""
-    _dene(0)
+    if _durum["kuruldu"]:
+        _tazele()
+    else:
+        _dene(0)
+
+
+def kaldir() -> None:
+    """Removes the button now; refreshes stop re-adding it (setting is off)."""
+    mw = _ana_pencere()
+    if mw is None:
+        return
+    for c in mw.findChildren(QtWidgets.QToolBar):
+        if c.objectName() == _ARAC_NESNE:
+            mw.removeToolBar(c)
+            c.deleteLater()
+            log.ayik("top bar removed")
 
 
 # --------------------------------------------------------------------------
@@ -157,7 +177,13 @@ def _tazelemeyi_baslat() -> None:
 
 
 def _tazele() -> None:
-    """Adds the toolbar if missing; leaves it alone if present."""
+    """Adds the toolbar if missing; leaves it alone if present.
+
+    If the user has turned the setting off, removes it instead.
+    """
+    if not config.bayrak("ShowEverywhere"):
+        kaldir()
+        return
     mw = _ana_pencere()
     if mw is None:
         return

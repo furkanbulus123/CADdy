@@ -83,10 +83,50 @@ class SonAiDegisikliginiGeriAl:
         return doc is not None and bool(doc.UndoNames)
 
 
+class HerYerdeGoster:
+    """Menu checkbox: keep the cat button in every workbench.
+
+    Off by default (Addon Index rule: an addon's toolbars stay in its own
+    workbench). Turning it on adds the button at once and on every later
+    start; turning it off removes it at once.
+    """
+
+    def GetResources(self):
+        from . import config
+
+        return {
+            "Pixmap": _ikon("caddy.svg"),
+            "MenuText": "Show CADdy button in every workbench",
+            "ToolTip": "Keeps the CADdy cat button in the toolbar whatever "
+                       "workbench is active",
+            "Checkable": config.bayrak("ShowEverywhere"),
+        }
+
+    def Activated(self, checked=None):
+        from . import config
+        from .ui import ust_menu
+
+        acik = (not config.bayrak("ShowEverywhere")) if checked is None             else bool(checked)
+        config.yaz("ShowEverywhere", acik)
+        if acik:
+            ust_menu.yerlestir()
+        else:
+            ust_menu.kaldir()
+        log.bilgi("cat button in every workbench: "
+                  + ("on" if acik else "off"))
+
+    def IsActive(self):
+        return True
+
+
 KOMUTLAR = (
     ("CADdy_ShowPanel", PaneliGoster()),
     ("CADdy_UndoLastAIChange", SonAiDegisikliginiGeriAl()),
+    ("CADdy_ShowEverywhere", HerYerdeGoster()),
 )
+
+# What goes on the workbench's own toolbar (the setting lives in the menu).
+ARAC_CUBUGU = ("CADdy_ShowPanel", "CADdy_UndoLastAIChange")
 
 
 def kaydet() -> list[str]:

@@ -4,8 +4,8 @@
   <description>AI assistant inside FreeCAD. You draw, the AI continues, you keep
   going - all on one live document. It measures its work (overlaps, open shells,
   inside-out solids, printability) instead of guessing.</description>
-  <version>0.1.0</version>
-  <date>2026-08-18</date>
+  <version>0.2.0</version>
+  <date>2026-11-04</date>
   <maintainer email="77415793+furkanbulus123@users.noreply.github.com">Furkan Bulus</maintainer>
   <license>MIT</license>
   <url type="repository" branch="master">https://github.com/furkanbulus123/CADdy</url>
