@@ -103,7 +103,8 @@ Delete either folder at any time.
 
 ## Tests & architecture
 
-See [ARCHITECTURE.md](ARCHITECTURE.md).
+See [ARCHITECTURE.md](ARCHITECTURE.md). Contributions are welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```powershell
 & "C:\Program Files\FreeCAD 1.1\bin\freecadcmd.exe" tests\test_yukleme_fc.py
