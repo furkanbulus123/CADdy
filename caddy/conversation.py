@@ -569,7 +569,9 @@ class ConversationController(QtCore.QObject):
             "including its print() output and warnings from FreeCAD's own "
             "console. If something is wrong, say what went wrong and give "
             "ONLY the first step of the fix; if not, confirm in one sentence "
-            "— if a number was asked for, state the number directly.\n\n"
+            "— if a number was asked for, state the number directly — and "
+            "if your plan has steps left, give the NEXT step's block in this "
+            "same reply instead of asking the user to type 'continue'.\n\n"
             f"<execution_result>\n{sonuc.modele_metin()}\n</execution_result>",
             kullanici_mi=kullanici_mi)
 

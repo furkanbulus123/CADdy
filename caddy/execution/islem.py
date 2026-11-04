@@ -467,6 +467,185 @@ def olcu_tablosu(_ad: str = TABLO_ADI, yaz: bool = True, **degerler):
     return sh
 
 
+# --------------------------------------------------------------------------
+# PARAMETER SWEEP — "at which value does the model break?"
+# --------------------------------------------------------------------------
+
+TARAMA_AZAMI_ADIM = 25
+TARAMA_BUTCE_S = 30.0
+
+
+def _tarama_hedefi(doc, hedef):
+    """(get, set, label) for a sweep target, or an error string.
+
+    Accepted: "Olculer.cap" (spreadsheet alias), "cap" (an alias in any
+    spreadsheet), "Pad.Length" (object property, Name or Label), or
+    (obj, "Length").
+    """
+    def nesne_bul(ad):
+        o = doc.getObject(ad)
+        if o is None:
+            ls = doc.getObjectsByLabel(ad)
+            o = ls[0] if len(ls) == 1 else None
+        return o
+
+    def tablo(sh, alias):
+        hucre = sh.getCellFromAlias(alias)
+        if not hucre:
+            return None
+        eski = sh.getContents(hucre)
+        return (lambda: eski,
+                lambda v: sh.set(hucre, str(v)),
+                lambda: sh.set(hucre, eski),
+                f"{sh.Name}.{alias}")
+
+    def ozellik(o, prop):
+        if prop not in o.PropertiesList:
+            return f"{o.Name} has no property {prop!r}"
+        for yol, ifade in getattr(o, "ExpressionEngine", []):
+            if yol == prop:
+                return (f"{o.Name}.{prop} is driven by the expression "
+                        f"'{ifade}' — sweep the value it reads instead")
+        eski = getattr(o, prop)
+        return (lambda: eski,
+                lambda v: setattr(o, prop, v),
+                lambda: setattr(o, prop, eski),
+                f"{o.Name}.{prop}")
+
+    if isinstance(hedef, (tuple, list)) and len(hedef) == 2:
+        return ozellik(hedef[0], str(hedef[1]))
+    hedef = str(hedef)
+    if "." in hedef:
+        sol, sag = hedef.split(".", 1)
+        o = nesne_bul(sol)
+        if o is None:
+            return f"no object named {sol!r}"
+        if o.TypeId == "Spreadsheet::Sheet":
+            return tablo(o, sag) or f"{o.Name} has no alias {sag!r}"
+        return ozellik(o, sag)
+    for o in doc.Objects:
+        if o.TypeId == "Spreadsheet::Sheet":
+            t = tablo(o, hedef)
+            if t is not None:
+                return t
+    return f"no spreadsheet alias {hedef!r} (use 'Object.Property' for a property)"
+
+
+def _tarama_durumu(doc) -> tuple:
+    """(problems by object, solid count, volume) of the visible model."""
+    sorun = {}
+    katilar = 0
+    hacim = 0.0
+    for o in doc.Objects:
+        if o.TypeId == "Spreadsheet::Sheet":
+            continue
+        durum = list(getattr(o, "State", []) or [])
+        if "Invalid" in durum or "Error" in durum:
+            sorun[o.Name] = "recompute error"
+            continue
+        s = _sekil_al(o)
+        if s is None or not getattr(o, "Visibility", True):
+            continue
+        try:
+            if s.isNull():
+                sorun[o.Name] = "empty shape"
+                continue
+            if not s.isValid():
+                sorun[o.Name] = "invalid shape"
+            if any(k.Volume < 0 for k in s.Solids):
+                sorun[o.Name] = "inside-out solid"
+            katilar += len(s.Solids)
+            hacim += sum(k.Volume for k in s.Solids)
+        except Exception:                                        # noqa: BLE001
+            sorun[o.Name] = "shape could not be read"
+    return sorun, katilar, hacim
+
+
+def tara(hedef, bas: float, son: float, adim: int = 5,
+         yaz: bool = True) -> list:
+    """Sweeps one dimension through a range and checks the model at each step.
+
+    The idea is SolveSpace's "step dimension": a parametric model that is
+    fine at the value you drew it may break at another (a fillet larger
+    than its edge, a pocket through the floor, a sketch that flips). Each
+    step sets the value, recomputes the document and compares it with the
+    starting state: a NEW recompute error, invalid or inside-out shape, or
+    a change in the number of solids is reported as BROKEN. The original
+    value is ALWAYS restored (finally), so the sweep leaves no trace.
+
+        sweep("Dimensions.wall", 1, 6, steps=6)
+        sweep("Pad.Length", 5, 50)
+
+    Returns one dict per step: value, ok, problems, solids, volume.
+    """
+    doc = App.ActiveDocument
+    if doc is None:
+        if yaz:
+            print("sweep: no open document")
+        return []
+    t = _tarama_hedefi(doc, hedef)
+    if isinstance(t, str):
+        if yaz:
+            print(f"sweep: {t}")
+        return []
+    _al, koy, geri_al, etiket = t
+    adim = max(2, min(int(adim), TARAMA_AZAMI_ADIM))
+    degerler = [bas + (son - bas) * i / (adim - 1) for i in range(adim)]
+
+    doc.recompute()
+    taban_sorun, taban_kati, _ = _tarama_durumu(doc)
+    sonuc = []
+    t0 = time.perf_counter()
+    try:
+        for v in degerler:
+            if time.perf_counter() - t0 > TARAMA_BUTCE_S:
+                break
+            try:
+                koy(v)
+                doc.recompute()
+                sorun, kati, hacim = _tarama_durumu(doc)
+            except Exception as e:                               # noqa: BLE001
+                sorun, kati, hacim = {"(set)": str(e)}, 0, 0.0
+            yeni = {k: d for k, d in sorun.items() if taban_sorun.get(k) != d}
+            if kati != taban_kati and not yeni:
+                yeni["(model)"] = (f"{kati} solids instead of {taban_kati} — "
+                                   f"parts separated or merged")
+            sonuc.append({"value": v, "ok": not yeni, "problems": yeni,
+                          "solids": kati, "volume": hacim})
+    finally:
+        try:
+            geri_al()
+            doc.recompute()
+        except Exception as e:                                   # noqa: BLE001
+            if yaz:
+                print(f"sweep: WARNING — the original value could not be "
+                      f"restored ({e}); check {etiket}")
+
+    if yaz:
+        print(f"sweep {etiket}: {len(sonuc)} steps {_sayi(bas)} .. "
+              f"{_sayi(son)} (original value restored)")
+        for r in sonuc:
+            if r["ok"]:
+                print(f"    {_sayi(r['value'])}: OK, {r['solids']} solid(s), "
+                      f"volume {_sayi(r['volume'])} mm3")
+            else:
+                ilk = "; ".join(f"{k}: {d}" for k, d in
+                                list(r["problems"].items())[:3])
+                print(f"    {_sayi(r['value'])}: BROKEN — {ilk}")
+        iyi = [r["value"] for r in sonuc if r["ok"]]
+        if len(sonuc) < len(degerler):
+            print(f"    stopped at the {TARAMA_BUTCE_S:.0f} s budget — "
+                  f"{len(degerler) - len(sonuc)} step(s) not run")
+        if not iyi:
+            print("    the model is broken at EVERY tested value")
+        elif len(iyi) < len(sonuc):
+            print(f"    works for: {', '.join(_sayi(x) for x in iyi)}")
+        if taban_sorun:
+            print(f"    already broken before the sweep (ignored): "
+                  f"{', '.join(taban_sorun)}")
+    return sonuc
+
+
 def bagla(nesne, ozellik: str, ifade: str, yaz: bool = True) -> bool:
     """BINDS a property to a value in the table and VERIFIES that it is bound.
 
@@ -935,19 +1114,28 @@ def _en_buyuk_duz_yuz(nesne):
         return None
 
 
-def tabana_otur(nesne=None, yaz: bool = True) -> bool:
+def tabana_otur(nesne=None, en_az_destek: bool = False,
+                yaz: bool = True) -> bool:
     """Places the part on the bed with its widest FLAT face down.
 
     The first question of print preparation, and until now it was done by
     eye. Measured: Mesh.getPlanarSegments 0.010 s.
 
     If there is no flat region it DOES NOT MAKE ONE UP, it says so.
+
+    `en_az_destek=True` (minimize_support): instead of the widest flat face,
+    pick the one of the six axis-aligned "side down" orientations that needs
+    the least FDM support (45 deg), and say what it costs in height. Works
+    for parts with no flat face too.
     """
     nesne = _hedef(nesne)
     if nesne is None:
         if yaz:
             print("place_on_bed: object not found")
         return False
+
+    if en_az_destek:
+        return _en_az_destekle_otur(nesne, yaz)
 
     bulgu = _en_buyuk_duz_yuz(nesne)
     if bulgu is None:
@@ -991,6 +1179,59 @@ def tabana_otur(nesne=None, yaz: bool = True) -> bool:
         print(f"{getattr(nesne, 'Name', '?')}: rotated {_sayi(aci)} degrees "
               f"and placed on the bed, z={_sayi(b.ZMin)}.."
               f"{_sayi(b.ZMax)}")
+    return True
+
+
+def _en_az_destekle_otur(nesne, yaz: bool) -> bool:
+    """place_on_bed(minimize_support=True) — see baski.orientations."""
+    from . import baski
+
+    ad = getattr(nesne, "Name", "?")
+    m, _ = baski.mesh_of(nesne)
+    adaylar = baski.orientations(m, 45.0) if m is not None else []
+    if not adaylar:
+        if yaz:
+            print(f"place_on_bed: {ad}: support could not be measured "
+                  f"(neither mesh nor solid, or numpy missing)")
+        return False
+    simdi = next(a for a in adaylar if a["side"] == "-Z")
+    en = adaylar[0]
+    if simdi["area"] - en["area"] <= 1e-6:
+        en = simdi
+    try:
+        if en["side"] != "-Z":
+            asagi = App.Vector(*en["down"])
+            hedef = App.Vector(0, 0, -1)
+            if asagi.getAngle(hedef) > math.pi - 1e-6:
+                donme = App.Rotation(App.Vector(1, 0, 0), 180)
+            else:
+                donme = App.Rotation(asagi, hedef)
+            p = nesne.Placement
+            nesne.Placement = App.Placement(
+                donme.multVec(p.Base), donme.multiply(p.Rotation))
+            App.ActiveDocument.recompute()
+        b = olcum._kutu(nesne)
+        if b is not None and abs(b.ZMin) > 1e-9:
+            p = nesne.Placement
+            p.Base = App.Vector(p.Base.x, p.Base.y, p.Base.z - b.ZMin)
+            nesne.Placement = p
+            App.ActiveDocument.recompute()
+    except Exception as e:                                       # noqa: BLE001
+        if yaz:
+            print(f"place_on_bed: could not be placed ({e})")
+        return False
+    if yaz:
+        b = olcum._kutu(nesne)
+        if en is simdi:
+            print(f"{ad}: the current orientation already needs the least "
+                  f"support ({_sayi(simdi['area'])} mm2 past 45 deg); placed "
+                  f"on the bed, z={_sayi(b.ZMin)}..{_sayi(b.ZMax)}")
+        else:
+            print(f"{ad}: turned {en['side']} side down — support "
+                  f"{_sayi(simdi['area'])} -> {_sayi(en['area'])} mm2 past "
+                  f"45 deg, height {_sayi(simdi['height'])} -> "
+                  f"{_sayi(en['height'])} mm; placed on the bed, "
+                  f"z={_sayi(b.ZMin)}..{_sayi(b.ZMax)}")
     return True
 
 

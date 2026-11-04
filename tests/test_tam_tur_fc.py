@@ -172,6 +172,7 @@ for _ad, _parca in [
     ("ayni soruyu tekrar sormama", "never re-ask"),
     ("kac adim + hangi adim bildirimi", "how many steps"),
     ("yalnizca 1. adim", "STEP 1 ONLY"),
+    ("devam yazdirmiyor", "Never end with 'type continue'"),
     ("varsayimlari acik etme", "state the assumptions"),
     ("adim buyuklugu tavani", "How big may one step be"),
     # caddy_gelisim.txt kayip 2: genel "belirsizse sor" maddesi zaten

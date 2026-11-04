@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 import FreeCAD as App
 
 from .. import log
-from . import dogrulama, islem, kesif, olcum
+from . import baski, dogrulama, islem, kesif, olcum
 
 # Window (seconds) in which running the same code a second time gets
 # QUESTIONED. The measured accidents were 2 seconds apart; a deliberate
@@ -225,7 +225,7 @@ def _katinin_meshi(o):
         return None
 
 
-def _baski_kontrol_yap(nesne=None) -> bool:
+def _baski_kontrol_yap(nesne=None, surec: str = "FDM") -> bool:
     """Print-readiness check the model can call from its code.
 
     WHY IN THE NAMESPACE. Users ask "is it ready now", "is it ready to
@@ -239,6 +239,11 @@ def _baski_kontrol_yap(nesne=None) -> bool:
 
     Without `nesne` it looks at ALL meshes in the document. Returns: are
     all of them ready.
+
+    `surec` (process: FDM, SLA, SLS, MJF, METAL) adds the DfAM facts —
+    walls per body, overhangs and support, a better orientation — compared
+    with that process's limits (baski.py). A wall FAIL makes the return
+    value False too: a slicer accepts such a part but it will not print.
     """
     nesneler = []
     if nesne is None:
@@ -278,7 +283,12 @@ def _baski_kontrol_yap(nesne=None) -> bool:
               f"  ({' '.join(olcumler)})")
         for tur, ayrinti in engeller:
             print(f"    - {tur}: {ayrinti}")
-        hepsi = hepsi and hazir
+        uygun = True
+        try:
+            uygun = baski.analyse_and_print(m, ad, surec)
+        except Exception as e:                                   # noqa: BLE001
+            print(f"    print analysis: NOT RUN ({type(e).__name__}: {e})")
+        hepsi = hepsi and hazir and uygun
     return hepsi
 
 
@@ -889,8 +899,10 @@ class CodeExecutor:
         for _ad in ("mesh_onar", "kati_yap", "icini_bosalt", "olcu_tablosu",
                     "bagla", "yazi", "vida_disi", "agirlik", "baskiya_bol",
                     "dizi_polar", "dizi_dogrusal", "tabana_otur",
-                    "birlestir", "kesit_konturu"):
+                    "birlestir", "kesit_konturu", "tara"):
             ns[_ad] = getattr(islem, _ad)
+        from . import cizim
+        ns["teknik_resim"] = cizim.teknik_resim
         # English API — what the contract and CLAUDE.md teach. The names
         # above stay bound so resumed older chats keep working.
         from . import api_en

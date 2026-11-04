@@ -9,7 +9,7 @@ resume with them keep working.
 
 from __future__ import annotations
 
-from . import islem, kesif, olcum
+from . import cizim, islem, kesif, olcum
 
 # English keyword -> original keyword. Positional arguments pass through.
 _KW = {
@@ -20,6 +20,9 @@ _KW = {
     "radius": "yaricap", "pitch": "hatve", "length": "boy", "internal": "ic_mi",
     "material": "malzeme", "infill": "doluluk", "count": "adet", "angle": "aci",
     "direction": "yon", "spacing": "aralik", "step": "sik",
+    "process": "surec", "minimize_support": "en_az_destek",
+    "start": "bas", "end": "son", "steps": "adim",
+    "path": "yol", "sheet": "sayfa", "title": "baslik",
 }
 
 
@@ -58,6 +61,8 @@ def bagla(ns: dict, baski_kontrol) -> None:
         "place_on_bed": islem.tabana_otur,
         "join": islem.birlestir,
         "section_contour": islem.kesit_konturu,
+        "sweep": islem.tara,
+        "drawing": cizim.teknik_resim,
     }
     for ad, fn in eslesme.items():
         ns[ad] = _sar(fn, ad)

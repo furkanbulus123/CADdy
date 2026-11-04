@@ -443,7 +443,10 @@ kontrol("~2 mm buldu (gercek duvar 2.0)",
         "en ince: 1.9" in s.cikti or "en ince: 2.0" in s.cikti, s.cikti)
 kontrol("kac olcum yaptigini soyluyor", "measurements" in s.cikti, s.cikti)
 
-s = yurutucu.calistir("duvar_kalinligi(doc.getObject('KureA'))", "dolu govde")
+# z ile radyal kip (z'siz cagri artik TUM govdeyi olcuyor: dolu kurede
+# "duvar" kurenin kendisi, 20 mm).
+s = yurutucu.calistir("duvar_kalinligi(doc.getObject('KureA'), z=0)",
+                      "dolu govde")
 kontrol("dolu govdede yanlis sayi UYDURMUYOR",
         "no wall found" in s.cikti, s.cikti)
 

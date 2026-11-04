@@ -70,10 +70,11 @@ engine plus numpy/scipy (both present in this FreeCAD):
 | `survey()` | everything present — the first step on an existing model |
 | `measure(obj)` | size, centre, volume, area, mesh state. Warns `TILTED` and gives the true size along the object's **own** axes |
 | `section_diameter(obj, z=...)` | diameter at a height. Tells circle / oval (short + long) / **wall** (outer, inner, thickness) apart |
-| `wall_thickness(obj)` | thinnest wall, by ray casting — the print-critical number |
+| `wall_thickness(obj)` | thinnest wall over the whole body (per separate body, p05 + location), solids too; `z=...` = radial sweep at one height |
 | `distance(a, b)` | shortest distance between two objects: *"do they actually touch?"* |
 | `measure_element(obj, "Face7")` | radius / diameter / area / length of a picked face or edge, exact, no fitting |
-| `print_check(obj)` | print-readiness verdict |
+| `print_check(obj, process="FDM")` | print-readiness verdict + walls, overhangs/support, better orientation against FDM / SLA / SLS / MJF / METAL limits |
+| `sweep("Olculer.wall", 1, 6, steps=6)` | sets a dimension step by step, reports where the model BREAKS, restores it |
 
 And these **do the work** — reach for them before writing geometry by hand:
 
@@ -90,7 +91,8 @@ And these **do the work** — reach for them before writing geometry by hand:
 | `weight(obj, "PLA", infill=0.2)` | grams + filament metres | any → grams |
 | `split_for_print(obj, z=...)` | split into printable parts | solid → list |
 | `polar_array(obj, 6)` / `linear_array(obj, 3, direction, spacing)` | arrays | any → array object |
-| `place_on_bed(obj)` | widest flat face down onto the bed | mesh → bool, moves in place |
+| `place_on_bed(obj)` | widest flat face down onto the bed; `minimize_support=True`: the side-down that needs the least support | any → bool, moves in place |
+| `drawing(obj, path="x.pdf", material="")` | TechDraw sheet: Front/Top/Right, hidden lines, overall + hole dimensions, title block; `.pdf` `.svg` `.dxf` | solid → page object |
 
 All of them print, so the answer comes straight back to you in the same turn.
 **Read the third column first** — guessing a return value cost a whole turn
@@ -214,7 +216,13 @@ print_check(doc.getObject("mug"))   # or print_check() for every mesh
 
 It prints a verdict plus the reasons, and print comes back to you, so one
 turn is enough. It reports: closed (watertight), self-intersections,
-non-manifold edges, corrupted facets, component count, volume, bbox.
+non-manifold edges, corrupted facets, component count, volume, bbox — then
+the print analysis for `process=` (default FDM): wall per body, overhangs
+past the self-supporting angle with their locations and support volume,
+and a better orientation. Each line is PASS / FAIL / REVIEW / SUPPORT or
+NOT MEASURED. Hole size, feature size and bridges are NOT MEASURED — check
+those by dimension, never by eye. Ask which process if the user has not
+said; "resin" means SLA.
 
 Never answer "ready" from a screenshot or from the fact that your code ran.
 A mesh that looks perfect can still be open, and a slicer will reject it.

@@ -506,18 +506,25 @@ def duvar_kalinligi(nesne=None, z=None, yaz: bool = True) -> dict:
 
     The THINNEST spot is reported, not the average: that is where the print
     fails.
+
+    TWO MODES (merged, not a second helper):
+      z given  -> the radial sweep above, at that height (a cup, a tube).
+      z=None   -> the WHOLE body: rays from sampled facets into the material,
+                  per separate body, robust p05 plus the thinnest location
+                  (baski.walls). Works for solids too: they are meshed the
+                  way the slicer will see them.
     """
     nesne = _hedef(nesne)
+    if z is None:
+        return _duvar_tum_govde(nesne, yaz)
     m = _mesh_al(nesne)
     if m is None:
         if yaz:
-            print("duvar_kalinligi: works on mesh objects only "
-                  "(use kesit_capi for solids)")
+            print("wall_thickness: the height (z=...) mode works on mesh "
+                  "objects only; call it without z for a solid")
         return {}
 
     b = m.BoundBox
-    if z is None:
-        z = b.ZMin + b.ZLength * 0.5
     merkez_x, merkez_y = b.Center.x, b.Center.y
 
     olcumler = []
@@ -566,6 +573,51 @@ def duvar_kalinligi(nesne=None, z=None, yaz: bool = True) -> dict:
             print(f"    WARNING: {_sayi(en_ince)} mm is below the nozzle "
                   f"diameter of most 3D printers — that area cannot be "
                   f"printed or will leave a gap.")
+    return d
+
+
+def _duvar_tum_govde(nesne, yaz: bool) -> dict:
+    """wall_thickness without z: every body, sampled (see baski.walls)."""
+    from . import baski
+
+    ad = getattr(nesne, "Name", "?")
+    m, uretildi = baski.mesh_of(nesne) if nesne is not None else (None, False)
+    if m is None:
+        if yaz:
+            print("wall_thickness: object not found, or it is neither a mesh "
+                  "nor a solid")
+        return {}
+    w = baski.walls(m)
+    if not w["bodies"]:
+        if yaz:
+            print(f"wall_thickness: {ad}: no wall found — no ray met a second "
+                  f"surface (open mesh?)")
+        return {}
+    en = min(w["bodies"], key=lambda g: g["p05"])
+    d = {"en_ince": min(g["min"] for g in w["bodies"]), "p05": en["p05"],
+         "ortanca": en["median"], "konum": en["at"],
+         "olcum": sum(g["samples"] for g in w["bodies"]),
+         "govdeler": w["bodies"], "kismi": w["partial"],
+         "sure": w.get("seconds", 0.0)}
+    satirlar = []
+    for g in w["bodies"]:
+        on = (f"body {g['index'] + 1}: " if len(w["bodies"]) > 1 else "")
+        satirlar.append(
+            f"{on}thinnest {_sayi(g['min'])} mm at "
+            f"({g['at'][0]:.1f}, {g['at'][1]:.1f}, {g['at'][2]:.1f}), "
+            f"p05 {_sayi(g['p05'])} mm, median {_sayi(g['median'])} mm, "
+            f"{g['samples']} measurements")
+    kaynak = " (solid meshed at 0.1 mm)" if uretildi else ""
+    d["satir"] = f"{ad} wall{kaynak}: " + "; ".join(satirlar)
+    if yaz:
+        print(d["satir"])
+        if w["partial"]:
+            print("    (stopped at the time budget — partial sample)")
+        if d["p05"] < 0.8:
+            print(f"    WARNING: p05 {_sayi(d['p05'])} mm is below the nozzle "
+                  f"diameter of most 3D printers — that area cannot be "
+                  f"printed or will leave a gap. print_check(obj, "
+                  f"process=...) compares it with the process limit.")
     return d
 
 
