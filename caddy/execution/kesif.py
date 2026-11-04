@@ -23,7 +23,7 @@ from and can fix the code and rerun it if needed. A host measurement is
 invisible magic.
 
 So this is a NAMESPACE HELPER: the model writes `kesif()`, and the output
-comes back to it via print (see conversation._ciktiyi_yolla).
+comes back to it via print (see conversation._send_output).
 
 LAYER RULE: no Qt here.
 """

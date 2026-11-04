@@ -191,10 +191,10 @@ class _Blok:
     kod = 'raise RuntimeError("birinci hata")\n'
 
 
-kontrol("sinir 2", cv._ONARIM_SINIRI == 2, cv._ONARIM_SINIRI)
+kontrol("sinir 2", cv._REPAIR_LIMIT == 2, cv._REPAIR_LIMIT)
 
-ctl._onarim_tur = 0
-ctl._son_hata = ""
+ctl._repair_turns = 0
+ctl._last_error = ""
 mesajlar.clear()
 gonderilen.clear()
 ctl.blogu_calistir(_Blok())
@@ -233,8 +233,8 @@ kontrol("durduruldugu SOYLENIYOR",
         any("stopped" in m for _, m in mesajlar), mesajlar)
 
 bolum("AYNI hata tekrarlarsa butceyi beklemeden durur")
-ctl._onarim_tur = 0
-ctl._son_hata = ""
+ctl._repair_turns = 0
+ctl._last_error = ""
 mesajlar.clear()
 gonderilen.clear()
 ctl.blogu_calistir(_Blok())          # birinci hata
@@ -246,16 +246,16 @@ kontrol("ayni hata TEKRAR gonderilmedi (butce dolmadan)",
         gonderilen == [], gonderilen)
 kontrol("sebep soyleniyor",
         any("same error" in m for _, m in mesajlar), mesajlar)
-kontrol("butce hala dolmamisti", ctl._onarim_tur < cv._ONARIM_SINIRI,
-        ctl._onarim_tur)
+kontrol("butce hala dolmamisti", ctl._repair_turns < cv._REPAIR_LIMIT,
+        ctl._repair_turns)
 
 bolum("gercek kullanici mesaji sayaci sifirliyor")
-ctl._onarim_tur = 2
-ctl._son_hata = "bir sey"
+ctl._repair_turns = 2
+ctl._last_error = "bir sey"
 gonderilen.clear()
 ctl.gonder("yeni istek", kullanici_mi=True)
-kontrol("onarim sayaci sifirlandi", ctl._onarim_tur == 0, ctl._onarim_tur)
-kontrol("hata imzasi sifirlandi", ctl._son_hata == "", ctl._son_hata)
+kontrol("onarim sayaci sifirlandi", ctl._repair_turns == 0, ctl._repair_turns)
+kontrol("hata imzasi sifirlandi", ctl._last_error == "", ctl._last_error)
 
 bolum("BASARILI kodda onarim tetiklenmiyor")
 
@@ -265,7 +265,7 @@ class _Iyi:
     kod = 'doc.addObject("Part::Box", "IyiKutu")\n'
 
 
-ctl._onarim_tur = 0
+ctl._repair_turns = 0
 gonderilen.clear()
 ctl.blogu_calistir(_Iyi())
 kontrol("basarili kodda hicbir sey gonderilmedi", gonderilen == [], gonderilen)
