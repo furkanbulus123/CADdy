@@ -10,9 +10,9 @@
   <license>MIT</license>
   <url type="repository" branch="master">https://github.com/furkanbulus123/CADdy</url>
   <url type="bugtracker">https://github.com/furkanbulus123/CADdy/issues</url>
-  <url type="readme">https://github.com/furkanbulus123/CADdy/blob/master/README.md</url>
+  <url type="readme">https://raw.githubusercontent.com/furkanbulus123/CADdy/master/README.md</url>
   <icon>resources/icons/caddy.svg</icon>
-  <freecadmin>1.1</freecadmin>
+  <freecadmin>1.1.0</freecadmin>
   <content>
     <workbench>
       <classname>CADdyWorkbench</classname>
