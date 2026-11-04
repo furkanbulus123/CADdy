@@ -1,0 +1,15 @@
+name: Feature request
+description: An idea for CADdy
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like CADdy to do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What are you building when you need it?
+      description: A short example of the part or project helps a lot.
