@@ -72,6 +72,35 @@ Then describe what you want:
 | **History** | Resume a past chat |
 | **Fast / Deep** | How much the model thinks |
 
+## Privacy
+
+CADdy itself makes no network connections and collects no telemetry. The only
+external service is the Claude Code CLI, which sends to Anthropic:
+
+- your messages,
+- a text description of the open document (object names, sizes, positions),
+- the output of the code it runs, and
+- screenshots of the 3D view when it does a visual check.
+
+Anthropic's [privacy policy](https://www.anthropic.com/legal/privacy) applies to
+that data. Everything else stays on your machine, inside the addon folder:
+
+- `LOG/` — plain-text chat logs (open them from the panel's right-click menu)
+- `.caddy-backups/` — a copy of your document saved before the first AI change
+
+Delete either folder at any time.
+
+## Troubleshooting
+
+- **"claude command not found"** — install the CLI
+  (`npm install -g @anthropic-ai/claude-code`), run `claude` once to sign in,
+  then restart FreeCAD.
+- **No CADdy in the workbench list** — run `.\install.ps1` again and check the
+  `[x]` lines; restart FreeCAD.
+- **Unexpected API charges** — `ANTHROPIC_API_KEY` is set; see Requirements.
+- **Something else** — [open an issue](https://github.com/furkanbulus123/CADdy/issues)
+  with the relevant part of the chat log from `LOG/`.
+
 ## Tests & architecture
 
 See [ARCHITECTURE.md](ARCHITECTURE.md).
